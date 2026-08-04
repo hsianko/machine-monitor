@@ -1,0 +1,721 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>產線即時監看板</title>
+<style>
+  :root{
+    --bg-page:#14171c;
+    --bg-panel:#1c2026;
+    --bg-field:#20252c;
+    --border:#2b313a;
+    --border-strong:#3a414c;
+    --text-primary:#eef0f2;
+    --text-secondary:#9099a6;
+    --text-muted:#5e6673;
+    --status-idle:#5e6673;
+    --status-run:#4caf6d;
+    --status-done:#6b7686;
+    --m-daibao:#e8a33d;
+    --m-erbao:#3f9088;
+    --m-sanbao:#d5654a;
+    --m-sibao:#7b8ce0;
+    --radius:10px;
+    --font-display:'Arial Narrow', 'Segoe UI', 'PingFang TC', 'Microsoft JhengHei', sans-serif;
+    --font-mono:'Consolas', 'Menlo', 'Monaco', 'Noto Sans Mono CJK TC', monospace;
+    font-family:var(--font-mono);
+  }
+  *{box-sizing:border-box;}
+  html, body{margin:0; padding:0;}
+  body{
+    background:var(--bg-page);
+    color:var(--text-primary);
+    font-family:var(--font-mono);
+    padding:16px;
+    min-height:100vh;
+    -webkit-text-size-adjust:100%;
+  }
+  input, button, select, textarea{font-size:16px;}
+  .wrap{width:100%; max-width:980px; margin:0 auto;}
+  .topbar{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    flex-wrap:wrap;
+    gap:10px;
+    padding:10px 4px 14px;
+    border-bottom:1px solid var(--border);
+    margin-bottom:20px;
+    position:sticky;
+    top:0;
+    background:var(--bg-page);
+    z-index:10;
+  }
+  .topbar h1{
+    font-family:var(--font-display);
+    font-weight:600;
+    font-size:22px;
+    letter-spacing:0.5px;
+    margin:0;
+    color:var(--text-primary);
+  }
+  .topbar-right{display:flex; align-items:center; gap:10px; flex-wrap:wrap;}
+  .topbar .clock{font-size:14px; color:var(--text-secondary); letter-spacing:0.5px;}
+  .export-btn{
+    background:var(--bg-field);
+    border:1px solid var(--border-strong);
+    color:var(--text-primary);
+    font-family:var(--font-mono);
+    font-size:12px;
+    padding:7px 12px;
+    border-radius:6px;
+    cursor:pointer;
+  }
+  .export-btn:hover{border-color:var(--text-secondary);}
+
+  .section-title{
+    font-family:var(--font-display);
+    font-weight:600;
+    font-size:16px;
+    color:var(--text-secondary);
+    letter-spacing:0.5px;
+    margin:26px 0 12px;
+    padding-bottom:8px;
+    border-bottom:1px solid var(--border);
+  }
+
+  .grid{display:grid; grid-template-columns:repeat(2, 1fr); gap:16px;}
+  @media (max-width:760px){ .grid{grid-template-columns:1fr;} }
+  @media (max-width:480px){
+    body{padding:12px;}
+    .card{padding:14px 14px 16px;}
+    .field-row{grid-template-columns:1fr;}
+    .times{grid-template-columns:1fr;}
+    .field input, .field select, .times .field select, .log-form select, .log-form input{
+      font-size:16px;
+      padding:10px 10px;
+    }
+    .field label, .times .field label{font-size:12px;}
+    .gauge-track{height:20px;}
+    .time-row select{font-size:13px !important;}
+  }
+
+  .card{
+    background:var(--bg-panel);
+    border:1px solid var(--border);
+    border-radius:var(--radius);
+    border-left:4px solid var(--accent);
+    padding:16px 18px 18px;
+  }
+  .card-head{display:flex; align-items:center; justify-content:space-between; margin-bottom:14px;}
+  .card-head .name{
+    font-family:var(--font-display);
+    font-weight:600;
+    font-size:20px;
+    color:var(--accent);
+    letter-spacing:0.5px;
+  }
+  .status{
+    display:inline-flex; align-items:center; gap:6px;
+    font-size:11px; padding:4px 9px; border-radius:999px;
+    background:var(--bg-field); color:var(--text-secondary); letter-spacing:0.5px;
+  }
+  .status .dot{width:7px;height:7px;border-radius:50%; background:var(--status-idle); flex-shrink:0;}
+  .status.run .dot{background:var(--status-run); box-shadow:0 0 0 3px rgba(76,175,109,0.18);}
+  .status.run{color:var(--status-run);}
+  .status.done .dot{background:var(--status-done);}
+  .status.done{color:var(--text-secondary);}
+
+  .field-row{display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:8px;}
+  .field{display:flex; flex-direction:column; gap:3px;}
+  .field.full{grid-column:1 / -1;}
+  .field label{font-size:10px; color:var(--text-muted); letter-spacing:0.4px;}
+  .field input, .field select{
+    background:var(--bg-field);
+    border:1px solid var(--border);
+    border-radius:6px;
+    color:var(--text-primary);
+    font-family:var(--font-mono);
+    font-size:12.5px;
+    padding:6px 8px;
+    width:100%;
+  }
+  .field input:focus, .field select:focus{outline:none; border-color:var(--accent);}
+
+  .gauge-wrap{margin:14px 0 12px;}
+  .gauge-label{display:flex; justify-content:space-between; font-size:11px; color:var(--text-secondary); margin-bottom:5px;}
+  .gauge-label .pct{color:var(--text-primary); font-weight:600;}
+  .gauge-track{
+    position:relative; height:16px;
+    background:repeating-linear-gradient(135deg, var(--bg-field), var(--bg-field) 6px, #262c34 6px, #262c34 12px);
+    border:1px solid var(--border); border-radius:4px; overflow:hidden;
+  }
+  .gauge-fill{position:absolute; top:0; left:0; bottom:0; background:var(--accent); transition:width 0.3s ease;}
+  .gauge-crate{position:absolute; top:50%; transform:translate(-50%,-50%); font-size:12px; line-height:0; color:var(--bg-page); transition:left 0.3s ease;}
+
+  .times{display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-top:10px; padding-top:12px; border-top:1px solid var(--border);}
+  .times .field label{font-size:9.5px;}
+  .time-row{display:flex; gap:4px;}
+  .time-row select{flex:1; min-width:0; font-size:10px; padding:4px 3px;}
+
+  .card-foot{display:flex; justify-content:space-between; align-items:center; margin-top:12px;}
+  .clear-btn{
+    background:none; border:none; color:var(--text-muted);
+    font-size:10.5px; font-family:var(--font-mono); cursor:pointer; padding:2px 4px; text-decoration:underline;
+  }
+  .clear-btn:hover{color:#d5654a;}
+  .done-btn{
+    background:var(--bg-field); border:1px solid var(--border-strong); color:var(--text-primary);
+    font-family:var(--font-mono); font-size:11px; padding:6px 10px; border-radius:6px; cursor:pointer;
+  }
+  .done-btn:hover{border-color:var(--status-run); color:var(--status-run);}
+
+  .log-panel{
+    background:var(--bg-panel);
+    border:1px solid var(--border);
+    border-radius:var(--radius);
+    padding:16px 18px 18px;
+  }
+  .log-form{display:grid; grid-template-columns:repeat(auto-fit, minmax(110px, 1fr)); gap:8px; align-items:end;}
+  .log-form .field label{font-size:10px; color:var(--text-muted);}
+  .log-form select, .log-form input{
+    background:var(--bg-field); border:1px solid var(--border); border-radius:6px;
+    color:var(--text-primary); font-family:var(--font-mono); font-size:12.5px; padding:6px 8px; width:100%;
+  }
+  .log-submit{
+    background:var(--bg-field); border:1px solid var(--border-strong); color:var(--text-primary);
+    font-family:var(--font-mono); font-size:12px; padding:8px 10px; border-radius:6px; cursor:pointer; height:32px;
+  }
+  .log-submit:hover{border-color:var(--status-run); color:var(--status-run);}
+  .log-hint{font-size:10.5px; color:var(--text-muted); margin-top:8px;}
+
+  .save-hint{text-align:100%; text-align:center; font-size:10.5px; color:var(--text-muted); margin-top:18px; letter-spacing:0.3px;}
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <div class="topbar">
+    <h1>產線即時監看板</h1>
+    <div class="topbar-right">
+      <button class="export-btn" id="settings-btn">設定 API 網址</button>
+      <button class="export-btn" id="export-btn">匯出完成紀錄 (CSV)</button>
+      <div class="clock" id="clock">--:--:--</div>
+    </div>
+  </div>
+
+  <div class="grid" id="grid"></div>
+
+  <div class="section-title">機台異常紀錄</div>
+  <div class="log-panel">
+    <div class="log-form" id="abnormal-form">
+      <div class="field">
+        <label>發生日期</label>
+        <div class="time-row">
+          <select data-part="month" id="ab-month"></select>
+          <select data-part="day" id="ab-day"></select>
+        </div>
+      </div>
+      <div class="field">
+        <label>機台</label>
+        <select id="ab-machine"></select>
+      </div>
+      <div class="field">
+        <label>異常類型</label>
+        <select id="ab-type">
+          <option value="">請選擇</option>
+          <option value="單捲標貼歪">單捲標貼歪</option>
+          <option value="料盤載台推擠">料盤載台推擠</option>
+          <option value="料盤毀損">料盤毀損</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>料盤產地</label>
+        <input type="text" id="ab-origin" placeholder="輸入料盤產地">
+      </div>
+      <button class="log-submit" id="ab-submit">新增紀錄</button>
+    </div>
+    <div class="log-hint" id="ab-hint"></div>
+  </div>
+
+  <div class="section-title">機台掃碼異常紀錄</div>
+  <div class="log-panel">
+    <div class="log-form" id="scan-form">
+      <div class="field">
+        <label>發生日期</label>
+        <div class="time-row">
+          <select data-part="month" id="sc-month"></select>
+          <select data-part="day" id="sc-day"></select>
+        </div>
+      </div>
+      <div class="field">
+        <label>機台</label>
+        <select id="sc-machine"></select>
+      </div>
+      <div class="field">
+        <label>異常次數</label>
+        <select id="sc-count"></select>
+      </div>
+      <div class="field">
+        <label>Scan位置</label>
+        <select id="sc-pos">
+          <option value="">請選擇</option>
+          <option value="1">1</option>
+          <option value="2">2</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>LOT</label>
+        <input type="text" id="sc-lot" placeholder="輸入LOT">
+      </div>
+      <div class="field">
+        <label>產地</label>
+        <input type="text" id="sc-origin" placeholder="輸入產地">
+      </div>
+      <button class="log-submit" id="sc-submit">新增紀錄</button>
+    </div>
+    <div class="log-hint" id="sc-hint"></div>
+  </div>
+
+  <div class="save-hint" id="save-hint">載入中...</div>
+</div>
+
+<script>
+const MACHINES = [
+  {key:'大寶', accent:'var(--m-daibao)'},
+  {key:'二寶', accent:'var(--m-erbao)'},
+  {key:'三寶', accent:'var(--m-sanbao)'},
+  {key:'四寶', accent:'var(--m-sibao)'}
+];
+
+const BOX_MIN = 1;
+const BOX_MAX = 1000;
+const TIME_START_MIN = 8*60+30; // 08:30
+const TIME_END_MIN = 22*60;     // 22:00
+const TIME_STEP = 10;
+
+let state = {};
+MACHINES.forEach(m => {
+  state[m.key] = {
+    customer:'',
+    totalBoxes:'', currentBox:'',
+    startTime:'', actualEnd:'', remark:''
+  };
+});
+
+let completedLog = [];
+
+function fmtClock(){
+  const now = new Date();
+  return now.toLocaleTimeString('zh-TW', {hour12:false});
+}
+
+function computeStatus(m){
+  const d = state[m];
+  if(d.actualEnd){ return {cls:'done', label:'已完成'}; }
+  const cur = parseFloat(d.currentBox);
+  if(cur > 0){ return {cls:'run', label:'進行中'}; }
+  return {cls:'idle', label:'待命'};
+}
+
+function computePct(m){
+  const d = state[m];
+  const total = parseFloat(d.totalBoxes);
+  const cur = parseFloat(d.currentBox);
+  if(!total || total <= 0 || isNaN(cur)) return 0;
+  let pct = Math.round((cur/total)*100);
+  if(pct < 0) pct = 0;
+  if(pct > 100) pct = 100;
+  return pct;
+}
+
+function boxOptions(selected){
+  let out = '<option value="">--</option>';
+  const sel = String(selected||'');
+  for(let i = BOX_MIN; i <= BOX_MAX; i++){
+    out += `<option value="${i}"${String(i)===sel?' selected':''}>${i}</option>`;
+  }
+  return out;
+}
+
+function timeOptions(selected){
+  let out = '<option value="">--:--</option>';
+  const sel = String(selected||'');
+  for(let mins = TIME_START_MIN; mins <= TIME_END_MIN; mins += TIME_STEP){
+    const hh = String(Math.floor(mins/60)).padStart(2,'0');
+    const mm = String(mins%60).padStart(2,'0');
+    const t = `${hh}:${mm}`;
+    out += `<option value="${t}"${t===sel?' selected':''}>${t}</option>`;
+  }
+  return out;
+}
+
+function monthOptionsHtml(selected){
+  let out = '<option value="">月</option>';
+  const sel = String(selected||'');
+  for(let i=1;i<=12;i++){
+    out += `<option value="${i}"${String(i)===sel?' selected':''}>${i}月</option>`;
+  }
+  return out;
+}
+
+function dayOptionsHtml(selected){
+  let out = '<option value="">日</option>';
+  const sel = String(selected||'');
+  for(let i=1;i<=31;i++){
+    out += `<option value="${i}"${String(i)===sel?' selected':''}>${i}日</option>`;
+  }
+  return out;
+}
+
+function buildComposite(month, day, time){
+  if(!month && !day && !time) return '';
+  return `${month||''}/${day||''} ${time||''}`;
+}
+
+function parseComposite(str){
+  if(!str) return {month:'', day:'', time:''};
+  const m = String(str).match(/^([^\/]*)\/([^\s]*)\s*(.*)$/);
+  if(!m) return {month:'', day:'', time:''};
+  return {month:m[1]||'', day:m[2]||'', time:m[3]||''};
+}
+
+function nowComposite(){
+  const now = new Date();
+  let mins = now.getHours()*60 + now.getMinutes();
+  mins = Math.max(TIME_START_MIN, Math.min(TIME_END_MIN, mins));
+  mins = Math.round(mins / TIME_STEP) * TIME_STEP;
+  const hh = String(Math.floor(mins/60)).padStart(2,'0');
+  const mm = String(mins%60).padStart(2,'0');
+  return buildComposite(now.getMonth()+1, now.getDate(), `${hh}:${mm}`);
+}
+
+function render(){
+  const grid = document.getElementById('grid');
+  grid.innerHTML = '';
+  MACHINES.forEach(m => {
+    const d = state[m.key];
+    const st = computeStatus(m.key);
+    const pct = computePct(m.key);
+    const sp = parseComposite(d.startTime);
+    const ep = parseComposite(d.actualEnd);
+
+    const card = document.createElement('div');
+    card.className = 'card';
+    card.style.setProperty('--accent', m.accent);
+
+    card.innerHTML = `
+      <div class="card-head">
+        <span class="name">${m.key}</span>
+        <span class="status ${st.cls}"><span class="dot"></span>${st.label}</span>
+      </div>
+      <div class="field-row">
+        <div class="field full">
+          <label>客戶名稱</label>
+          <input type="text" data-k="customer" placeholder="輸入客戶名稱" value="${escapeHtml(d.customer)}">
+        </div>
+      </div>
+      <div class="field-row">
+        <div class="field">
+          <label>總箱數</label>
+          <select data-k="totalBoxes">${boxOptions(d.totalBoxes)}</select>
+        </div>
+        <div class="field">
+          <label>目前第幾箱</label>
+          <select data-k="currentBox">${boxOptions(d.currentBox)}</select>
+        </div>
+      </div>
+      <div class="gauge-wrap">
+        <div class="gauge-label">
+          <span>${(d.currentBox||0)} / ${(d.totalBoxes||0)} 箱</span>
+          <span class="pct">${pct}%</span>
+        </div>
+        <div class="gauge-track">
+          <div class="gauge-fill" style="width:${pct}%"></div>
+          <div class="gauge-crate" style="left:${pct}%">▣</div>
+        </div>
+      </div>
+      <div class="times">
+        <div class="field time-group" data-group="start">
+          <label>開始作業</label>
+          <div class="time-row">
+            <select data-part="month">${monthOptionsHtml(sp.month)}</select>
+            <select data-part="day">${dayOptionsHtml(sp.day)}</select>
+            <select data-part="time">${timeOptions(sp.time)}</select>
+          </div>
+        </div>
+        <div class="field time-group" data-group="end">
+          <label>實際結束</label>
+          <div class="time-row">
+            <select data-part="month">${monthOptionsHtml(ep.month)}</select>
+            <select data-part="day">${dayOptionsHtml(ep.day)}</select>
+            <select data-part="time">${timeOptions(ep.time)}</select>
+          </div>
+        </div>
+      </div>
+      <div class="field-row">
+        <div class="field full">
+          <label>備註</label>
+          <input type="text" data-k="remark" placeholder="輸入備註" value="${escapeHtml(d.remark)}">
+        </div>
+      </div>
+      <div class="card-foot">
+        <button class="clear-btn" data-clear="${m.key}">清空本機台資料</button>
+        <button class="done-btn" data-done="${m.key}">確定完成並加入紀錄</button>
+      </div>
+    `;
+
+    card.querySelectorAll('.field-row input, .field-row select, .field-row.full input').forEach(inp => {
+      if(!inp.dataset.k) return;
+      inp.addEventListener('change', (e) => {
+        state[m.key][e.target.dataset.k] = e.target.value;
+        saveState(m.key);
+        render();
+      });
+    });
+
+    card.querySelectorAll('.time-group').forEach(group => {
+      const grp = group.dataset.group;
+      group.querySelectorAll('select').forEach(sel => {
+        sel.addEventListener('change', () => {
+          const monthV = group.querySelector('[data-part="month"]').value;
+          const dayV = group.querySelector('[data-part="day"]').value;
+          const timeV = group.querySelector('[data-part="time"]').value;
+          const composite = buildComposite(monthV, dayV, timeV);
+          if(grp === 'start'){ state[m.key].startTime = composite; }
+          else { state[m.key].actualEnd = composite; }
+          saveState(m.key);
+          render();
+        });
+      });
+    });
+
+    card.querySelector('[data-clear]').addEventListener('click', () => {
+      if(confirm(`確定要清空 ${m.key} 的資料嗎？`)){
+        state[m.key] = { customer:'', totalBoxes:'', currentBox:'', startTime:'', actualEnd:'', remark:'' };
+        saveState(m.key);
+        render();
+      }
+    });
+
+    card.querySelector('[data-done]').addEventListener('click', () => {
+      const dd = state[m.key];
+      if(!dd.customer || !dd.totalBoxes){
+        alert('請先填寫客戶名稱與總箱數，再標記完成。');
+        return;
+      }
+      const finishTime = dd.actualEnd || nowComposite();
+      const record = {
+        machine:m.key, customer:dd.customer, totalBoxes:dd.totalBoxes, currentBox:dd.currentBox,
+        startTime:dd.startTime, actualEnd:finishTime, remark:dd.remark, pct:computePct(m.key)
+      };
+      completedLog.push(record);
+      saveLog(record);
+      state[m.key] = { customer:'', totalBoxes:'', currentBox:'', startTime:'', actualEnd:'', remark:'' };
+      saveState(m.key);
+      render();
+    });
+
+    grid.appendChild(card);
+  });
+}
+
+function escapeHtml(v){
+  if(v === undefined || v === null) return '';
+  return String(v).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+// ---------- API layer ----------
+const API_URL_KEY = 'monitor-board-api-url';
+let API_URL = localStorage.getItem(API_URL_KEY) || '';
+
+function setupApiUrl(){
+  const current = API_URL || '';
+  const input = prompt('請貼上 Google Apps Script 部署後的網頁應用程式網址：', current);
+  if(input === null) return;
+  API_URL = input.trim();
+  localStorage.setItem(API_URL_KEY, API_URL);
+  loadState();
+}
+
+async function apiPost(payload){
+  if(!API_URL) throw new Error('尚未設定 API 網址');
+  const res = await fetch(API_URL, {
+    method:'POST',
+    headers:{'Content-Type':'text/plain;charset=utf-8'},
+    body: JSON.stringify(payload)
+  });
+  const text = await res.text();
+  let json;
+  try{
+    json = JSON.parse(text);
+  }catch(parseErr){
+    throw new Error('伺服器回應不是有效資料，請確認 API 網址與部署權限是否為「任何人」');
+  }
+  if(json && json.error){ throw new Error(json.error); }
+  if(!json || json.ok !== true){ throw new Error('伺服器未確認寫入成功'); }
+  return json;
+}
+
+async function saveState(machine){
+  const hint = document.getElementById('save-hint');
+  if(!API_URL){ hint.textContent = '尚未設定 API 網址，資料暫時只存在畫面上'; return; }
+  try{
+    await apiPost({action:'saveState', machine: machine, data: state[machine]});
+    hint.textContent = '已同步至試算表 · ' + fmtClock();
+  }catch(err){
+    hint.textContent = '同步失敗，請檢查網路或 API 網址：' + err;
+  }
+}
+
+async function saveLog(record){
+  if(!API_URL){ alert('尚未設定 API 網址，無法把這筆紀錄存到試算表。'); return; }
+  try{ await apiPost({action:'appendLog', data: record}); }
+  catch(err){ alert('紀錄同步失敗：' + err); }
+}
+
+async function loadState(){
+  const hint = document.getElementById('save-hint');
+  if(!API_URL){
+    hint.textContent = '尚未設定 API 網址，請點選右上角「設定 API 網址」';
+    render();
+    return;
+  }
+  try{
+    const res = await fetch(API_URL + '?action=load');
+    const text = await res.text();
+    let json;
+    try{
+      json = JSON.parse(text);
+    }catch(parseErr){
+      throw new Error('伺服器回應不是有效資料，請確認 API 網址與部署權限是否為「任何人」');
+    }
+    if(json.state){
+      MACHINES.forEach(m => { if(json.state[m.key]) state[m.key] = Object.assign(state[m.key], json.state[m.key]); });
+    }
+    if(json.log){ completedLog = json.log; }
+    hint.textContent = '已同步至試算表 · ' + fmtClock();
+  }catch(err){
+    hint.textContent = '讀取失敗，請檢查網路或 API 網址：' + err;
+  }
+  render();
+}
+
+function csvEscape(v){
+  const s = String(v===undefined||v===null?'':v);
+  if(/[",\n]/.test(s)){ return '"' + s.replace(/"/g,'""') + '"'; }
+  return s;
+}
+
+function exportCsv(){
+  if(!completedLog.length){ alert('目前還沒有已完成的紀錄可以匯出。'); return; }
+  const headers = ['機台','客戶名稱','總箱數','完成箱數','開始作業時間','實際結束時間','備註','完成率(%)'];
+  const rows = completedLog.map(r => [r.machine, r.customer, r.totalBoxes, r.currentBox, r.startTime, r.actualEnd, r.remark, r.pct]);
+  let csv = '\uFEFF' + headers.map(csvEscape).join(',') + '\r\n';
+  rows.forEach(row => { csv += row.map(csvEscape).join(',') + '\r\n'; });
+  const blob = new Blob([csv], {type:'text/csv;charset=utf-8;'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  const now = new Date();
+  const pad = n => String(n).padStart(2,'0');
+  a.href = url;
+  a.download = `機台完成紀錄_${now.getFullYear()}${pad(now.getMonth()+1)}${pad(now.getDate())}.csv`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+function tickClock(){ document.getElementById('clock').textContent = fmtClock(); }
+
+document.getElementById('export-btn').addEventListener('click', exportCsv);
+document.getElementById('settings-btn').addEventListener('click', setupApiUrl);
+
+// ---------- 機台異常 / 機台掃碼異常 quick-log forms ----------
+function fillMachineSelect(sel){
+  sel.innerHTML = '<option value="">請選擇</option>' + MACHINES.map(m => `<option value="${m.key}">${m.key}</option>`).join('');
+}
+fillMachineSelect(document.getElementById('ab-machine'));
+fillMachineSelect(document.getElementById('sc-machine'));
+document.getElementById('ab-month').innerHTML = monthOptionsHtml('');
+document.getElementById('ab-day').innerHTML = dayOptionsHtml('');
+document.getElementById('sc-month').innerHTML = monthOptionsHtml('');
+document.getElementById('sc-day').innerHTML = dayOptionsHtml('');
+(function fillCountOptions(){
+  const sel = document.getElementById('sc-count');
+  let out = '<option value="">請選擇</option>';
+  for(let i=1;i<=20;i++){ out += `<option value="${i}">${i}</option>`; }
+  sel.innerHTML = out;
+})();
+
+document.getElementById('ab-submit').addEventListener('click', async () => {
+  const month = document.getElementById('ab-month').value;
+  const day = document.getElementById('ab-day').value;
+  const machine = document.getElementById('ab-machine').value;
+  const type = document.getElementById('ab-type').value;
+  const origin = document.getElementById('ab-origin').value.trim();
+  const hint = document.getElementById('ab-hint');
+  if(!month || !day || !machine || !type){
+    hint.textContent = '請把發生日期、機台、異常類型都選完再送出。';
+    return;
+  }
+  if(!API_URL){ hint.textContent = '尚未設定 API 網址，請先點右上角「設定 API 網址」。'; return; }
+  try{
+    await apiPost({action:'appendAbnormal', data:{
+      '發生日期': `${month}/${day}`,
+      '機台': machine,
+      '異常類型': type,
+      '料盤產地': origin
+    }});
+    hint.textContent = '已新增：' + `${month}/${day} ${machine} ${type}` + ' · ' + fmtClock();
+    document.getElementById('ab-type').value = '';
+    document.getElementById('ab-origin').value = '';
+  }catch(err){
+    hint.textContent = '新增失敗：' + err;
+  }
+});
+
+document.getElementById('sc-submit').addEventListener('click', async () => {
+  const month = document.getElementById('sc-month').value;
+  const day = document.getElementById('sc-day').value;
+  const machine = document.getElementById('sc-machine').value;
+  const count = document.getElementById('sc-count').value;
+  const pos = document.getElementById('sc-pos').value;
+  const lot = document.getElementById('sc-lot').value.trim();
+  const origin = document.getElementById('sc-origin').value.trim();
+  const hint = document.getElementById('sc-hint');
+  if(!month || !day || !machine || !count || !pos){
+    hint.textContent = '請把發生日期、機台、異常次數、Scan位置都選完再送出。';
+    return;
+  }
+  if(!API_URL){ hint.textContent = '尚未設定 API 網址，請先點右上角「設定 API 網址」。'; return; }
+  try{
+    await apiPost({action:'appendScan', data:{
+      '發生日期': `${month}/${day}`,
+      '機台': machine,
+      '異常次數': count,
+      'Scan位置': pos,
+      'LOT': lot,
+      '產地': origin
+    }});
+    hint.textContent = '已新增 · ' + fmtClock();
+    document.getElementById('sc-lot').value = '';
+    document.getElementById('sc-origin').value = '';
+  }catch(err){
+    hint.textContent = '新增失敗：' + err;
+  }
+});
+
+tickClock();
+setInterval(tickClock, 1000);
+setInterval(() => {
+  const active = document.activeElement;
+  const isEditing = active && (active.tagName === 'INPUT' || active.tagName === 'SELECT');
+  if(!isEditing){ loadState(); }
+}, 15000);
+loadState();
+</script>
+
+</body>
+</html>
