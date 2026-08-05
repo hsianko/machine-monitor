@@ -380,7 +380,7 @@
 
 <div class="wrap">
   <div class="topbar">
-    <h1>產線即時監看板 <button class="version-badge" id="version-badge">v5.0</button></h1>
+    <h1>產線即時監看板 <button class="version-badge" id="version-badge">v5.1</button></h1>
     <div class="topbar-right">
       <div class="menu-wrap">
         <button class="export-btn" id="records-btn">查看紀錄 ▾</button>
@@ -528,7 +528,8 @@ function fmtClock(){
 
 function computeStatus(m){
   const d = state[m];
-  if(d.actualEnd){ return {cls:'done', label:'已完成'}; }
+  const ep = parseComposite(d.actualEnd);
+  if(ep.time){ return {cls:'done', label:'已完成'}; }
   const cur = parseFloat(d.currentBox);
   if(cur > 0){ return {cls:'run', label:'進行中'}; }
   return {cls:'idle', label:'待命'};
@@ -722,7 +723,8 @@ function render(){
         alert('請先填寫客戶名稱與總箱數，再標記完成。');
         return;
       }
-      const finishTime = dd.actualEnd || nowComposite();
+      const endHasTime = parseComposite(dd.actualEnd).time;
+      const finishTime = endHasTime ? dd.actualEnd : nowComposite();
       const record = {
         machine:m.key, customer:dd.customer, totalBoxes:dd.totalBoxes, currentBox:dd.currentBox,
         startTime:dd.startTime, actualEnd:finishTime, remark:dd.remark, pct:computePct(m.key)
@@ -1174,6 +1176,7 @@ document.addEventListener('click', (e) => {
 
 // ---------- 版本紀錄 ----------
 const VERSION_LOG = [
+  {v:'v5.1', d:'修正只先選了結束日期、時間還沒填時，狀態燈號被誤判成「已完成」的問題'},
   {v:'v5.0', d:'機台產能記錄新增備註提示：有備註的紀錄自動標色加圖示，並可一鍵篩選只看有備註的紀錄'},
   {v:'v4.9', d:'修正完成率欄位對不上試算表標題導致空白的問題；查看紀錄時若舊資料沒有完成率，會自動用箱數換算補上'},
   {v:'v4.8', d:'內建預設 API 網址，分享給其他人或在新裝置開啟時不用再手動設定，會自動連到同一份試算表'},
