@@ -61,7 +61,90 @@
     letter-spacing:0.5px;
     margin:0;
     color:var(--text-primary);
+    display:flex;
+    align-items:center;
+    gap:8px;
   }
+  .version-badge{
+    font-family:var(--font-mono);
+    font-size:11px;
+    font-weight:600;
+    color:var(--text-secondary);
+    background:var(--bg-field);
+    border:1px solid var(--border-strong);
+    border-radius:999px;
+    padding:3px 10px;
+    cursor:pointer;
+    letter-spacing:0.3px;
+  }
+  .version-badge:hover{border-color:var(--status-run); color:var(--status-run);}
+
+  .modal-overlay{
+    display:none;
+    position:fixed;
+    inset:0;
+    background:rgba(0,0,0,0.6);
+    z-index:100;
+    align-items:center;
+    justify-content:center;
+    padding:24px;
+  }
+  .modal-overlay.open{display:flex;}
+  .version-modal{
+    background:var(--bg-panel);
+    border:1px solid var(--border-strong);
+    border-radius:12px;
+    width:100%;
+    max-width:560px;
+    max-height:82vh;
+    display:flex;
+    flex-direction:column;
+    box-shadow:0 24px 64px rgba(0,0,0,0.55);
+  }
+  .version-modal-head{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    padding:16px 20px;
+    border-bottom:1px solid var(--border);
+  }
+  .version-modal-head .vtitle{
+    font-family:var(--font-display);
+    font-weight:600;
+    font-size:18px;
+    color:var(--text-primary);
+  }
+  .modal-close-x{
+    background:none;
+    border:none;
+    color:var(--text-secondary);
+    font-size:20px;
+    line-height:1;
+    cursor:pointer;
+    padding:6px 10px;
+    border-radius:8px;
+  }
+  .modal-close-x:hover{background:var(--bg-field); color:#d5654a;}
+  .version-modal-body{
+    padding:8px 20px 20px;
+    overflow-y:auto;
+  }
+  .version-modal-body .vrow{
+    display:flex;
+    gap:16px;
+    padding:12px 4px;
+    border-bottom:1px solid var(--border);
+    font-size:13.5px;
+  }
+  .version-modal-body .vrow:last-child{border-bottom:none;}
+  .version-modal-body .vnum{
+    flex-shrink:0;
+    width:52px;
+    font-weight:700;
+    color:var(--status-run);
+    font-size:14px;
+  }
+  .version-modal-body .vdesc{color:var(--text-secondary); line-height:1.6;}
   .topbar-right{display:flex; align-items:center; gap:10px; flex-wrap:wrap;}
   .topbar .clock{font-size:14px; color:var(--text-secondary); letter-spacing:0.5px;}
   .export-btn{
@@ -291,7 +374,7 @@
 
 <div class="wrap">
   <div class="topbar">
-    <h1>產線即時監看板</h1>
+    <h1>產線即時監看板 <button class="version-badge" id="version-badge">v4.3</button></h1>
     <div class="topbar-right">
       <div class="menu-wrap">
         <button class="export-btn" id="records-btn">查看紀錄 ▾</button>
@@ -391,6 +474,16 @@
   </div>
 
   <div class="save-hint" id="save-hint">載入中...</div>
+</div>
+
+<div class="modal-overlay" id="version-overlay">
+  <div class="version-modal">
+    <div class="version-modal-head">
+      <span class="vtitle">版本紀錄</span>
+      <button class="modal-close-x" id="version-close-x">✕</button>
+    </div>
+    <div class="version-modal-body" id="version-modal-body"></div>
+  </div>
 </div>
 
 <script>
@@ -662,7 +755,8 @@ async function apiPost(payload){
   const res = await fetch(API_URL, {
     method:'POST',
     headers:{'Content-Type':'text/plain;charset=utf-8'},
-    body: JSON.stringify(payload)
+    body: JSON.stringify(payload),
+    keepalive: true
   });
   const text = await res.text();
   let json;
@@ -698,8 +792,15 @@ function fromChinese(map, obj){
   return out;
 }
 
+// 記錄「這台機台最近才在本機修改過」的截止時間。
+// 在這個時間之前，即使背景輪詢抓到試算表資料，也不會拿來覆蓋畫面上的內容，
+// 避免「剛選好日期/時間，還來不及真正寫進試算表，就被舊資料蓋掉」的情況。
+let dirtyUntil = {};
+const DIRTY_GRACE_MS = 25000;
+
 async function saveState(machine){
   const hint = document.getElementById('save-hint');
+  dirtyUntil[machine] = Date.now() + DIRTY_GRACE_MS;
   if(!API_URL){ hint.textContent = '尚未設定 API 網址，資料暫時只存在畫面上'; return; }
   try{
     await apiPost({action:'saveState', machine: machine, data: toChinese(STATE_MAP, state[machine])});
@@ -733,6 +834,8 @@ async function loadState(){
     }
     if(json.state){
       MACHINES.forEach(m => {
+        const stillDirty = dirtyUntil[m.key] && Date.now() < dirtyUntil[m.key];
+        if(stillDirty) return; // 最近才本機修改過，先不要用伺服器資料覆蓋
         if(json.state[m.key]) state[m.key] = Object.assign(state[m.key], fromChinese(STATE_MAP, json.state[m.key]));
       });
     }
@@ -1020,6 +1123,48 @@ document.addEventListener('click', (e) => {
   if(!e.target.closest('.menu-wrap')){
     document.getElementById('records-menu').classList.remove('open');
   }
+});
+
+// ---------- 版本紀錄 ----------
+const VERSION_LOG = [
+  {v:'v4.3', d:'新增版本紀錄功能，點選標題旁的版本標籤可用浮動視窗查看完整更新歷程'},
+  {v:'v4.2', d:'修正網頁欄位與試算表標題對不上的問題、時間格式異常、資料離開畫面消失的防呆機制'},
+  {v:'v4.1', d:'新增依日期分頁檢視紀錄、清除兩週前舊紀錄功能'},
+  {v:'v4.0', d:'新增「查看紀錄」選單，可即時檢視三大類紀錄並支援編輯／刪除'},
+  {v:'v3.2', d:'開始／結束時間改為月/日/時間下拉選單；Scan位置、異常次數等選項調整'},
+  {v:'v3.1', d:'新增機台異常記錄、機台掃碼異常記錄表單'},
+  {v:'v3.0', d:'改用 Google 試算表 + Apps Script，支援手機與電腦即時雲端同步'},
+  {v:'v2.1', d:'移除產品別、新增備註欄位；改用瀏覽器本機儲存'},
+  {v:'v2.0', d:'移除客戶單號／預計結束時間；箱數改下拉選單；新增完成紀錄與 CSV 匯出'},
+  {v:'v1.1', d:'手機版面與頁面置中問題修正'},
+  {v:'v1.0', d:'初版四機台監看板：客戶名稱、單號、產品別、箱數、時間、完成率'}
+];
+
+function renderVersionPanel(){
+  const body = document.getElementById('version-modal-body');
+  body.innerHTML = VERSION_LOG.map(item =>
+    `<div class="vrow"><span class="vnum">${item.v}</span><span class="vdesc">${escapeHtml(item.d)}</span></div>`
+  ).join('');
+}
+renderVersionPanel();
+
+function openVersionModal(){
+  document.getElementById('version-overlay').classList.add('open');
+}
+function closeVersionModal(){
+  document.getElementById('version-overlay').classList.remove('open');
+}
+
+document.getElementById('version-badge').addEventListener('click', (e) => {
+  e.stopPropagation();
+  openVersionModal();
+});
+document.getElementById('version-close-x').addEventListener('click', closeVersionModal);
+document.getElementById('version-overlay').addEventListener('click', (e) => {
+  if(e.target.id === 'version-overlay') closeVersionModal();
+});
+document.addEventListener('keydown', (e) => {
+  if(e.key === 'Escape') closeVersionModal();
 });
 
 document.getElementById('export-btn').addEventListener('click', exportCsv);
