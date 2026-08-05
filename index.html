@@ -380,7 +380,7 @@
 
 <div class="wrap">
   <div class="topbar">
-    <h1>產線即時監看板 <button class="version-badge" id="version-badge">v5.3</button></h1>
+    <h1>產線即時監看板 <button class="version-badge" id="version-badge">v5.4</button></h1>
     <div class="topbar-right">
       <div class="menu-wrap">
         <button class="export-btn" id="records-btn">查看紀錄 ▾</button>
@@ -431,6 +431,10 @@
           <option value="料盤載台推擠">料盤載台推擠</option>
           <option value="料盤毀損">料盤毀損</option>
         </select>
+      </div>
+      <div class="field">
+        <label>異常次數</label>
+        <select id="ab-count"></select>
       </div>
       <div class="field">
         <label>料盤產地</label>
@@ -967,9 +971,9 @@ const VIEW_CONFIG = {
   abnormal: {
     title:'機台異常記錄',
     sheet:'MachineAbnormal',
-    headers:['發生日期','機台','異常類型','料盤產地'],
-    keys:['發生日期','機台','異常類型','料盤產地'],
-    fieldTypes:{'機台':{type:'select', options:MACHINE_OPTS}, '異常類型':{type:'select', options:AB_TYPE_OPTS}},
+    headers:['發生日期','機台','異常類型','異常次數','料盤產地'],
+    keys:['發生日期','機台','異常類型','異常次數','料盤產地'],
+    fieldTypes:{'機台':{type:'select', options:MACHINE_OPTS}, '異常類型':{type:'select', options:AB_TYPE_OPTS}, '異常次數':{type:'select', options:SCAN_COUNT_OPTS}},
     dateKey:'紀錄時間',
     getData: () => abnormalLog,
     toApi: (obj) => obj
@@ -1192,6 +1196,7 @@ document.addEventListener('click', (e) => {
 
 // ---------- 版本紀錄 ----------
 const VERSION_LOG = [
+  {v:'v5.4', d:'機台異常記錄新增「異常次數」下拉選單（1~20），放在異常類型與料盤產地之間'},
   {v:'v5.3', d:'加強網路不穩定時的容錯：連線失敗會自動重試一次；後端執行錯誤也會回傳清楚的錯誤訊息，不會再顯示看不懂的「伺服器回應不是有效資料」'},
   {v:'v5.2', d:'機台異常記錄、機台掃碼異常記錄，新增後表單會自動清空全部欄位，方便直接輸入下一筆'},
   {v:'v5.1', d:'修正只先選了結束日期、時間還沒填時，狀態燈號被誤判成「已完成」的問題'},
@@ -1256,10 +1261,10 @@ document.getElementById('ab-day').innerHTML = dayOptionsHtml('');
 document.getElementById('sc-month').innerHTML = monthOptionsHtml('');
 document.getElementById('sc-day').innerHTML = dayOptionsHtml('');
 (function fillCountOptions(){
-  const sel = document.getElementById('sc-count');
   let out = '<option value="">請選擇</option>';
   for(let i=1;i<=20;i++){ out += `<option value="${i}">${i}</option>`; }
-  sel.innerHTML = out;
+  document.getElementById('sc-count').innerHTML = out;
+  document.getElementById('ab-count').innerHTML = out;
 })();
 
 document.getElementById('ab-submit').addEventListener('click', async () => {
@@ -1267,6 +1272,7 @@ document.getElementById('ab-submit').addEventListener('click', async () => {
   const day = document.getElementById('ab-day').value;
   const machine = document.getElementById('ab-machine').value;
   const type = document.getElementById('ab-type').value;
+  const count = document.getElementById('ab-count').value;
   const origin = document.getElementById('ab-origin').value.trim();
   const hint = document.getElementById('ab-hint');
   if(!month || !day || !machine || !type){
@@ -1279,6 +1285,7 @@ document.getElementById('ab-submit').addEventListener('click', async () => {
       '發生日期': `${month}/${day}`,
       '機台': machine,
       '異常類型': type,
+      '異常次數': count,
       '料盤產地': origin
     };
     await apiPost({action:'appendAbnormal', data: record});
@@ -1288,6 +1295,7 @@ document.getElementById('ab-submit').addEventListener('click', async () => {
     document.getElementById('ab-day').value = '';
     document.getElementById('ab-machine').value = '';
     document.getElementById('ab-type').value = '';
+    document.getElementById('ab-count').value = '';
     document.getElementById('ab-origin').value = '';
     renderViewer('abnormal', true);
   }catch(err){
