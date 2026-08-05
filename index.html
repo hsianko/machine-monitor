@@ -380,7 +380,7 @@
 
 <div class="wrap">
   <div class="topbar">
-    <h1>產線即時監看板 <button class="version-badge" id="version-badge">v5.2</button></h1>
+    <h1>產線即時監看板 <button class="version-badge" id="version-badge">v5.3</button></h1>
     <div class="topbar-right">
       <div class="menu-wrap">
         <button class="export-btn" id="records-btn">查看紀錄 ▾</button>
@@ -762,7 +762,9 @@ function setupApiUrl(){
   loadState();
 }
 
-async function apiPost(payload){
+function sleep(ms){ return new Promise(resolve => setTimeout(resolve, ms)); }
+
+async function apiPostOnce(payload){
   if(!API_URL) throw new Error('尚未設定 API 網址');
   const res = await fetch(API_URL, {
     method:'POST',
@@ -780,6 +782,20 @@ async function apiPost(payload){
   if(json && json.error){ throw new Error(json.error); }
   if(!json || json.ok !== true){ throw new Error('伺服器未確認寫入成功'); }
   return json;
+}
+
+// 網路偶爾會斷斷續續（尤其是手機切換 WiFi/行動網路時），
+// 遇到「連線本身失敗」（不是伺服器回錯誤，是根本送不出去/收不到回應）時，
+// 自動重試一次，中間等 1.2 秒，避免只是一瞬間的網路不穩就整筆資料存失敗。
+async function apiPost(payload){
+  try{
+    return await apiPostOnce(payload);
+  }catch(err){
+    const isNetworkErr = err instanceof TypeError || /Load failed|Failed to fetch|NetworkError/i.test(String(err.message||err));
+    if(!isNetworkErr) throw err;
+    await sleep(1200);
+    return await apiPostOnce(payload);
+  }
 }
 
 // 網頁內部用英文欄位名稱，試算表用中文標題列 -> 這裡做雙向轉換，避免對不上
@@ -1176,6 +1192,7 @@ document.addEventListener('click', (e) => {
 
 // ---------- 版本紀錄 ----------
 const VERSION_LOG = [
+  {v:'v5.3', d:'加強網路不穩定時的容錯：連線失敗會自動重試一次；後端執行錯誤也會回傳清楚的錯誤訊息，不會再顯示看不懂的「伺服器回應不是有效資料」'},
   {v:'v5.2', d:'機台異常記錄、機台掃碼異常記錄，新增後表單會自動清空全部欄位，方便直接輸入下一筆'},
   {v:'v5.1', d:'修正只先選了結束日期、時間還沒填時，狀態燈號被誤判成「已完成」的問題'},
   {v:'v5.0', d:'機台產能記錄新增備註提示：有備註的紀錄自動標色加圖示，並可一鍵篩選只看有備註的紀錄'},
