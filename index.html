@@ -249,7 +249,7 @@
   .time-row{display:flex; gap:6px;}
   .time-row select{flex:1; min-width:0; font-size:13px; padding:6px 4px;}
 
-  .card-foot{display:flex; justify-content:space-between; align-items:center; margin-top:12px;}
+  .card-foot{display:flex; justify-content:space-between; align-items:center; margin-top:12px; flex-wrap:wrap; gap:8px;}
   .clear-btn{
     background:none; border:none; color:var(--text-muted);
     font-size:10.5px; font-family:var(--font-mono); cursor:pointer; padding:2px 4px; text-decoration:underline;
@@ -380,7 +380,7 @@
 
 <div class="wrap">
   <div class="topbar">
-    <h1>產線即時監看板 <button class="version-badge" id="version-badge">v5.4</button></h1>
+    <h1>產線即時監看板 <button class="version-badge" id="version-badge">v6.0</button></h1>
     <div class="topbar-right">
       <div class="menu-wrap">
         <button class="export-btn" id="records-btn">查看紀錄 ▾</button>
@@ -388,6 +388,7 @@
           <button data-view="log">機台產能記錄</button>
           <button data-view="abnormal">機台異常記錄</button>
           <button data-view="scan">機台掃碼異常記錄</button>
+          <button data-view="daily">每日進度紀錄</button>
         </div>
       </div>
       <button class="export-btn" id="settings-btn">設定 API 網址</button>
@@ -523,6 +524,19 @@ MACHINES.forEach(m => {
 let completedLog = [];
 let abnormalLog = [];
 let scanLog = [];
+let dailyLog = [];
+
+// 找出同一張訂單（機台+客戶+總箱數 相同視為同一張）最近一次「記錄今日進度」的累計箱數，
+// 用來算出「今天實際多做了幾箱」，不用自己心算。
+function computeDailyDelta(machine, customer, totalBoxes, currentBox){
+  const matches = dailyLog.filter(r =>
+    r['機台'] === machine && r['客戶名稱'] === customer && String(r['總箱數']) === String(totalBoxes)
+  );
+  if(!matches.length) return currentBox;
+  const last = matches[matches.length - 1];
+  const prevCum = parseFloat(last['累計箱數']) || 0;
+  return Math.max(0, currentBox - prevCum);
+}
 let currentLogView = null;
 
 function fmtClock(){
@@ -684,7 +698,10 @@ function render(){
       </div>
       <div class="card-foot">
         <button class="clear-btn" data-clear="${m.key}">清空本機台資料</button>
-        <button class="done-btn" data-done="${m.key}">確定完成並加入紀錄</button>
+        <div style="display:flex; gap:8px;">
+          <button class="done-btn" data-daily="${m.key}">記錄今日進度</button>
+          <button class="done-btn" data-done="${m.key}">確定完成並加入紀錄</button>
+        </div>
       </div>
     `;
 
@@ -739,6 +756,34 @@ function render(){
       await loadState();
       renderViewer('log', true);
       render();
+    });
+
+    card.querySelector('[data-daily]').addEventListener('click', async () => {
+      const dd = state[m.key];
+      if(!dd.customer || !dd.totalBoxes){
+        alert('請先填寫客戶名稱與總箱數，再記錄今日進度。');
+        return;
+      }
+      if(!API_URL){ alert('尚未設定 API 網址，請先點右上角「設定 API 網址」。'); return; }
+      const cur = parseFloat(dd.currentBox) || 0;
+      const delta = computeDailyDelta(m.key, dd.customer, dd.totalBoxes, cur);
+      const now = new Date();
+      const record = {
+        '日期': `${now.getMonth()+1}/${now.getDate()}`,
+        '機台': m.key,
+        '客戶名稱': dd.customer,
+        '今日完成箱數': delta,
+        '累計箱數': cur,
+        '總箱數': dd.totalBoxes,
+        '完成率(%)': computePct(m.key)
+      };
+      try{
+        await apiPost({action:'appendDaily', data: record});
+        await loadState();
+        renderViewer('daily', true);
+      }catch(err){
+        alert('記錄今日進度失敗：' + err);
+      }
     });
 
     grid.appendChild(card);
@@ -874,6 +919,7 @@ async function loadState(){
     if(json.log){ completedLog = json.log.map(r => fromChinese(LOG_MAP, r)); }
     if(json.abnormal){ abnormalLog = json.abnormal; }
     if(json.scan){ scanLog = json.scan; }
+    if(json.daily){ dailyLog = json.daily; }
     if(currentLogView){ renderViewer(currentLogView); }
     const beTag = json.backendVersion ? (' · 後端 ' + json.backendVersion) : ' · 後端版本未知（請確認 Apps Script 是否為最新版）';
     hint.textContent = '已同步至試算表 · ' + fmtClock() + beTag;
@@ -925,7 +971,8 @@ async function purgeOldRecords(){
   const n1 = countOld(completedLog, VIEW_CONFIG.log);
   const n2 = countOld(abnormalLog, VIEW_CONFIG.abnormal);
   const n3 = countOld(scanLog, VIEW_CONFIG.scan);
-  const total = n1 + n2 + n3;
+  const n4 = countOld(dailyLog, VIEW_CONFIG.daily);
+  const total = n1 + n2 + n3 + n4;
 
   if(total === 0){
     alert('目前沒有超過兩週的舊紀錄可以清除。');
@@ -933,7 +980,7 @@ async function purgeOldRecords(){
   }
 
   const msg = `即將清除 ${cutoffDate.getMonth()+1}/${cutoffDate.getDate()} 之前建立的紀錄，共 ${total} 筆：\n`
-    + `機台產能記錄 ${n1} 筆\n機台異常記錄 ${n2} 筆\n機台掃碼異常記錄 ${n3} 筆\n\n此動作無法復原，確定要清除嗎？`;
+    + `機台產能記錄 ${n1} 筆\n機台異常記錄 ${n2} 筆\n機台掃碼異常記錄 ${n3} 筆\n每日進度紀錄 ${n4} 筆\n\n此動作無法復原，確定要清除嗎？`;
   if(!confirm(msg)) return;
 
   if(!API_URL){ alert('尚未設定 API 網址。'); return; }
@@ -986,6 +1033,16 @@ const VIEW_CONFIG = {
     fieldTypes:{'機台':{type:'select', options:MACHINE_OPTS}, '異常次數':{type:'select', options:SCAN_COUNT_OPTS}, 'Scan位置':{type:'select', options:SCAN_POS_OPTS}},
     dateKey:'紀錄時間',
     getData: () => scanLog,
+    toApi: (obj) => obj
+  },
+  daily: {
+    title:'每日進度紀錄',
+    sheet:'DailyProgress',
+    headers:['日期','機台','客戶名稱','今日完成箱數','累計箱數','總箱數','完成率(%)'],
+    keys:['日期','機台','客戶名稱','今日完成箱數','累計箱數','總箱數','完成率(%)'],
+    fieldTypes:{'機台':{type:'select', options:MACHINE_OPTS}},
+    dateKey:'紀錄時間',
+    getData: () => dailyLog,
     toApi: (obj) => obj
   }
 };
@@ -1196,6 +1253,7 @@ document.addEventListener('click', (e) => {
 
 // ---------- 版本紀錄 ----------
 const VERSION_LOG = [
+  {v:'v6.0', d:'新增「記錄今日進度」功能，用於跨日訂單：可記錄每天實際完成箱數而不清空卡片，並新增「每日進度紀錄」查看分類'},
   {v:'v5.4', d:'機台異常記錄新增「異常次數」下拉選單（1~20），放在異常類型與料盤產地之間'},
   {v:'v5.3', d:'加強網路不穩定時的容錯：連線失敗會自動重試一次；後端執行錯誤也會回傳清楚的錯誤訊息，不會再顯示看不懂的「伺服器回應不是有效資料」'},
   {v:'v5.2', d:'機台異常記錄、機台掃碼異常記錄，新增後表單會自動清空全部欄位，方便直接輸入下一筆'},
