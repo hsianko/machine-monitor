@@ -377,7 +377,7 @@
 
 <div class="wrap">
   <div class="topbar">
-    <h1>產線即時監看板 <button class="version-badge" id="version-badge">v4.5</button></h1>
+    <h1>產線即時監看板 <button class="version-badge" id="version-badge">v4.6</button></h1>
     <div class="topbar-right">
       <div class="menu-wrap">
         <button class="export-btn" id="records-btn">查看紀錄 ▾</button>
@@ -846,7 +846,8 @@ async function loadState(){
     if(json.abnormal){ abnormalLog = json.abnormal; }
     if(json.scan){ scanLog = json.scan; }
     if(currentLogView){ renderViewer(currentLogView); }
-    hint.textContent = '已同步至試算表 · ' + fmtClock();
+    const beTag = json.backendVersion ? (' · 後端 ' + json.backendVersion) : ' · 後端版本未知（請確認 Apps Script 是否為最新版）';
+    hint.textContent = '已同步至試算表 · ' + fmtClock() + beTag;
   }catch(err){
     hint.textContent = '讀取失敗，請檢查網路或 API 網址：' + err;
   }
@@ -1130,6 +1131,7 @@ document.addEventListener('click', (e) => {
 
 // ---------- 版本紀錄 ----------
 const VERSION_LOG = [
+  {v:'v4.6', d:'加入後端版本標記，畫面下方會顯示目前連到的 Apps Script 版本代號，方便確認是否已更新到最新版；紀錄時間欄位也加入防止被誤判成日期格式的保護'},
   {v:'v4.5', d:'加入防止瀏覽器快取的設定，避免手機加到主畫面後看到舊版畫面'},
   {v:'v4.4', d:'修正時間顯示整整差 8 小時的問題（試算表後端時區固定改為 Asia/Taipei）'},
   {v:'v4.3', d:'新增版本紀錄功能，點選標題旁的版本標籤可用浮動視窗查看完整更新歷程'},
