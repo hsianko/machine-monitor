@@ -377,7 +377,7 @@
 
 <div class="wrap">
   <div class="topbar">
-    <h1>產線即時監看板 <button class="version-badge" id="version-badge">v4.7</button></h1>
+    <h1>產線即時監看板 <button class="version-badge" id="version-badge">v4.8</button></h1>
     <div class="topbar-right">
       <div class="menu-wrap">
         <button class="export-btn" id="records-btn">查看紀錄 ▾</button>
@@ -742,7 +742,10 @@ function escapeHtml(v){
 
 // ---------- API layer ----------
 const API_URL_KEY = 'monitor-board-api-url';
-let API_URL = localStorage.getItem(API_URL_KEY) || '';
+// 預設 API 網址：新裝置第一次打開不用手動設定就能直接連上同一份試算表。
+// 如果之後要換連到別的試算表，還是可以照樣點右上角「設定 API 網址」覆蓋掉。
+const DEFAULT_API_URL = 'https://script.google.com/macros/s/AKfycbzqqqFMRL09Y4EKbtN1e05n-ZK21yPazoJmeXSzqAVjuwwEKaFWkJ6YI8BHVppy7tZV/exec';
+let API_URL = localStorage.getItem(API_URL_KEY) || DEFAULT_API_URL;
 
 function setupApiUrl(){
   const current = API_URL || '';
@@ -1131,6 +1134,7 @@ document.addEventListener('click', (e) => {
 
 // ---------- 版本紀錄 ----------
 const VERSION_LOG = [
+  {v:'v4.8', d:'內建預設 API 網址，分享給其他人或在新裝置開啟時不用再手動設定，會自動連到同一份試算表'},
   {v:'v4.7', d:'「已完成」狀態燈號改為藍色，與「待命」灰色、「進行中」綠色明顯區分'},
   {v:'v4.6', d:'加入後端版本標記，畫面下方會顯示目前連到的 Apps Script 版本代號，方便確認是否已更新到最新版；紀錄時間欄位也加入防止被誤判成日期格式的保護'},
   {v:'v4.5', d:'加入防止瀏覽器快取的設定，避免手機加到主畫面後看到舊版畫面'},
