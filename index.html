@@ -338,6 +338,9 @@
     cursor:pointer;
   }
   .date-tab.active{border-color:var(--status-run); color:var(--status-run);}
+  .remark-filter-btn.active{border-color:#e8a33d; color:#e8a33d;}
+  table.viewer-table tr.remark-row{background:rgba(232,163,61,0.10);}
+  table.viewer-table .remark-icon{margin-right:5px;}
   .date-tab:hover{border-color:var(--text-secondary);}
   .viewer-table-wrap{overflow-x:auto;}
   table.viewer-table{width:100%; border-collapse:collapse; font-size:11.5px;}
@@ -377,7 +380,7 @@
 
 <div class="wrap">
   <div class="topbar">
-    <h1>產線即時監看板 <button class="version-badge" id="version-badge">v4.8</button></h1>
+    <h1>產線即時監看板 <button class="version-badge" id="version-badge">v5.0</button></h1>
     <div class="topbar-right">
       <div class="menu-wrap">
         <button class="export-btn" id="records-btn">查看紀錄 ▾</button>
@@ -400,6 +403,7 @@
       <button class="viewer-close" id="viewer-close">關閉</button>
     </div>
     <div class="date-tabs" id="viewer-date-tabs"></div>
+    <div class="date-tabs" id="viewer-remark-filter"></div>
     <div class="viewer-table-wrap" id="viewer-body"></div>
   </div>
 
@@ -783,7 +787,7 @@ const STATE_MAP = {
 };
 const LOG_MAP = {
   machine:'機台', customer:'客戶名稱', totalBoxes:'總箱數', currentBox:'完成箱數',
-  startTime:'開始作業時間', actualEnd:'實際結束時間', remark:'備註', pct:'完成率(%)', loggedAt:'紀錄時間'
+  startTime:'開始作業時間', actualEnd:'實際結束時間', remark:'備註', pct:'完成率', loggedAt:'紀錄時間'
 };
 
 function toChinese(map, obj){
@@ -866,7 +870,7 @@ function csvEscape(v){
 function exportCsv(){
   if(!completedLog.length){ alert('目前還沒有已完成的紀錄可以匯出。'); return; }
   const headers = ['機台','客戶名稱','總箱數','完成箱數','開始作業時間','實際結束時間','備註','完成率(%)'];
-  const rows = completedLog.map(r => [r.machine, r.customer, r.totalBoxes, r.currentBox, cleanDisplayTime(r.startTime), cleanDisplayTime(r.actualEnd), r.remark, r.pct]);
+  const rows = completedLog.map(r => [r.machine, r.customer, r.totalBoxes, r.currentBox, cleanDisplayTime(r.startTime), cleanDisplayTime(r.actualEnd), r.remark, displayValue('log', r, 'pct')]);
   let csv = '\uFEFF' + headers.map(csvEscape).join(',') + '\r\n';
   rows.forEach(row => { csv += row.map(csvEscape).join(',') + '\r\n'; });
   const blob = new Blob([csv], {type:'text/csv;charset=utf-8;'});
@@ -938,6 +942,7 @@ const VIEW_CONFIG = {
     keys:['machine','customer','totalBoxes','currentBox','startTime','actualEnd','remark','pct'],
     fieldTypes:{machine:{type:'select', options:MACHINE_OPTS}},
     dateKey:'loggedAt',
+    remarkKey:'remark',
     getData: () => completedLog,
     toApi: (obj) => toChinese(LOG_MAP, obj)
   },
@@ -966,6 +971,7 @@ const VIEW_CONFIG = {
 let currentViewRows = [];
 let editingIdx = null;
 let currentDateFilter = null; // null = 全部
+let remarkFilterOn = false;
 
 function recordDateStr(cfg, r){
   const v = r[cfg.dateKey];
@@ -1004,10 +1010,21 @@ function fieldControlHtml(cfg, key, value){
   return `<input type="text" data-edit-key="${key}" value="${val}">`;
 }
 
+function displayValue(view, r, k){
+  if(view === 'log' && k === 'pct' && (r.pct === '' || r.pct === undefined || r.pct === null)){
+    const total = parseFloat(r.totalBoxes);
+    const cur = parseFloat(r.currentBox);
+    if(total > 0 && !isNaN(cur)){
+      return Math.max(0, Math.min(100, Math.round((cur/total)*100)));
+    }
+  }
+  return r[k];
+}
+
 function renderViewer(view, highlightLast, keepDateFilter){
   currentLogView = view;
   editingIdx = null;
-  if(!keepDateFilter) currentDateFilter = null;
+  if(!keepDateFilter){ currentDateFilter = null; remarkFilterOn = false; }
   const cfg = VIEW_CONFIG[view];
   document.getElementById('viewer-title').textContent = cfg.title;
   const allData = cfg.getData();
@@ -1036,7 +1053,24 @@ function renderViewer(view, highlightLast, keepDateFilter){
     tabsWrap.style.display = 'none';
   }
 
-  const filtered = currentDateFilter ? allData.filter(r => recordDateStr(cfg, r) === currentDateFilter) : allData;
+  const remarkWrap = document.getElementById('viewer-remark-filter');
+  if(cfg.remarkKey){
+    const remarkCount = allData.filter(r => r[cfg.remarkKey]).length;
+    remarkWrap.innerHTML = `<button class="date-tab remark-filter-btn${remarkFilterOn?' active':''}" id="remark-filter-btn">📌 只看有備註 (${remarkCount})</button>`;
+    remarkWrap.style.display = '';
+    document.getElementById('remark-filter-btn').addEventListener('click', () => {
+      remarkFilterOn = !remarkFilterOn;
+      renderViewer(view, false, true);
+    });
+  } else {
+    remarkWrap.innerHTML = '';
+    remarkWrap.style.display = 'none';
+  }
+
+  let filtered = currentDateFilter ? allData.filter(r => recordDateStr(cfg, r) === currentDateFilter) : allData;
+  if(cfg.remarkKey && remarkFilterOn){
+    filtered = filtered.filter(r => r[cfg.remarkKey]);
+  }
   currentViewRows = filtered.slice().reverse();
 
   if(!currentViewRows.length){
@@ -1045,8 +1079,14 @@ function renderViewer(view, highlightLast, keepDateFilter){
     const headHtml = '<tr>' + cfg.headers.map(h => `<th>${h}</th>`).join('') + '<th>操作</th></tr>';
     const bodyHtml = currentViewRows.map((r, idx) => {
       const isNew = highlightLast && idx === 0;
-      const cells = cfg.keys.map(k => `<td>${escapeHtml(cleanDisplayTime(r[k]))}</td>`).join('');
-      return `<tr class="${isNew ? 'new-row' : ''}" data-idx="${idx}">${cells}<td><button data-act="edit" data-idx="${idx}">編輯</button> <button data-act="del" data-idx="${idx}">刪除</button></td></tr>`;
+      const hasRemark = cfg.remarkKey && r[cfg.remarkKey];
+      const cells = cfg.keys.map((k, ci) => {
+        const val = escapeHtml(cleanDisplayTime(displayValue(view, r, k)));
+        const icon = (hasRemark && ci === 0) ? '<span class="remark-icon">📌</span>' : '';
+        return `<td>${icon}${val}</td>`;
+      }).join('');
+      const rowCls = [isNew ? 'new-row' : '', hasRemark ? 'remark-row' : ''].filter(Boolean).join(' ');
+      return `<tr class="${rowCls}" data-idx="${idx}">${cells}<td><button data-act="edit" data-idx="${idx}">編輯</button> <button data-act="del" data-idx="${idx}">刪除</button></td></tr>`;
     }).join('');
     body.innerHTML = `<table class="viewer-table"><thead>${headHtml}</thead><tbody>${bodyHtml}</tbody></table>`;
   }
@@ -1134,6 +1174,8 @@ document.addEventListener('click', (e) => {
 
 // ---------- 版本紀錄 ----------
 const VERSION_LOG = [
+  {v:'v5.0', d:'機台產能記錄新增備註提示：有備註的紀錄自動標色加圖示，並可一鍵篩選只看有備註的紀錄'},
+  {v:'v4.9', d:'修正完成率欄位對不上試算表標題導致空白的問題；查看紀錄時若舊資料沒有完成率，會自動用箱數換算補上'},
   {v:'v4.8', d:'內建預設 API 網址，分享給其他人或在新裝置開啟時不用再手動設定，會自動連到同一份試算表'},
   {v:'v4.7', d:'「已完成」狀態燈號改為藍色，與「待命」灰色、「進行中」綠色明顯區分'},
   {v:'v4.6', d:'加入後端版本標記，畫面下方會顯示目前連到的 Apps Script 版本代號，方便確認是否已更新到最新版；紀錄時間欄位也加入防止被誤判成日期格式的保護'},
