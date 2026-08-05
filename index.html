@@ -21,7 +21,7 @@
     --text-muted:#5e6673;
     --status-idle:#5e6673;
     --status-run:#4caf6d;
-    --status-done:#6b7686;
+    --status-done:#4a90d9;
     --m-daibao:#e8a33d;
     --m-erbao:#3f9088;
     --m-sanbao:#d5654a;
@@ -212,8 +212,8 @@
   .status .dot{width:7px;height:7px;border-radius:50%; background:var(--status-idle); flex-shrink:0;}
   .status.run .dot{background:var(--status-run); box-shadow:0 0 0 3px rgba(76,175,109,0.18);}
   .status.run{color:var(--status-run);}
-  .status.done .dot{background:var(--status-done);}
-  .status.done{color:var(--text-secondary);}
+  .status.done .dot{background:var(--status-done); box-shadow:0 0 0 3px rgba(74,144,217,0.18);}
+  .status.done{color:var(--status-done);}
 
   .field-row{display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:8px;}
   .field{display:flex; flex-direction:column; gap:3px;}
@@ -377,7 +377,7 @@
 
 <div class="wrap">
   <div class="topbar">
-    <h1>產線即時監看板 <button class="version-badge" id="version-badge">v4.6</button></h1>
+    <h1>產線即時監看板 <button class="version-badge" id="version-badge">v4.7</button></h1>
     <div class="topbar-right">
       <div class="menu-wrap">
         <button class="export-btn" id="records-btn">查看紀錄 ▾</button>
@@ -1131,6 +1131,7 @@ document.addEventListener('click', (e) => {
 
 // ---------- 版本紀錄 ----------
 const VERSION_LOG = [
+  {v:'v4.7', d:'「已完成」狀態燈號改為藍色，與「待命」灰色、「進行中」綠色明顯區分'},
   {v:'v4.6', d:'加入後端版本標記，畫面下方會顯示目前連到的 Apps Script 版本代號，方便確認是否已更新到最新版；紀錄時間欄位也加入防止被誤判成日期格式的保護'},
   {v:'v4.5', d:'加入防止瀏覽器快取的設定，避免手機加到主畫面後看到舊版畫面'},
   {v:'v4.4', d:'修正時間顯示整整差 8 小時的問題（試算表後端時區固定改為 Asia/Taipei）'},
