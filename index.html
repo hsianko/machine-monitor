@@ -4,6 +4,8 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>產線即時監看板</title>
+<meta name="robots" content="noindex, nofollow, noarchive">
+<meta name="googlebot" content="noindex, nofollow">
 <style>
   :root{
     --bg-page:#14171c;
@@ -146,6 +148,8 @@
   .gauge-wrap{margin:14px 0 12px;}
   .gauge-label{display:flex; justify-content:space-between; font-size:11px; color:var(--text-secondary); margin-bottom:5px;}
   .gauge-label .pct{color:var(--text-primary); font-weight:600;}
+  .qty-warning{color:#d5654a; font-weight:700; font-size:11.5px; margin-top:6px;}
+  .qty-overflow{color:#d5654a; font-weight:700;}
   .gauge-track{
     position:relative; height:16px;
     background:repeating-linear-gradient(135deg, var(--bg-field), var(--bg-field) 6px, #262c34 6px, #262c34 12px);
@@ -154,10 +158,10 @@
   .gauge-fill{position:absolute; top:0; left:0; bottom:0; background:var(--accent); transition:width 0.3s ease;}
   .gauge-crate{position:absolute; top:50%; transform:translate(-50%,-50%); font-size:12px; line-height:0; color:var(--bg-page); transition:left 0.3s ease;}
 
-  .times{display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-top:10px; padding-top:12px; border-top:1px solid var(--border);}
-  .times .field label{font-size:9.5px;}
-  .time-row{display:flex; gap:4px;}
-  .time-row select{flex:1; min-width:0; font-size:10px; padding:4px 3px;}
+  .times{display:grid; grid-template-columns:1fr; gap:14px; margin-top:10px; padding-top:12px; border-top:1px solid var(--border);}
+  .times .field label{font-size:10.5px;}
+  .time-row{display:flex; gap:6px;}
+  .time-row select{flex:1; min-width:0; font-size:13px; padding:6px 4px;}
 
   .card-foot{display:flex; justify-content:space-between; align-items:center; margin-top:12px;}
   .clear-btn{
@@ -191,6 +195,96 @@
   .log-hint{font-size:10.5px; color:var(--text-muted); margin-top:8px;}
 
   .save-hint{text-align:100%; text-align:center; font-size:10.5px; color:var(--text-muted); margin-top:18px; letter-spacing:0.3px;}
+
+  .menu-wrap{position:relative;}
+  .menu-list{
+    display:none;
+    position:absolute;
+    top:calc(100% + 6px);
+    left:0;
+    right:auto;
+    background:var(--bg-panel);
+    border:1px solid var(--border-strong);
+    border-radius:8px;
+    min-width:180px;
+    max-width:calc(100vw - 32px);
+    padding:6px;
+    z-index:20;
+    box-shadow:0 8px 24px rgba(0,0,0,0.4);
+  }
+  .menu-list.open{display:block;}
+  .menu-list button{
+    display:block;
+    width:100%;
+    text-align:left;
+    background:none;
+    border:none;
+    color:var(--text-primary);
+    font-family:var(--font-mono);
+    font-size:12.5px;
+    padding:8px 10px;
+    border-radius:6px;
+    cursor:pointer;
+  }
+  .menu-list button:hover{background:var(--bg-field);}
+
+  .viewer-panel{
+    background:var(--bg-panel);
+    border:1px solid var(--border);
+    border-radius:var(--radius);
+    padding:14px 16px 16px;
+    margin-bottom:20px;
+    display:none;
+  }
+  .viewer-panel.open{display:block;}
+  .viewer-head{display:flex; align-items:center; justify-content:space-between; margin-bottom:10px;}
+  .viewer-head .vtitle{font-family:var(--font-display); font-weight:600; font-size:15px; color:var(--text-primary);}
+  .viewer-close{background:none; border:none; color:var(--text-muted); font-size:11px; cursor:pointer; text-decoration:underline;}
+  .date-tabs{display:flex; flex-wrap:wrap; gap:6px; margin-bottom:12px;}
+  .date-tab{
+    background:var(--bg-field);
+    border:1px solid var(--border);
+    color:var(--text-secondary);
+    font-family:var(--font-mono);
+    font-size:11px;
+    padding:5px 10px;
+    border-radius:999px;
+    cursor:pointer;
+  }
+  .date-tab.active{border-color:var(--status-run); color:var(--status-run);}
+  .date-tab:hover{border-color:var(--text-secondary);}
+  .viewer-table-wrap{overflow-x:auto;}
+  table.viewer-table{width:100%; border-collapse:collapse; font-size:11.5px;}
+  table.viewer-table th, table.viewer-table td{
+    text-align:left; padding:6px 8px; border-bottom:1px solid var(--border); white-space:nowrap;
+  }
+  table.viewer-table th{color:var(--text-muted); font-weight:500; font-size:10.5px;}
+  table.viewer-table tr.new-row{background:rgba(76,175,109,0.12);}
+  .viewer-empty{color:var(--text-muted); font-size:11.5px; padding:6px 2px;}
+  table.viewer-table td button{
+    background:var(--bg-field);
+    border:1px solid var(--border-strong);
+    color:var(--text-primary);
+    font-family:var(--font-mono);
+    font-size:10.5px;
+    padding:4px 8px;
+    border-radius:5px;
+    cursor:pointer;
+  }
+  table.viewer-table td button:hover{border-color:var(--status-run); color:var(--status-run);}
+  table.viewer-table td[data-act="del"], table.viewer-table td button[data-act="del"]{}
+  table.viewer-table button[data-act="del"]:hover{border-color:#d5654a; color:#d5654a;}
+  table.viewer-table td select, table.viewer-table td input{
+    background:var(--bg-field);
+    border:1px solid var(--border);
+    border-radius:5px;
+    color:var(--text-primary);
+    font-family:var(--font-mono);
+    font-size:11px;
+    padding:4px 6px;
+    width:100%;
+    min-width:70px;
+  }
 </style>
 </head>
 <body>
@@ -199,10 +293,28 @@
   <div class="topbar">
     <h1>產線即時監看板</h1>
     <div class="topbar-right">
+      <div class="menu-wrap">
+        <button class="export-btn" id="records-btn">查看紀錄 ▾</button>
+        <div class="menu-list" id="records-menu">
+          <button data-view="log">機台產能記錄</button>
+          <button data-view="abnormal">機台異常記錄</button>
+          <button data-view="scan">機台掃碼異常記錄</button>
+        </div>
+      </div>
       <button class="export-btn" id="settings-btn">設定 API 網址</button>
       <button class="export-btn" id="export-btn">匯出完成紀錄 (CSV)</button>
+      <button class="export-btn" id="purge-btn">清除兩週前舊紀錄</button>
       <div class="clock" id="clock">--:--:--</div>
     </div>
+  </div>
+
+  <div class="viewer-panel" id="viewer-panel">
+    <div class="viewer-head">
+      <span class="vtitle" id="viewer-title"></span>
+      <button class="viewer-close" id="viewer-close">關閉</button>
+    </div>
+    <div class="date-tabs" id="viewer-date-tabs"></div>
+    <div class="viewer-table-wrap" id="viewer-body"></div>
   </div>
 
   <div class="grid" id="grid"></div>
@@ -305,6 +417,9 @@ MACHINES.forEach(m => {
 });
 
 let completedLog = [];
+let abnormalLog = [];
+let scanLog = [];
+let currentLogView = null;
 
 function fmtClock(){
   const now = new Date();
@@ -400,6 +515,7 @@ function render(){
     const pct = computePct(m.key);
     const sp = parseComposite(d.startTime);
     const ep = parseComposite(d.actualEnd);
+    const isOverflow = d.totalBoxes && d.currentBox && parseFloat(d.currentBox) > parseFloat(d.totalBoxes);
 
     const card = document.createElement('div');
     card.className = 'card';
@@ -428,17 +544,18 @@ function render(){
       </div>
       <div class="gauge-wrap">
         <div class="gauge-label">
-          <span>${(d.currentBox||0)} / ${(d.totalBoxes||0)} 箱</span>
+          <span class="${isOverflow ? 'qty-overflow' : ''}">${(d.currentBox||0)} / ${(d.totalBoxes||0)} 箱</span>
           <span class="pct">${pct}%</span>
         </div>
         <div class="gauge-track">
           <div class="gauge-fill" style="width:${pct}%"></div>
           <div class="gauge-crate" style="left:${pct}%">▣</div>
         </div>
+        ${isOverflow ? '<div class="qty-warning">⚠ 目前箱數已超過總箱數，請確認並修正！</div>' : ''}
       </div>
       <div class="times">
         <div class="field time-group" data-group="start">
-          <label>開始作業</label>
+          <label>開始時間</label>
           <div class="time-row">
             <select data-part="month">${monthOptionsHtml(sp.month)}</select>
             <select data-part="day">${dayOptionsHtml(sp.day)}</select>
@@ -446,7 +563,7 @@ function render(){
           </div>
         </div>
         <div class="field time-group" data-group="end">
-          <label>實際結束</label>
+          <label>結束時間</label>
           <div class="time-row">
             <select data-part="month">${monthOptionsHtml(ep.month)}</select>
             <select data-part="day">${dayOptionsHtml(ep.day)}</select>
@@ -499,7 +616,7 @@ function render(){
       }
     });
 
-    card.querySelector('[data-done]').addEventListener('click', () => {
+    card.querySelector('[data-done]').addEventListener('click', async () => {
       const dd = state[m.key];
       if(!dd.customer || !dd.totalBoxes){
         alert('請先填寫客戶名稱與總箱數，再標記完成。');
@@ -510,10 +627,11 @@ function render(){
         machine:m.key, customer:dd.customer, totalBoxes:dd.totalBoxes, currentBox:dd.currentBox,
         startTime:dd.startTime, actualEnd:finishTime, remark:dd.remark, pct:computePct(m.key)
       };
-      completedLog.push(record);
-      saveLog(record);
+      await saveLog(record);
       state[m.key] = { customer:'', totalBoxes:'', currentBox:'', startTime:'', actualEnd:'', remark:'' };
-      saveState(m.key);
+      await saveState(m.key);
+      await loadState();
+      renderViewer('log', true);
       render();
     });
 
@@ -558,11 +676,33 @@ async function apiPost(payload){
   return json;
 }
 
+// 網頁內部用英文欄位名稱，試算表用中文標題列 -> 這裡做雙向轉換，避免對不上
+const STATE_MAP = {
+  customer:'客戶名稱', totalBoxes:'總箱數', currentBox:'目前第幾箱',
+  startTime:'開始作業時間', actualEnd:'實際結束時間', remark:'備註'
+};
+const LOG_MAP = {
+  machine:'機台', customer:'客戶名稱', totalBoxes:'總箱數', currentBox:'完成箱數',
+  startTime:'開始作業時間', actualEnd:'實際結束時間', remark:'備註', pct:'完成率(%)', loggedAt:'紀錄時間'
+};
+
+function toChinese(map, obj){
+  const out = {};
+  Object.keys(map).forEach(k => { out[map[k]] = obj[k] !== undefined ? obj[k] : ''; });
+  return out;
+}
+function fromChinese(map, obj){
+  const out = {};
+  Object.keys(map).forEach(k => { out[k] = obj[map[k]] !== undefined ? obj[map[k]] : ''; });
+  if(obj._row !== undefined) out._row = obj._row;
+  return out;
+}
+
 async function saveState(machine){
   const hint = document.getElementById('save-hint');
   if(!API_URL){ hint.textContent = '尚未設定 API 網址，資料暫時只存在畫面上'; return; }
   try{
-    await apiPost({action:'saveState', machine: machine, data: state[machine]});
+    await apiPost({action:'saveState', machine: machine, data: toChinese(STATE_MAP, state[machine])});
     hint.textContent = '已同步至試算表 · ' + fmtClock();
   }catch(err){
     hint.textContent = '同步失敗，請檢查網路或 API 網址：' + err;
@@ -571,7 +711,7 @@ async function saveState(machine){
 
 async function saveLog(record){
   if(!API_URL){ alert('尚未設定 API 網址，無法把這筆紀錄存到試算表。'); return; }
-  try{ await apiPost({action:'appendLog', data: record}); }
+  try{ await apiPost({action:'appendLog', data: toChinese(LOG_MAP, record)}); }
   catch(err){ alert('紀錄同步失敗：' + err); }
 }
 
@@ -592,9 +732,14 @@ async function loadState(){
       throw new Error('伺服器回應不是有效資料，請確認 API 網址與部署權限是否為「任何人」');
     }
     if(json.state){
-      MACHINES.forEach(m => { if(json.state[m.key]) state[m.key] = Object.assign(state[m.key], json.state[m.key]); });
+      MACHINES.forEach(m => {
+        if(json.state[m.key]) state[m.key] = Object.assign(state[m.key], fromChinese(STATE_MAP, json.state[m.key]));
+      });
     }
-    if(json.log){ completedLog = json.log; }
+    if(json.log){ completedLog = json.log.map(r => fromChinese(LOG_MAP, r)); }
+    if(json.abnormal){ abnormalLog = json.abnormal; }
+    if(json.scan){ scanLog = json.scan; }
+    if(currentLogView){ renderViewer(currentLogView); }
     hint.textContent = '已同步至試算表 · ' + fmtClock();
   }catch(err){
     hint.textContent = '讀取失敗，請檢查網路或 API 網址：' + err;
@@ -611,7 +756,7 @@ function csvEscape(v){
 function exportCsv(){
   if(!completedLog.length){ alert('目前還沒有已完成的紀錄可以匯出。'); return; }
   const headers = ['機台','客戶名稱','總箱數','完成箱數','開始作業時間','實際結束時間','備註','完成率(%)'];
-  const rows = completedLog.map(r => [r.machine, r.customer, r.totalBoxes, r.currentBox, r.startTime, r.actualEnd, r.remark, r.pct]);
+  const rows = completedLog.map(r => [r.machine, r.customer, r.totalBoxes, r.currentBox, cleanDisplayTime(r.startTime), cleanDisplayTime(r.actualEnd), r.remark, r.pct]);
   let csv = '\uFEFF' + headers.map(csvEscape).join(',') + '\r\n';
   rows.forEach(row => { csv += row.map(csvEscape).join(',') + '\r\n'; });
   const blob = new Blob([csv], {type:'text/csv;charset=utf-8;'});
@@ -628,6 +773,254 @@ function exportCsv(){
 }
 
 function tickClock(){ document.getElementById('clock').textContent = fmtClock(); }
+
+async function purgeOldRecords(){
+  const PURGE_DAYS = 14;
+  const cutoffDate = new Date();
+  cutoffDate.setDate(cutoffDate.getDate() - PURGE_DAYS);
+  const pad = n => String(n).padStart(2,'0');
+  const cutoffStr = `${cutoffDate.getFullYear()}-${pad(cutoffDate.getMonth()+1)}-${pad(cutoffDate.getDate())} 00:00`;
+
+  const countOld = (data, cfg) => data.filter(r => {
+    const v = r[cfg.dateKey];
+    return v && String(v) < cutoffStr;
+  }).length;
+
+  const n1 = countOld(completedLog, VIEW_CONFIG.log);
+  const n2 = countOld(abnormalLog, VIEW_CONFIG.abnormal);
+  const n3 = countOld(scanLog, VIEW_CONFIG.scan);
+  const total = n1 + n2 + n3;
+
+  if(total === 0){
+    alert('目前沒有超過兩週的舊紀錄可以清除。');
+    return;
+  }
+
+  const msg = `即將清除 ${cutoffDate.getMonth()+1}/${cutoffDate.getDate()} 之前建立的紀錄，共 ${total} 筆：\n`
+    + `機台產能記錄 ${n1} 筆\n機台異常記錄 ${n2} 筆\n機台掃碼異常記錄 ${n3} 筆\n\n此動作無法復原，確定要清除嗎？`;
+  if(!confirm(msg)) return;
+
+  if(!API_URL){ alert('尚未設定 API 網址。'); return; }
+  try{
+    const res = await apiPost({action:'purgeOldRecords', cutoff:cutoffStr});
+    await loadState();
+    if(currentLogView) renderViewer(currentLogView, false, true);
+    alert(`已清除 ${res.deleted !== undefined ? res.deleted : total} 筆舊紀錄。`);
+  }catch(err){
+    alert('清除失敗：' + err);
+  }
+}
+
+document.getElementById('purge-btn').addEventListener('click', purgeOldRecords);
+
+
+// ---------- 紀錄查看選單（可編輯／刪除） ----------
+const MACHINE_OPTS = MACHINES.map(m => m.key);
+const AB_TYPE_OPTS = ['單捲標貼歪','料盤載台推擠','料盤毀損'];
+const SCAN_POS_OPTS = ['1','2'];
+const SCAN_COUNT_OPTS = Array.from({length:20}, (_,i)=>String(i+1));
+
+const VIEW_CONFIG = {
+  log: {
+    title:'機台產能記錄',
+    sheet:'Log',
+    headers:['機台','客戶名稱','總箱數','完成箱數','開始時間','結束時間','備註','完成率(%)'],
+    keys:['machine','customer','totalBoxes','currentBox','startTime','actualEnd','remark','pct'],
+    fieldTypes:{machine:{type:'select', options:MACHINE_OPTS}},
+    dateKey:'loggedAt',
+    getData: () => completedLog,
+    toApi: (obj) => toChinese(LOG_MAP, obj)
+  },
+  abnormal: {
+    title:'機台異常記錄',
+    sheet:'MachineAbnormal',
+    headers:['發生日期','機台','異常類型','料盤產地'],
+    keys:['發生日期','機台','異常類型','料盤產地'],
+    fieldTypes:{'機台':{type:'select', options:MACHINE_OPTS}, '異常類型':{type:'select', options:AB_TYPE_OPTS}},
+    dateKey:'紀錄時間',
+    getData: () => abnormalLog,
+    toApi: (obj) => obj
+  },
+  scan: {
+    title:'機台掃碼異常記錄',
+    sheet:'ScanAbnormal',
+    headers:['發生日期','機台','異常次數','Scan位置','LOT','產地'],
+    keys:['發生日期','機台','異常次數','Scan位置','LOT','產地'],
+    fieldTypes:{'機台':{type:'select', options:MACHINE_OPTS}, '異常次數':{type:'select', options:SCAN_COUNT_OPTS}, 'Scan位置':{type:'select', options:SCAN_POS_OPTS}},
+    dateKey:'紀錄時間',
+    getData: () => scanLog,
+    toApi: (obj) => obj
+  }
+};
+
+let currentViewRows = [];
+let editingIdx = null;
+let currentDateFilter = null; // null = 全部
+
+function recordDateStr(cfg, r){
+  const v = r[cfg.dateKey];
+  if(!v) return null;
+  const s = String(v).trim();
+  const m = s.match(/^(\d{4}-\d{2}-\d{2})/);
+  return m ? m[1] : s.split(' ')[0];
+}
+
+// 防呆：如果 Google 試算表把我們存的時間字串自動誤判成日期格式，
+// 讀回來會變成一長串 ISO 格式（例如 2026-08-04T01:00:00.000Z），這裡把它清乾淨、
+// 還原成我們原本要的「M/D HH:MM」或「M/D」樣式，沒有問題的字串則原樣顯示。
+function cleanDisplayTime(v){
+  if(v === undefined || v === null || v === '') return '';
+  const s = String(v);
+  const iso = s.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/);
+  if(iso){
+    const hh = iso[4], mm = iso[5];
+    if(hh === '00' && mm === '00'){
+      return `${parseInt(iso[2],10)}/${parseInt(iso[3],10)}`;
+    }
+    return `${parseInt(iso[2],10)}/${parseInt(iso[3],10)} ${hh}:${mm}`;
+  }
+  const trailing = s.match(/^(.*\d{2}:\d{2}):\d{2}(\.\d+)?Z?$/);
+  if(trailing) return trailing[1];
+  return s;
+}
+
+function fieldControlHtml(cfg, key, value){
+  const ft = cfg.fieldTypes[key];
+  const val = escapeHtml(cleanDisplayTime(value));
+  if(ft && ft.type === 'select'){
+    const opts = ft.options.map(o => `<option value="${escapeHtml(o)}"${String(o)===String(value)?' selected':''}>${escapeHtml(o)}</option>`).join('');
+    return `<select data-edit-key="${key}"><option value="">--</option>${opts}</select>`;
+  }
+  return `<input type="text" data-edit-key="${key}" value="${val}">`;
+}
+
+function renderViewer(view, highlightLast, keepDateFilter){
+  currentLogView = view;
+  editingIdx = null;
+  if(!keepDateFilter) currentDateFilter = null;
+  const cfg = VIEW_CONFIG[view];
+  document.getElementById('viewer-title').textContent = cfg.title;
+  const allData = cfg.getData();
+  const body = document.getElementById('viewer-body');
+
+  // 依日期分組，最新的日期排在最前面
+  const dateSet = {};
+  allData.forEach(r => {
+    const d = recordDateStr(cfg, r);
+    if(d) dateSet[d] = true;
+  });
+  const dates = Object.keys(dateSet).sort().reverse();
+
+  const tabsWrap = document.getElementById('viewer-date-tabs');
+  if(dates.length){
+    const allBtn = `<button class="date-tab${currentDateFilter===null?' active':''}" data-date="">全部</button>`;
+    const dateBtns = dates.map(d => {
+      const parts = d.split('-'); // ['YYYY','MM','DD']
+      const label = parts.length === 3 ? `${parts[1]}/${parts[2]}` : d;
+      return `<button class="date-tab${currentDateFilter===d?' active':''}" data-date="${d}">${label}</button>`;
+    }).join('');
+    tabsWrap.innerHTML = allBtn + dateBtns;
+    tabsWrap.style.display = '';
+  } else {
+    tabsWrap.innerHTML = '';
+    tabsWrap.style.display = 'none';
+  }
+
+  const filtered = currentDateFilter ? allData.filter(r => recordDateStr(cfg, r) === currentDateFilter) : allData;
+  currentViewRows = filtered.slice().reverse();
+
+  if(!currentViewRows.length){
+    body.innerHTML = '<div class="viewer-empty">目前還沒有資料</div>';
+  } else {
+    const headHtml = '<tr>' + cfg.headers.map(h => `<th>${h}</th>`).join('') + '<th>操作</th></tr>';
+    const bodyHtml = currentViewRows.map((r, idx) => {
+      const isNew = highlightLast && idx === 0;
+      const cells = cfg.keys.map(k => `<td>${escapeHtml(cleanDisplayTime(r[k]))}</td>`).join('');
+      return `<tr class="${isNew ? 'new-row' : ''}" data-idx="${idx}">${cells}<td><button data-act="edit" data-idx="${idx}">編輯</button> <button data-act="del" data-idx="${idx}">刪除</button></td></tr>`;
+    }).join('');
+    body.innerHTML = `<table class="viewer-table"><thead>${headHtml}</thead><tbody>${bodyHtml}</tbody></table>`;
+  }
+  document.getElementById('viewer-panel').classList.add('open');
+  document.getElementById('records-menu').classList.remove('open');
+}
+
+function renderEditRow(view, idx){
+  editingIdx = idx;
+  const cfg = VIEW_CONFIG[view];
+  const r = currentViewRows[idx];
+  const tr = document.querySelector(`#viewer-body tr[data-idx="${idx}"]`);
+  if(!tr) return;
+  const cellsHtml = cfg.keys.map(k => `<td>${fieldControlHtml(cfg, k, r[k])}</td>`).join('');
+  tr.innerHTML = `${cellsHtml}<td><button data-act="save" data-idx="${idx}">儲存</button> <button data-act="cancel" data-idx="${idx}">取消</button></td>`;
+}
+
+async function handleSaveEdit(view, idx){
+  const cfg = VIEW_CONFIG[view];
+  const r = currentViewRows[idx];
+  const tr = document.querySelector(`#viewer-body tr[data-idx="${idx}"]`);
+  if(!tr) return;
+  const newValues = Object.assign({}, r);
+  tr.querySelectorAll('[data-edit-key]').forEach(el => { newValues[el.dataset.editKey] = el.value; });
+  if(!API_URL){ alert('尚未設定 API 網址，無法儲存修改。'); return; }
+  try{
+    await apiPost({action:'updateRow', sheet:cfg.sheet, row:r._row, data: cfg.toApi(newValues)});
+    await loadState();
+    renderViewer(view, false, true);
+  }catch(err){
+    alert('儲存失敗：' + err);
+  }
+}
+
+async function handleDelete(view, idx){
+  const cfg = VIEW_CONFIG[view];
+  const r = currentViewRows[idx];
+  if(!confirm('確定要刪除這筆紀錄嗎？此動作無法復原。')) return;
+  if(!API_URL){ alert('尚未設定 API 網址，無法刪除。'); return; }
+  try{
+    await apiPost({action:'deleteRow', sheet:cfg.sheet, row:r._row});
+    await loadState();
+    renderViewer(view, false, true);
+  }catch(err){
+    alert('刪除失敗：' + err);
+  }
+}
+
+document.getElementById('viewer-body').addEventListener('click', (e) => {
+  const btn = e.target.closest('[data-act]');
+  if(!btn) return;
+  const idx = Number(btn.dataset.idx);
+  const act = btn.dataset.act;
+  if(act === 'edit') renderEditRow(currentLogView, idx);
+  else if(act === 'cancel') renderViewer(currentLogView, false, true);
+  else if(act === 'save') handleSaveEdit(currentLogView, idx);
+  else if(act === 'del') handleDelete(currentLogView, idx);
+});
+
+document.getElementById('viewer-date-tabs').addEventListener('click', (e) => {
+  const btn = e.target.closest('.date-tab');
+  if(!btn) return;
+  currentDateFilter = btn.dataset.date || null;
+  renderViewer(currentLogView, false, true);
+});
+
+function closeViewer(){
+  currentLogView = null;
+  document.getElementById('viewer-panel').classList.remove('open');
+}
+
+document.getElementById('records-btn').addEventListener('click', (e) => {
+  e.stopPropagation();
+  document.getElementById('records-menu').classList.toggle('open');
+});
+document.querySelectorAll('#records-menu [data-view]').forEach(btn => {
+  btn.addEventListener('click', () => renderViewer(btn.dataset.view));
+});
+document.getElementById('viewer-close').addEventListener('click', closeViewer);
+document.addEventListener('click', (e) => {
+  if(!e.target.closest('.menu-wrap')){
+    document.getElementById('records-menu').classList.remove('open');
+  }
+});
 
 document.getElementById('export-btn').addEventListener('click', exportCsv);
 document.getElementById('settings-btn').addEventListener('click', setupApiUrl);
@@ -662,15 +1055,18 @@ document.getElementById('ab-submit').addEventListener('click', async () => {
   }
   if(!API_URL){ hint.textContent = '尚未設定 API 網址，請先點右上角「設定 API 網址」。'; return; }
   try{
-    await apiPost({action:'appendAbnormal', data:{
+    const record = {
       '發生日期': `${month}/${day}`,
       '機台': machine,
       '異常類型': type,
       '料盤產地': origin
-    }});
+    };
+    await apiPost({action:'appendAbnormal', data: record});
+    await loadState();
     hint.textContent = '已新增：' + `${month}/${day} ${machine} ${type}` + ' · ' + fmtClock();
     document.getElementById('ab-type').value = '';
     document.getElementById('ab-origin').value = '';
+    renderViewer('abnormal', true);
   }catch(err){
     hint.textContent = '新增失敗：' + err;
   }
@@ -691,17 +1087,20 @@ document.getElementById('sc-submit').addEventListener('click', async () => {
   }
   if(!API_URL){ hint.textContent = '尚未設定 API 網址，請先點右上角「設定 API 網址」。'; return; }
   try{
-    await apiPost({action:'appendScan', data:{
+    const record = {
       '發生日期': `${month}/${day}`,
       '機台': machine,
       '異常次數': count,
       'Scan位置': pos,
       'LOT': lot,
       '產地': origin
-    }});
+    };
+    await apiPost({action:'appendScan', data: record});
+    await loadState();
     hint.textContent = '已新增 · ' + fmtClock();
     document.getElementById('sc-lot').value = '';
     document.getElementById('sc-origin').value = '';
+    renderViewer('scan', true);
   }catch(err){
     hint.textContent = '新增失敗：' + err;
   }
