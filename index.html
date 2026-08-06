@@ -382,7 +382,7 @@
 
 <div class="wrap">
   <div class="topbar">
-    <h1>產線即時監看板 <button class="version-badge" id="version-badge">v6.7</button></h1>
+    <h1>產線即時監看板 <button class="version-badge" id="version-badge">v6.8</button></h1>
     <div class="topbar-right">
       <div class="menu-wrap">
         <button class="export-btn" id="records-btn">查看紀錄 ▾</button>
@@ -766,12 +766,15 @@ function render(){
           const dayPct = total > 0 ? Math.max(0, Math.min(100, Math.round((cum/total)*100))) : '';
           await saveLog({
             machine:m.key, customer:dd.customer, totalBoxes:dd.totalBoxes, currentBox:cum,
+            dayBoxes: dRec['今日完成箱數'] !== undefined ? dRec['今日完成箱數'] : cum,
             startTime:dRec['開始時間']||'', actualEnd:dRec['結束時間']||'', remark:dRec['備註']||'', pct:dayPct
           });
         }
         // 今天最後完成的這一段
+        const todayDayBoxes = computeDailyDelta(m.key, dd.customer, dd.totalBoxes, parseFloat(dd.currentBox) || 0);
         await saveLog({
           machine:m.key, customer:dd.customer, totalBoxes:dd.totalBoxes, currentBox:dd.currentBox,
+          dayBoxes: todayDayBoxes,
           startTime:dd.startTime, actualEnd:finishTime, remark:dd.remark, pct:computePct(m.key)
         });
         if(priorDaily.length){
@@ -890,7 +893,7 @@ const STATE_MAP = {
   startTime:'開始作業時間', actualEnd:'實際結束時間', remark:'備註'
 };
 const LOG_MAP = {
-  machine:'機台', customer:'客戶名稱', totalBoxes:'總箱數', currentBox:'完成箱數',
+  machine:'機台', customer:'客戶名稱', totalBoxes:'總箱數', currentBox:'完成箱數', dayBoxes:'當日箱數',
   startTime:'開始作業時間', actualEnd:'實際結束時間', remark:'備註', pct:'完成率', loggedAt:'紀錄時間'
 };
 
@@ -981,10 +984,10 @@ function exportCsv(){
 
   if(completedLog.length){
     csv += '機台產能記錄\r\n';
-    const headers1 = ['機台','客戶名稱','總箱數','完成箱數','開始作業時間','實際結束時間','備註','完成率(%)'];
+    const headers1 = ['機台','客戶名稱','總箱數','完成箱數','當日箱數','開始作業時間','實際結束時間','備註','完成率(%)'];
     csv += headers1.map(csvEscape).join(',') + '\r\n';
     completedLog.forEach(r => {
-      const row = [r.machine, r.customer, r.totalBoxes, r.currentBox, cleanDisplayTime(r.startTime), cleanDisplayTime(r.actualEnd), r.remark, displayValue('log', r, 'pct')];
+      const row = [r.machine, r.customer, r.totalBoxes, r.currentBox, r.dayBoxes, cleanDisplayTime(r.startTime), cleanDisplayTime(r.actualEnd), r.remark, displayValue('log', r, 'pct')];
       csv += row.map(csvEscape).join(',') + '\r\n';
     });
     csv += '\r\n';
@@ -1088,8 +1091,8 @@ const VIEW_CONFIG = {
   log: {
     title:'機台產能記錄',
     sheet:'Log',
-    headers:['機台','客戶名稱','總箱數','完成箱數','開始時間','結束時間','備註','完成率(%)'],
-    keys:['machine','customer','totalBoxes','currentBox','startTime','actualEnd','remark','pct'],
+    headers:['機台','客戶名稱','總箱數','完成箱數','當日箱數','開始時間','結束時間','備註','完成率(%)'],
+    keys:['machine','customer','totalBoxes','currentBox','dayBoxes','startTime','actualEnd','remark','pct'],
     fieldTypes:{machine:{type:'select', options:MACHINE_OPTS}, startTime:{type:'datetime'}, actualEnd:{type:'datetime'}},
     dateKey:'loggedAt',
     remarkKey:'remark',
@@ -1363,6 +1366,7 @@ document.addEventListener('click', (e) => {
 
 // ---------- 版本紀錄 ----------
 const VERSION_LOG = [
+  {v:'v6.8', d:'機台產能記錄新增「當日箱數」欄位，跟「完成箱數」（累計）分開顯示，箱數多時也能一眼看出當天實際做了多少'},
   {v:'v6.7', d:'跨日訂單完成時，改為把每一天的進度各自變成一筆機台產能記錄（而不是合併成一筆總結），並把該訂單在每日進度記錄裡的過程資料移除，機台產能記錄本身就能直接看到每天分別做了多少箱、花了多久'},
   {v:'v6.6', d:'取消訂單完成時自動清除每日進度記錄的動作，改為永久保留，方便查每天各做了幾箱、花多久時間（機台產能記錄看總結果，每日進度記錄看每天明細）'},
   {v:'v6.5', d:'跨日訂單完成時，機台產能記錄的「開始時間」改為自動抓每日進度記錄裡最早一筆的開始時間，呈現整張訂單真正的起訖時間，不會只顯示最後一天那一段'},
