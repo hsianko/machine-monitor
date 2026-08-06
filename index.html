@@ -382,7 +382,7 @@
 
 <div class="wrap">
   <div class="topbar">
-    <h1>產線即時監看板 <button class="version-badge" id="version-badge">v6.9</button></h1>
+    <h1>產線即時監看板 <button class="version-badge" id="version-badge">v7.0</button></h1>
     <div class="topbar-right">
       <div class="menu-wrap">
         <button class="export-btn" id="records-btn">查看紀錄 ▾</button>
@@ -1098,6 +1098,7 @@ const VIEW_CONFIG = {
     keys:['machine','customer','totalBoxes','currentBox','dayBoxes','startTime','actualEnd','remark','pct'],
     fieldTypes:{machine:{type:'select', options:MACHINE_OPTS}, startTime:{type:'datetime'}, actualEnd:{type:'datetime'}},
     dateKey:'loggedAt',
+    groupDateKey:'startTime',
     remarkKey:'remark',
     getData: () => completedLog,
     toApi: (obj) => toChinese(LOG_MAP, obj)
@@ -1109,6 +1110,7 @@ const VIEW_CONFIG = {
     keys:['發生日期','機台','異常類型','異常次數','料盤產地'],
     fieldTypes:{'機台':{type:'select', options:MACHINE_OPTS}, '異常類型':{type:'select', options:AB_TYPE_OPTS}, '異常次數':{type:'select', options:SCAN_COUNT_OPTS}, '發生日期':{type:'date'}},
     dateKey:'紀錄時間',
+    groupDateKey:'發生日期',
     getData: () => abnormalLog,
     toApi: (obj) => obj
   },
@@ -1119,6 +1121,7 @@ const VIEW_CONFIG = {
     keys:['發生日期','機台','異常次數','Scan位置','LOT','產地'],
     fieldTypes:{'機台':{type:'select', options:MACHINE_OPTS}, '異常次數':{type:'select', options:SCAN_COUNT_OPTS}, 'Scan位置':{type:'select', options:SCAN_POS_OPTS}, '發生日期':{type:'date'}},
     dateKey:'紀錄時間',
+    groupDateKey:'發生日期',
     getData: () => scanLog,
     toApi: (obj) => obj
   },
@@ -1129,6 +1132,7 @@ const VIEW_CONFIG = {
     keys:['日期','機台','客戶名稱','今日完成箱數','累計箱數','總箱數','開始時間','結束時間','完成率(%)'],
     fieldTypes:{'機台':{type:'select', options:MACHINE_OPTS}, '日期':{type:'date'}, '開始時間':{type:'datetime'}, '結束時間':{type:'datetime'}},
     dateKey:'紀錄時間',
+    groupDateKey:'日期',
     getData: () => dailyLog,
     toApi: (obj) => obj
   }
@@ -1140,11 +1144,16 @@ let currentDateFilter = null; // null = 全部
 let remarkFilterOn = false;
 
 function recordDateStr(cfg, r){
-  const v = r[cfg.dateKey];
+  const v = r[cfg.groupDateKey || cfg.dateKey];
   if(!v) return null;
   const s = String(v).trim();
-  const m = s.match(/^(\d{4}-\d{2}-\d{2})/);
-  return m ? m[1] : s.split(' ')[0];
+  // 我們自己存的「M/D」或「M/D 時:分」格式（開始時間、發生日期、日期 這幾欄都是這種格式）
+  const md = s.match(/^(\d{1,2})\/(\d{1,2})/);
+  if(md) return `${md[1].padStart(2,'0')}-${md[2].padStart(2,'0')}`;
+  // 防呆：如果不小心抓到的是紀錄時間那種帶年份的格式，也一樣能分類
+  const iso = s.match(/^\d{4}-(\d{2})-(\d{2})/);
+  if(iso) return `${iso[1]}-${iso[2]}`;
+  return null;
 }
 
 // 防呆：如果 Google 試算表把我們存的時間字串自動誤判成日期格式，
@@ -1225,8 +1234,7 @@ function renderViewer(view, highlightLast, keepDateFilter){
   if(dates.length){
     const allBtn = `<button class="date-tab${currentDateFilter===null?' active':''}" data-date="">全部</button>`;
     const dateBtns = dates.map(d => {
-      const parts = d.split('-'); // ['YYYY','MM','DD']
-      const label = parts.length === 3 ? `${parts[1]}/${parts[2]}` : d;
+      const label = d.replace('-', '/'); // 'MM-DD' -> 'MM/DD'
       return `<button class="date-tab${currentDateFilter===d?' active':''}" data-date="${d}">${label}</button>`;
     }).join('');
     tabsWrap.innerHTML = allBtn + dateBtns;
@@ -1369,6 +1377,7 @@ document.addEventListener('click', (e) => {
 
 // ---------- 版本紀錄 ----------
 const VERSION_LOG = [
+  {v:'v7.0', d:'查看紀錄的日期分頁，改為依「實際作業日期」分類（機台產能記錄用開始時間、機台異常/掃碼異常用發生日期、每日進度記錄用日期），不再依建立紀錄的時間分類，避免補登資料被歸到錯的日期'},
   {v:'v6.9', d:'改善手機上儲存速度：跨日訂單完成時，多天的資料改成一次打包送出（不再一天一天分開請求）；連線暫時不穩造成的誤判錯誤，也會自動重試'},
   {v:'v6.8', d:'機台產能記錄新增「當日箱數」欄位，跟「完成箱數」（累計）分開顯示，箱數多時也能一眼看出當天實際做了多少'},
   {v:'v6.7', d:'跨日訂單完成時，改為把每一天的進度各自變成一筆機台產能記錄（而不是合併成一筆總結），並把該訂單在每日進度記錄裡的過程資料移除，機台產能記錄本身就能直接看到每天分別做了多少箱、花了多久'},
