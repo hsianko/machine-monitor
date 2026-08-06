@@ -161,6 +161,16 @@
     cursor:pointer;
   }
   .export-btn:hover{border-color:var(--text-secondary);}
+  .export-date-picker{display:flex; gap:4px;}
+  .export-date-picker select{
+    background:var(--bg-field);
+    border:1px solid var(--border-strong);
+    color:var(--text-primary);
+    font-family:var(--font-mono);
+    font-size:12px;
+    padding:7px 6px;
+    border-radius:6px;
+  }
 
   .section-title{
     font-family:var(--font-display);
@@ -395,7 +405,7 @@
 
 <div class="wrap">
   <div class="topbar">
-    <h1>產線即時監看板 <button class="version-badge" id="version-badge">v7.3</button></h1>
+    <h1>產線即時監看板 <button class="version-badge" id="version-badge">v7.4</button></h1>
     <div class="topbar-right">
       <div class="menu-wrap">
         <button class="export-btn" id="records-btn">查看紀錄 ▾</button>
@@ -407,7 +417,11 @@
         </div>
       </div>
       <button class="export-btn" id="settings-btn">設定 API 網址</button>
-      <button class="export-btn" id="export-btn">匯出全部紀錄 (CSV)</button>
+      <div class="export-date-picker">
+        <select id="export-month"><option value="">全部</option></select>
+        <select id="export-day"></select>
+      </div>
+      <button class="export-btn" id="export-btn">匯出紀錄 (CSV)</button>
       <button class="export-btn" id="purge-btn">清除兩週前舊紀錄</button>
       <div class="clock" id="clock">--:--:--</div>
     </div>
@@ -1001,50 +1015,59 @@ function csvEscape(v){
 }
 
 function exportCsv(){
-  if(!completedLog.length && !dailyLog.length && !abnormalLog.length && !scanLog.length){
-    alert('目前還沒有任何紀錄可以匯出。');
+  const monthV = document.getElementById('export-month').value;
+  const dayV = document.getElementById('export-day').value;
+  const filterDate = (monthV && dayV) ? `${monthV.padStart(2,'0')}-${dayV.padStart(2,'0')}` : null;
+
+  const fLog = filterDate ? completedLog.filter(r => recordDateStr(VIEW_CONFIG.log, r) === filterDate) : completedLog;
+  const fDaily = filterDate ? dailyLog.filter(r => recordDateStr(VIEW_CONFIG.daily, r) === filterDate) : dailyLog;
+  const fAbnormal = filterDate ? abnormalLog.filter(r => recordDateStr(VIEW_CONFIG.abnormal, r) === filterDate) : abnormalLog;
+  const fScan = filterDate ? scanLog.filter(r => recordDateStr(VIEW_CONFIG.scan, r) === filterDate) : scanLog;
+
+  if(!fLog.length && !fDaily.length && !fAbnormal.length && !fScan.length){
+    alert(filterDate ? `${monthV}/${dayV} 沒有任何紀錄可以匯出。` : '目前還沒有任何紀錄可以匯出。');
     return;
   }
   let csv = '\uFEFF';
 
-  if(completedLog.length){
+  if(fLog.length){
     csv += '機台產能記錄\r\n';
     const headers1 = ['機台','客戶名稱','總箱數','完成箱數','當日箱數','開始作業時間','實際結束時間','備註','完成率(%)'];
     csv += headers1.map(csvEscape).join(',') + '\r\n';
-    completedLog.forEach(r => {
+    fLog.forEach(r => {
       const row = [r.machine, r.customer, r.totalBoxes, r.currentBox, r.dayBoxes, cleanDisplayTime(r.startTime), cleanDisplayTime(r.actualEnd), r.remark, displayValue('log', r, 'pct')];
       csv += row.map(csvEscape).join(',') + '\r\n';
     });
     csv += '\r\n';
   }
 
-  if(dailyLog.length){
+  if(fDaily.length){
     csv += '每日進度記錄\r\n';
     const headers2 = ['日期','機台','客戶名稱','今日完成箱數','累計箱數','總箱數','開始時間','結束時間','完成率(%)'];
     csv += headers2.map(csvEscape).join(',') + '\r\n';
-    dailyLog.forEach(r => {
+    fDaily.forEach(r => {
       const row = headers2.map(h => cleanDisplayTime(r[h]));
       csv += row.map(csvEscape).join(',') + '\r\n';
     });
     csv += '\r\n';
   }
 
-  if(abnormalLog.length){
+  if(fAbnormal.length){
     csv += '機台異常記錄\r\n';
     const headers3 = ['發生日期','機台','異常類型','異常次數','料盤產地'];
     csv += headers3.map(csvEscape).join(',') + '\r\n';
-    abnormalLog.forEach(r => {
+    fAbnormal.forEach(r => {
       const row = headers3.map(h => cleanDisplayTime(r[h]));
       csv += row.map(csvEscape).join(',') + '\r\n';
     });
     csv += '\r\n';
   }
 
-  if(scanLog.length){
+  if(fScan.length){
     csv += '機台掃碼異常記錄\r\n';
     const headers4 = ['發生日期','機台','異常次數','Scan位置','LOT','產地'];
     csv += headers4.map(csvEscape).join(',') + '\r\n';
-    scanLog.forEach(r => {
+    fScan.forEach(r => {
       const row = headers4.map(h => cleanDisplayTime(r[h]));
       csv += row.map(csvEscape).join(',') + '\r\n';
     });
@@ -1055,8 +1078,9 @@ function exportCsv(){
   const a = document.createElement('a');
   const now = new Date();
   const pad = n => String(n).padStart(2,'0');
+  const tag = filterDate ? filterDate.replace('-','') : `${now.getFullYear()}${pad(now.getMonth()+1)}${pad(now.getDate())}`;
   a.href = url;
-  a.download = `機台紀錄匯出_${now.getFullYear()}${pad(now.getMonth()+1)}${pad(now.getDate())}.csv`;
+  a.download = `機台紀錄匯出_${tag}.csv`;
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);
@@ -1399,6 +1423,7 @@ document.addEventListener('click', (e) => {
 
 // ---------- 版本紀錄 ----------
 const VERSION_LOG = [
+  {v:'v7.4', d:'匯出紀錄新增日期篩選，可選擇匯出全部或指定某一天的資料，判斷依據跟畫面上的日期分頁一致（機台產能記錄用開始時間、異常記錄用發生日期、每日進度記錄用日期）'},
   {v:'v7.3', d:'新增資料警語提醒，放在頁面頂端：說明時間為概略時間、箱數已扣除刷一貼一作業，避免與後台數據核對時對不起來'},
   {v:'v7.2', d:'修正查看紀錄選了日期分頁後，每 15 秒自動同步會把篩選重置回「全部」的問題，現在會維持你選的日期不跳動'},
   {v:'v7.1', d:'訂單完成後，如果「清空卡片」這一步同步失敗，現在會跳出明確提醒，不會再默默失敗、讓卡片看起來像沒清空過（紀錄本身不受影響，一定有存成功）'},
@@ -1477,6 +1502,14 @@ document.getElementById('ab-month').innerHTML = monthOptionsHtml('');
 document.getElementById('ab-day').innerHTML = dayOptionsHtml('');
 document.getElementById('sc-month').innerHTML = monthOptionsHtml('');
 document.getElementById('sc-day').innerHTML = dayOptionsHtml('');
+(function fillExportDatePicker(){
+  let monthOpts = '<option value="">全部</option>';
+  for(let i=1;i<=12;i++){ monthOpts += `<option value="${i}">${i}月</option>`; }
+  document.getElementById('export-month').innerHTML = monthOpts;
+  let dayOpts = '<option value="">日</option>';
+  for(let i=1;i<=31;i++){ dayOpts += `<option value="${i}">${i}日</option>`; }
+  document.getElementById('export-day').innerHTML = dayOpts;
+})();
 (function fillCountOptions(){
   let out = '<option value="">請選擇</option>';
   for(let i=1;i<=20;i++){ out += `<option value="${i}">${i}</option>`; }
