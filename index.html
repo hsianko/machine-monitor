@@ -374,13 +374,15 @@
     width:100%;
     min-width:70px;
   }
+  table.viewer-table .edit-datetime{display:flex; gap:4px;}
+  table.viewer-table .edit-datetime select{min-width:52px; width:auto;}
 </style>
 </head>
 <body>
 
 <div class="wrap">
   <div class="topbar">
-    <h1>產線即時監看板 <button class="version-badge" id="version-badge">v6.2</button></h1>
+    <h1>產線即時監看板 <button class="version-badge" id="version-badge">v6.4</button></h1>
     <div class="topbar-right">
       <div class="menu-wrap">
         <button class="export-btn" id="records-btn">查看紀錄 ▾</button>
@@ -392,7 +394,7 @@
         </div>
       </div>
       <button class="export-btn" id="settings-btn">設定 API 網址</button>
-      <button class="export-btn" id="export-btn">匯出紀錄 (CSV)</button>
+      <button class="export-btn" id="export-btn">匯出全部紀錄 (CSV)</button>
       <button class="export-btn" id="purge-btn">清除兩週前舊紀錄</button>
       <div class="clock" id="clock">--:--:--</div>
     </div>
@@ -947,8 +949,8 @@ function csvEscape(v){
 }
 
 function exportCsv(){
-  if(!completedLog.length && !dailyLog.length){
-    alert('目前還沒有機台產能記錄或每日進度記錄可以匯出。');
+  if(!completedLog.length && !dailyLog.length && !abnormalLog.length && !scanLog.length){
+    alert('目前還沒有任何紀錄可以匯出。');
     return;
   }
   let csv = '\uFEFF';
@@ -970,6 +972,28 @@ function exportCsv(){
     csv += headers2.map(csvEscape).join(',') + '\r\n';
     dailyLog.forEach(r => {
       const row = headers2.map(h => cleanDisplayTime(r[h]));
+      csv += row.map(csvEscape).join(',') + '\r\n';
+    });
+    csv += '\r\n';
+  }
+
+  if(abnormalLog.length){
+    csv += '機台異常記錄\r\n';
+    const headers3 = ['發生日期','機台','異常類型','異常次數','料盤產地'];
+    csv += headers3.map(csvEscape).join(',') + '\r\n';
+    abnormalLog.forEach(r => {
+      const row = headers3.map(h => cleanDisplayTime(r[h]));
+      csv += row.map(csvEscape).join(',') + '\r\n';
+    });
+    csv += '\r\n';
+  }
+
+  if(scanLog.length){
+    csv += '機台掃碼異常記錄\r\n';
+    const headers4 = ['發生日期','機台','異常次數','Scan位置','LOT','產地'];
+    csv += headers4.map(csvEscape).join(',') + '\r\n';
+    scanLog.forEach(r => {
+      const row = headers4.map(h => cleanDisplayTime(r[h]));
       csv += row.map(csvEscape).join(',') + '\r\n';
     });
   }
@@ -1042,7 +1066,7 @@ const VIEW_CONFIG = {
     sheet:'Log',
     headers:['機台','客戶名稱','總箱數','完成箱數','開始時間','結束時間','備註','完成率(%)'],
     keys:['machine','customer','totalBoxes','currentBox','startTime','actualEnd','remark','pct'],
-    fieldTypes:{machine:{type:'select', options:MACHINE_OPTS}},
+    fieldTypes:{machine:{type:'select', options:MACHINE_OPTS}, startTime:{type:'datetime'}, actualEnd:{type:'datetime'}},
     dateKey:'loggedAt',
     remarkKey:'remark',
     getData: () => completedLog,
@@ -1053,7 +1077,7 @@ const VIEW_CONFIG = {
     sheet:'MachineAbnormal',
     headers:['發生日期','機台','異常類型','異常次數','料盤產地'],
     keys:['發生日期','機台','異常類型','異常次數','料盤產地'],
-    fieldTypes:{'機台':{type:'select', options:MACHINE_OPTS}, '異常類型':{type:'select', options:AB_TYPE_OPTS}, '異常次數':{type:'select', options:SCAN_COUNT_OPTS}},
+    fieldTypes:{'機台':{type:'select', options:MACHINE_OPTS}, '異常類型':{type:'select', options:AB_TYPE_OPTS}, '異常次數':{type:'select', options:SCAN_COUNT_OPTS}, '發生日期':{type:'date'}},
     dateKey:'紀錄時間',
     getData: () => abnormalLog,
     toApi: (obj) => obj
@@ -1063,7 +1087,7 @@ const VIEW_CONFIG = {
     sheet:'ScanAbnormal',
     headers:['發生日期','機台','異常次數','Scan位置','LOT','產地'],
     keys:['發生日期','機台','異常次數','Scan位置','LOT','產地'],
-    fieldTypes:{'機台':{type:'select', options:MACHINE_OPTS}, '異常次數':{type:'select', options:SCAN_COUNT_OPTS}, 'Scan位置':{type:'select', options:SCAN_POS_OPTS}},
+    fieldTypes:{'機台':{type:'select', options:MACHINE_OPTS}, '異常次數':{type:'select', options:SCAN_COUNT_OPTS}, 'Scan位置':{type:'select', options:SCAN_POS_OPTS}, '發生日期':{type:'date'}},
     dateKey:'紀錄時間',
     getData: () => scanLog,
     toApi: (obj) => obj
@@ -1073,7 +1097,7 @@ const VIEW_CONFIG = {
     sheet:'DailyProgress',
     headers:['日期','機台','客戶名稱','今日完成箱數','累計箱數','總箱數','開始時間','結束時間','完成率(%)'],
     keys:['日期','機台','客戶名稱','今日完成箱數','累計箱數','總箱數','開始時間','結束時間','完成率(%)'],
-    fieldTypes:{'機台':{type:'select', options:MACHINE_OPTS}},
+    fieldTypes:{'機台':{type:'select', options:MACHINE_OPTS}, '日期':{type:'date'}, '開始時間':{type:'datetime'}, '結束時間':{type:'datetime'}},
     dateKey:'紀錄時間',
     getData: () => dailyLog,
     toApi: (obj) => obj
@@ -1114,11 +1138,28 @@ function cleanDisplayTime(v){
 
 function fieldControlHtml(cfg, key, value){
   const ft = cfg.fieldTypes[key];
-  const val = escapeHtml(cleanDisplayTime(value));
   if(ft && ft.type === 'select'){
     const opts = ft.options.map(o => `<option value="${escapeHtml(o)}"${String(o)===String(value)?' selected':''}>${escapeHtml(o)}</option>`).join('');
     return `<select data-edit-key="${key}"><option value="">--</option>${opts}</select>`;
   }
+  if(ft && ft.type === 'datetime'){
+    const p = parseComposite(value);
+    return `<div class="edit-datetime" data-edit-key="${key}">
+      <select data-edit-part="month">${monthOptionsHtml(p.month)}</select>
+      <select data-edit-part="day">${dayOptionsHtml(p.day)}</select>
+      <select data-edit-part="time">${timeOptions(p.time)}</select>
+    </div>`;
+  }
+  if(ft && ft.type === 'date'){
+    const parts = String(value||'').split('/');
+    const month = parts[0] || '';
+    const day = parts[1] || '';
+    return `<div class="edit-datetime" data-edit-key="${key}">
+      <select data-edit-part="month">${monthOptionsHtml(month)}</select>
+      <select data-edit-part="day">${dayOptionsHtml(day)}</select>
+    </div>`;
+  }
+  const val = escapeHtml(cleanDisplayTime(value));
   return `<input type="text" data-edit-key="${key}" value="${val}">`;
 }
 
@@ -1222,7 +1263,19 @@ async function handleSaveEdit(view, idx){
   const tr = document.querySelector(`#viewer-body tr[data-idx="${idx}"]`);
   if(!tr) return;
   const newValues = Object.assign({}, r);
-  tr.querySelectorAll('[data-edit-key]').forEach(el => { newValues[el.dataset.editKey] = el.value; });
+  tr.querySelectorAll('[data-edit-key]').forEach(el => {
+    const key = el.dataset.editKey;
+    const parts = el.querySelectorAll('[data-edit-part]');
+    if(parts.length){
+      const get = p => { const found = el.querySelector(`[data-edit-part="${p}"]`); return found ? found.value : ''; };
+      const ft = cfg.fieldTypes[key];
+      newValues[key] = (ft && ft.type === 'date')
+        ? (get('month') && get('day') ? `${get('month')}/${get('day')}` : '')
+        : buildComposite(get('month'), get('day'), get('time'));
+    } else {
+      newValues[key] = el.value;
+    }
+  });
   if(!API_URL){ alert('尚未設定 API 網址，無法儲存修改。'); return; }
   try{
     await apiPost({action:'updateRow', sheet:cfg.sheet, row:r._row, data: cfg.toApi(newValues)});
@@ -1286,6 +1339,8 @@ document.addEventListener('click', (e) => {
 
 // ---------- 版本紀錄 ----------
 const VERSION_LOG = [
+  {v:'v6.4', d:'查看紀錄的編輯功能，日期/時間全部改成月/日/時分下拉選單，不用再手動輸入格式；匯出 CSV 新增機台異常記錄、機台掃碼異常記錄，四種紀錄一次匯出成同一個檔案（分段呈現）'},
+  {v:'v6.3', d:'修正每日進度紀錄裡「開始時間」「結束時間」編輯後被誤判成日期格式、存錯的問題'},
   {v:'v6.2', d:'匯出 CSV 改為「機台產能記錄」和「每日進度記錄」一起匯出（同一個檔案分兩段），方便統計當日作業箱數'},
   {v:'v6.1', d:'每日進度紀錄新增開始/結束時間欄位，記錄後自動清空方便隔天重填；訂單全部完成時，會自動清除該訂單在每日進度紀錄裡的中間過程資料'},
   {v:'v6.0', d:'新增「記錄今日進度」功能，用於跨日訂單：可記錄每天實際完成箱數而不清空卡片，並新增「每日進度紀錄」查看分類'},
