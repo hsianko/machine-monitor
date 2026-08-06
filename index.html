@@ -382,7 +382,7 @@
 
 <div class="wrap">
   <div class="topbar">
-    <h1>產線即時監看板 <button class="version-badge" id="version-badge">v6.5</button></h1>
+    <h1>產線即時監看板 <button class="version-badge" id="version-badge">v6.7</button></h1>
     <div class="topbar-right">
       <div class="menu-wrap">
         <button class="export-btn" id="records-btn">查看紀錄 ▾</button>
@@ -543,13 +543,6 @@ function computeDailyDelta(machine, customer, totalBoxes, currentBox){
 // 訂單全部完成時，「開始時間」要呈現「整張訂單真正開始」的那一刻，
 // 不是只有最後一天這一段的開始時間。所以去每日進度紀錄裡找同一張訂單最早一筆有填開始時間的紀錄。
 // 如果完全沒有每日進度紀錄（單日就做完的訂單），就用卡片上目前的開始時間。
-function findJobStartTime(machine, customer, totalBoxes, fallback){
-  const matches = dailyLog.filter(r =>
-    r['機台'] === machine && r['客戶名稱'] === customer && String(r['總箱數']) === String(totalBoxes) && r['開始時間']
-  );
-  if(!matches.length) return fallback;
-  return matches[0]['開始時間'];
-}
 let currentLogView = null;
 
 function fmtClock(){
@@ -759,17 +752,36 @@ function render(){
       }
       const endHasTime = parseComposite(dd.actualEnd).time;
       const finishTime = endHasTime ? dd.actualEnd : nowComposite();
-      const jobStart = findJobStartTime(m.key, dd.customer, dd.totalBoxes, dd.startTime);
-      const record = {
-        machine:m.key, customer:dd.customer, totalBoxes:dd.totalBoxes, currentBox:dd.currentBox,
-        startTime:jobStart, actualEnd:finishTime, remark:dd.remark, pct:computePct(m.key)
-      };
-      await saveLog(record);
+      const total = parseFloat(dd.totalBoxes) || 0;
+
+      // 把這張訂單先前每一天的進度，各自變成一筆機台產能記錄，
+      // 這樣機台產能記錄本身就能直接看到每天分別做了多少箱、花了多久，不用切去別的頁面看。
+      const priorDaily = dailyLog.filter(r =>
+        r['機台'] === m.key && r['客戶名稱'] === dd.customer && String(r['總箱數']) === String(dd.totalBoxes)
+      );
+
       try{
-        await apiPost({action:'deleteDailyForJob', machine:m.key, customer:dd.customer, totalBoxes:dd.totalBoxes});
+        for(const dRec of priorDaily){
+          const cum = parseFloat(dRec['累計箱數']) || 0;
+          const dayPct = total > 0 ? Math.max(0, Math.min(100, Math.round((cum/total)*100))) : '';
+          await saveLog({
+            machine:m.key, customer:dd.customer, totalBoxes:dd.totalBoxes, currentBox:cum,
+            startTime:dRec['開始時間']||'', actualEnd:dRec['結束時間']||'', remark:dRec['備註']||'', pct:dayPct
+          });
+        }
+        // 今天最後完成的這一段
+        await saveLog({
+          machine:m.key, customer:dd.customer, totalBoxes:dd.totalBoxes, currentBox:dd.currentBox,
+          startTime:dd.startTime, actualEnd:finishTime, remark:dd.remark, pct:computePct(m.key)
+        });
+        if(priorDaily.length){
+          await apiPost({action:'deleteDailyForJob', machine:m.key, customer:dd.customer, totalBoxes:dd.totalBoxes});
+        }
       }catch(err){
-        console.error('清除每日進度紀錄失敗：', err);
+        alert('建立完成紀錄失敗：' + err);
+        return;
       }
+
       state[m.key] = { customer:'', totalBoxes:'', currentBox:'', startTime:'', actualEnd:'', remark:'' };
       await saveState(m.key);
       await loadState();
@@ -1351,6 +1363,8 @@ document.addEventListener('click', (e) => {
 
 // ---------- 版本紀錄 ----------
 const VERSION_LOG = [
+  {v:'v6.7', d:'跨日訂單完成時，改為把每一天的進度各自變成一筆機台產能記錄（而不是合併成一筆總結），並把該訂單在每日進度記錄裡的過程資料移除，機台產能記錄本身就能直接看到每天分別做了多少箱、花了多久'},
+  {v:'v6.6', d:'取消訂單完成時自動清除每日進度記錄的動作，改為永久保留，方便查每天各做了幾箱、花多久時間（機台產能記錄看總結果，每日進度記錄看每天明細）'},
   {v:'v6.5', d:'跨日訂單完成時，機台產能記錄的「開始時間」改為自動抓每日進度記錄裡最早一筆的開始時間，呈現整張訂單真正的起訖時間，不會只顯示最後一天那一段'},
   {v:'v6.4', d:'查看紀錄的編輯功能，日期/時間全部改成月/日/時分下拉選單，不用再手動輸入格式；匯出 CSV 新增機台異常記錄、機台掃碼異常記錄，四種紀錄一次匯出成同一個檔案（分段呈現）'},
   {v:'v6.3', d:'修正每日進度紀錄裡「開始時間」「結束時間」編輯後被誤判成日期格式、存錯的問題'},
