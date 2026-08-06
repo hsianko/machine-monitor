@@ -382,7 +382,7 @@
 
 <div class="wrap">
   <div class="topbar">
-    <h1>產線即時監看板 <button class="version-badge" id="version-badge">v6.8</button></h1>
+    <h1>產線即時監看板 <button class="version-badge" id="version-badge">v6.9</button></h1>
     <div class="topbar-right">
       <div class="menu-wrap">
         <button class="export-btn" id="records-btn">查看紀錄 ▾</button>
@@ -761,22 +761,24 @@ function render(){
       );
 
       try{
-        for(const dRec of priorDaily){
+        const records = priorDaily.map(dRec => {
           const cum = parseFloat(dRec['累計箱數']) || 0;
           const dayPct = total > 0 ? Math.max(0, Math.min(100, Math.round((cum/total)*100))) : '';
-          await saveLog({
+          return {
             machine:m.key, customer:dd.customer, totalBoxes:dd.totalBoxes, currentBox:cum,
             dayBoxes: dRec['今日完成箱數'] !== undefined ? dRec['今日完成箱數'] : cum,
             startTime:dRec['開始時間']||'', actualEnd:dRec['結束時間']||'', remark:dRec['備註']||'', pct:dayPct
-          });
-        }
+          };
+        });
         // 今天最後完成的這一段
         const todayDayBoxes = computeDailyDelta(m.key, dd.customer, dd.totalBoxes, parseFloat(dd.currentBox) || 0);
-        await saveLog({
+        records.push({
           machine:m.key, customer:dd.customer, totalBoxes:dd.totalBoxes, currentBox:dd.currentBox,
           dayBoxes: todayDayBoxes,
           startTime:dd.startTime, actualEnd:finishTime, remark:dd.remark, pct:computePct(m.key)
         });
+        // 不管幾天的資料，一次打包送出去，減少手機上多次來回網路請求造成的延遲。
+        await apiPost({action:'appendLogBatch', data: records.map(rec => toChinese(LOG_MAP, rec))});
         if(priorDaily.length){
           await apiPost({action:'deleteDailyForJob', machine:m.key, customer:dd.customer, totalBoxes:dd.totalBoxes});
         }
@@ -874,14 +876,15 @@ async function apiPostOnce(payload){
 }
 
 // 網路偶爾會斷斷續續（尤其是手機切換 WiFi/行動網路時），
-// 遇到「連線本身失敗」（不是伺服器回錯誤，是根本送不出去/收不到回應）時，
+// 遇到「連線本身失敗」（根本送不出去/收不到回應）或「回應內容不完整」時，
 // 自動重試一次，中間等 1.2 秒，避免只是一瞬間的網路不穩就整筆資料存失敗。
 async function apiPost(payload){
   try{
     return await apiPostOnce(payload);
   }catch(err){
-    const isNetworkErr = err instanceof TypeError || /Load failed|Failed to fetch|NetworkError/i.test(String(err.message||err));
-    if(!isNetworkErr) throw err;
+    const msg = String(err.message||err);
+    const isRetryable = (err instanceof TypeError) || /Load failed|Failed to fetch|NetworkError|伺服器回應不是有效資料/i.test(msg);
+    if(!isRetryable) throw err;
     await sleep(1200);
     return await apiPostOnce(payload);
   }
@@ -1366,6 +1369,7 @@ document.addEventListener('click', (e) => {
 
 // ---------- 版本紀錄 ----------
 const VERSION_LOG = [
+  {v:'v6.9', d:'改善手機上儲存速度：跨日訂單完成時，多天的資料改成一次打包送出（不再一天一天分開請求）；連線暫時不穩造成的誤判錯誤，也會自動重試'},
   {v:'v6.8', d:'機台產能記錄新增「當日箱數」欄位，跟「完成箱數」（累計）分開顯示，箱數多時也能一眼看出當天實際做了多少'},
   {v:'v6.7', d:'跨日訂單完成時，改為把每一天的進度各自變成一筆機台產能記錄（而不是合併成一筆總結），並把該訂單在每日進度記錄裡的過程資料移除，機台產能記錄本身就能直接看到每天分別做了多少箱、花了多久'},
   {v:'v6.6', d:'取消訂單完成時自動清除每日進度記錄的動作，改為永久保留，方便查每天各做了幾箱、花多久時間（機台產能記錄看總結果，每日進度記錄看每天明細）'},
