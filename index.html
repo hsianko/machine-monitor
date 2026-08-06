@@ -380,7 +380,7 @@
 
 <div class="wrap">
   <div class="topbar">
-    <h1>產線即時監看板 <button class="version-badge" id="version-badge">v6.1</button></h1>
+    <h1>產線即時監看板 <button class="version-badge" id="version-badge">v6.2</button></h1>
     <div class="topbar-right">
       <div class="menu-wrap">
         <button class="export-btn" id="records-btn">查看紀錄 ▾</button>
@@ -392,7 +392,7 @@
         </div>
       </div>
       <button class="export-btn" id="settings-btn">設定 API 網址</button>
-      <button class="export-btn" id="export-btn">匯出完成紀錄 (CSV)</button>
+      <button class="export-btn" id="export-btn">匯出紀錄 (CSV)</button>
       <button class="export-btn" id="purge-btn">清除兩週前舊紀錄</button>
       <div class="clock" id="clock">--:--:--</div>
     </div>
@@ -947,18 +947,40 @@ function csvEscape(v){
 }
 
 function exportCsv(){
-  if(!completedLog.length){ alert('目前還沒有已完成的紀錄可以匯出。'); return; }
-  const headers = ['機台','客戶名稱','總箱數','完成箱數','開始作業時間','實際結束時間','備註','完成率(%)'];
-  const rows = completedLog.map(r => [r.machine, r.customer, r.totalBoxes, r.currentBox, cleanDisplayTime(r.startTime), cleanDisplayTime(r.actualEnd), r.remark, displayValue('log', r, 'pct')]);
-  let csv = '\uFEFF' + headers.map(csvEscape).join(',') + '\r\n';
-  rows.forEach(row => { csv += row.map(csvEscape).join(',') + '\r\n'; });
+  if(!completedLog.length && !dailyLog.length){
+    alert('目前還沒有機台產能記錄或每日進度記錄可以匯出。');
+    return;
+  }
+  let csv = '\uFEFF';
+
+  if(completedLog.length){
+    csv += '機台產能記錄\r\n';
+    const headers1 = ['機台','客戶名稱','總箱數','完成箱數','開始作業時間','實際結束時間','備註','完成率(%)'];
+    csv += headers1.map(csvEscape).join(',') + '\r\n';
+    completedLog.forEach(r => {
+      const row = [r.machine, r.customer, r.totalBoxes, r.currentBox, cleanDisplayTime(r.startTime), cleanDisplayTime(r.actualEnd), r.remark, displayValue('log', r, 'pct')];
+      csv += row.map(csvEscape).join(',') + '\r\n';
+    });
+    csv += '\r\n';
+  }
+
+  if(dailyLog.length){
+    csv += '每日進度記錄\r\n';
+    const headers2 = ['日期','機台','客戶名稱','今日完成箱數','累計箱數','總箱數','開始時間','結束時間','完成率(%)'];
+    csv += headers2.map(csvEscape).join(',') + '\r\n';
+    dailyLog.forEach(r => {
+      const row = headers2.map(h => cleanDisplayTime(r[h]));
+      csv += row.map(csvEscape).join(',') + '\r\n';
+    });
+  }
+
   const blob = new Blob([csv], {type:'text/csv;charset=utf-8;'});
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   const now = new Date();
   const pad = n => String(n).padStart(2,'0');
   a.href = url;
-  a.download = `機台完成紀錄_${now.getFullYear()}${pad(now.getMonth()+1)}${pad(now.getDate())}.csv`;
+  a.download = `機台紀錄匯出_${now.getFullYear()}${pad(now.getMonth()+1)}${pad(now.getDate())}.csv`;
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);
@@ -1264,6 +1286,7 @@ document.addEventListener('click', (e) => {
 
 // ---------- 版本紀錄 ----------
 const VERSION_LOG = [
+  {v:'v6.2', d:'匯出 CSV 改為「機台產能記錄」和「每日進度記錄」一起匯出（同一個檔案分兩段），方便統計當日作業箱數'},
   {v:'v6.1', d:'每日進度紀錄新增開始/結束時間欄位，記錄後自動清空方便隔天重填；訂單全部完成時，會自動清除該訂單在每日進度紀錄裡的中間過程資料'},
   {v:'v6.0', d:'新增「記錄今日進度」功能，用於跨日訂單：可記錄每天實際完成箱數而不清空卡片，並新增「每日進度紀錄」查看分類'},
   {v:'v5.4', d:'機台異常記錄新增「異常次數」下拉選單（1~20），放在異常類型與料盤產地之間'},
