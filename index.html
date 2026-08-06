@@ -380,7 +380,7 @@
 
 <div class="wrap">
   <div class="topbar">
-    <h1>產線即時監看板 <button class="version-badge" id="version-badge">v6.0</button></h1>
+    <h1>產線即時監看板 <button class="version-badge" id="version-badge">v6.1</button></h1>
     <div class="topbar-right">
       <div class="menu-wrap">
         <button class="export-btn" id="records-btn">查看紀錄 ▾</button>
@@ -751,6 +751,11 @@ function render(){
         startTime:dd.startTime, actualEnd:finishTime, remark:dd.remark, pct:computePct(m.key)
       };
       await saveLog(record);
+      try{
+        await apiPost({action:'deleteDailyForJob', machine:m.key, customer:dd.customer, totalBoxes:dd.totalBoxes});
+      }catch(err){
+        console.error('清除每日進度紀錄失敗：', err);
+      }
       state[m.key] = { customer:'', totalBoxes:'', currentBox:'', startTime:'', actualEnd:'', remark:'' };
       await saveState(m.key);
       await loadState();
@@ -775,12 +780,18 @@ function render(){
         '今日完成箱數': delta,
         '累計箱數': cur,
         '總箱數': dd.totalBoxes,
+        '開始時間': dd.startTime,
+        '結束時間': dd.actualEnd,
         '完成率(%)': computePct(m.key)
       };
       try{
         await apiPost({action:'appendDaily', data: record});
+        state[m.key].startTime = '';
+        state[m.key].actualEnd = '';
+        await saveState(m.key);
         await loadState();
         renderViewer('daily', true);
+        render();
       }catch(err){
         alert('記錄今日進度失敗：' + err);
       }
@@ -1038,8 +1049,8 @@ const VIEW_CONFIG = {
   daily: {
     title:'每日進度紀錄',
     sheet:'DailyProgress',
-    headers:['日期','機台','客戶名稱','今日完成箱數','累計箱數','總箱數','完成率(%)'],
-    keys:['日期','機台','客戶名稱','今日完成箱數','累計箱數','總箱數','完成率(%)'],
+    headers:['日期','機台','客戶名稱','今日完成箱數','累計箱數','總箱數','開始時間','結束時間','完成率(%)'],
+    keys:['日期','機台','客戶名稱','今日完成箱數','累計箱數','總箱數','開始時間','結束時間','完成率(%)'],
     fieldTypes:{'機台':{type:'select', options:MACHINE_OPTS}},
     dateKey:'紀錄時間',
     getData: () => dailyLog,
@@ -1253,6 +1264,7 @@ document.addEventListener('click', (e) => {
 
 // ---------- 版本紀錄 ----------
 const VERSION_LOG = [
+  {v:'v6.1', d:'每日進度紀錄新增開始/結束時間欄位，記錄後自動清空方便隔天重填；訂單全部完成時，會自動清除該訂單在每日進度紀錄裡的中間過程資料'},
   {v:'v6.0', d:'新增「記錄今日進度」功能，用於跨日訂單：可記錄每天實際完成箱數而不清空卡片，並新增「每日進度紀錄」查看分類'},
   {v:'v5.4', d:'機台異常記錄新增「異常次數」下拉選單（1~20），放在異常類型與料盤產地之間'},
   {v:'v5.3', d:'加強網路不穩定時的容錯：連線失敗會自動重試一次；後端執行錯誤也會回傳清楚的錯誤訊息，不會再顯示看不懂的「伺服器回應不是有效資料」'},
