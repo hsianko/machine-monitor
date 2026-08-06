@@ -382,7 +382,7 @@
 
 <div class="wrap">
   <div class="topbar">
-    <h1>產線即時監看板 <button class="version-badge" id="version-badge">v6.4</button></h1>
+    <h1>產線即時監看板 <button class="version-badge" id="version-badge">v6.5</button></h1>
     <div class="topbar-right">
       <div class="menu-wrap">
         <button class="export-btn" id="records-btn">查看紀錄 ▾</button>
@@ -538,6 +538,17 @@ function computeDailyDelta(machine, customer, totalBoxes, currentBox){
   const last = matches[matches.length - 1];
   const prevCum = parseFloat(last['累計箱數']) || 0;
   return Math.max(0, currentBox - prevCum);
+}
+
+// 訂單全部完成時，「開始時間」要呈現「整張訂單真正開始」的那一刻，
+// 不是只有最後一天這一段的開始時間。所以去每日進度紀錄裡找同一張訂單最早一筆有填開始時間的紀錄。
+// 如果完全沒有每日進度紀錄（單日就做完的訂單），就用卡片上目前的開始時間。
+function findJobStartTime(machine, customer, totalBoxes, fallback){
+  const matches = dailyLog.filter(r =>
+    r['機台'] === machine && r['客戶名稱'] === customer && String(r['總箱數']) === String(totalBoxes) && r['開始時間']
+  );
+  if(!matches.length) return fallback;
+  return matches[0]['開始時間'];
 }
 let currentLogView = null;
 
@@ -748,9 +759,10 @@ function render(){
       }
       const endHasTime = parseComposite(dd.actualEnd).time;
       const finishTime = endHasTime ? dd.actualEnd : nowComposite();
+      const jobStart = findJobStartTime(m.key, dd.customer, dd.totalBoxes, dd.startTime);
       const record = {
         machine:m.key, customer:dd.customer, totalBoxes:dd.totalBoxes, currentBox:dd.currentBox,
-        startTime:dd.startTime, actualEnd:finishTime, remark:dd.remark, pct:computePct(m.key)
+        startTime:jobStart, actualEnd:finishTime, remark:dd.remark, pct:computePct(m.key)
       };
       await saveLog(record);
       try{
@@ -1339,6 +1351,7 @@ document.addEventListener('click', (e) => {
 
 // ---------- 版本紀錄 ----------
 const VERSION_LOG = [
+  {v:'v6.5', d:'跨日訂單完成時，機台產能記錄的「開始時間」改為自動抓每日進度記錄裡最早一筆的開始時間，呈現整張訂單真正的起訖時間，不會只顯示最後一天那一段'},
   {v:'v6.4', d:'查看紀錄的編輯功能，日期/時間全部改成月/日/時分下拉選單，不用再手動輸入格式；匯出 CSV 新增機台異常記錄、機台掃碼異常記錄，四種紀錄一次匯出成同一個檔案（分段呈現）'},
   {v:'v6.3', d:'修正每日進度紀錄裡「開始時間」「結束時間」編輯後被誤判成日期格式、存錯的問題'},
   {v:'v6.2', d:'匯出 CSV 改為「機台產能記錄」和「每日進度記錄」一起匯出（同一個檔案分兩段），方便統計當日作業箱數'},
