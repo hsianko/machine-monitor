@@ -327,6 +327,19 @@
   .viewer-head .vtitle{font-family:var(--font-display); font-weight:600; font-size:15px; color:var(--text-primary);}
   .viewer-close{background:none; border:none; color:var(--text-muted); font-size:11px; cursor:pointer; text-decoration:underline;}
   .date-tabs{display:flex; flex-wrap:wrap; gap:6px; margin-bottom:12px;}
+  .data-notice{
+    background:rgba(232,163,61,0.08);
+    border:1px solid rgba(232,163,61,0.35);
+    border-radius:8px;
+    padding:10px 14px;
+    margin-bottom:16px;
+  }
+  .data-notice p{
+    margin:2px 0;
+    font-size:11.5px;
+    color:#e8a33d;
+    line-height:1.6;
+  }
   .date-tab{
     background:var(--bg-field);
     border:1px solid var(--border);
@@ -382,7 +395,7 @@
 
 <div class="wrap">
   <div class="topbar">
-    <h1>產線即時監看板 <button class="version-badge" id="version-badge">v7.2</button></h1>
+    <h1>產線即時監看板 <button class="version-badge" id="version-badge">v7.3</button></h1>
     <div class="topbar-right">
       <div class="menu-wrap">
         <button class="export-btn" id="records-btn">查看紀錄 ▾</button>
@@ -398,6 +411,11 @@
       <button class="export-btn" id="purge-btn">清除兩週前舊紀錄</button>
       <div class="clock" id="clock">--:--:--</div>
     </div>
+  </div>
+
+  <div class="data-notice">
+    <p>⚠ 時間紀錄為人工選取之概略時間，非系統自動偵測之精確時間，僅供進度參考。</p>
+    <p>⚠ 箱數為機台實際作業箱數，已扣除「刷一貼一」作業箱數，與後台系統統計基準可能不同。</p>
   </div>
 
   <div class="viewer-panel" id="viewer-panel">
@@ -1381,6 +1399,7 @@ document.addEventListener('click', (e) => {
 
 // ---------- 版本紀錄 ----------
 const VERSION_LOG = [
+  {v:'v7.3', d:'新增資料警語提醒，放在頁面頂端：說明時間為概略時間、箱數已扣除刷一貼一作業，避免與後台數據核對時對不起來'},
   {v:'v7.2', d:'修正查看紀錄選了日期分頁後，每 15 秒自動同步會把篩選重置回「全部」的問題，現在會維持你選的日期不跳動'},
   {v:'v7.1', d:'訂單完成後，如果「清空卡片」這一步同步失敗，現在會跳出明確提醒，不會再默默失敗、讓卡片看起來像沒清空過（紀錄本身不受影響，一定有存成功）'},
   {v:'v7.0', d:'查看紀錄的日期分頁，改為依「實際作業日期」分類（機台產能記錄用開始時間、機台異常/掃碼異常用發生日期、每日進度記錄用日期），不再依建立紀錄的時間分類，避免補登資料被歸到錯的日期'},
