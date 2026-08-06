@@ -382,7 +382,7 @@
 
 <div class="wrap">
   <div class="topbar">
-    <h1>產線即時監看板 <button class="version-badge" id="version-badge">v7.1</button></h1>
+    <h1>產線即時監看板 <button class="version-badge" id="version-badge">v7.2</button></h1>
     <div class="topbar-right">
       <div class="menu-wrap">
         <button class="export-btn" id="records-btn">查看紀錄 ▾</button>
@@ -967,7 +967,7 @@ async function loadState(){
     if(json.abnormal){ abnormalLog = json.abnormal; }
     if(json.scan){ scanLog = json.scan; }
     if(json.daily){ dailyLog = json.daily; }
-    if(currentLogView){ renderViewer(currentLogView); }
+    if(currentLogView){ renderViewer(currentLogView, false, true); }
     const beTag = json.backendVersion ? (' · 後端 ' + json.backendVersion) : ' · 後端版本未知（請確認 Apps Script 是否為最新版）';
     hint.textContent = '已同步至試算表 · ' + fmtClock() + beTag;
   }catch(err){
@@ -1381,6 +1381,7 @@ document.addEventListener('click', (e) => {
 
 // ---------- 版本紀錄 ----------
 const VERSION_LOG = [
+  {v:'v7.2', d:'修正查看紀錄選了日期分頁後，每 15 秒自動同步會把篩選重置回「全部」的問題，現在會維持你選的日期不跳動'},
   {v:'v7.1', d:'訂單完成後，如果「清空卡片」這一步同步失敗，現在會跳出明確提醒，不會再默默失敗、讓卡片看起來像沒清空過（紀錄本身不受影響，一定有存成功）'},
   {v:'v7.0', d:'查看紀錄的日期分頁，改為依「實際作業日期」分類（機台產能記錄用開始時間、機台異常/掃碼異常用發生日期、每日進度記錄用日期），不再依建立紀錄的時間分類，避免補登資料被歸到錯的日期'},
   {v:'v6.9', d:'改善手機上儲存速度：跨日訂單完成時，多天的資料改成一次打包送出（不再一天一天分開請求）；連線暫時不穩造成的誤判錯誤，也會自動重試'},
