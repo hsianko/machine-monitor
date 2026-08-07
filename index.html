@@ -419,7 +419,7 @@
 
 <div class="wrap">
   <div class="topbar">
-    <h1>產線即時監看板 <button class="version-badge" id="version-badge">v7.5</button></h1>
+    <h1>產線即時監看板 <button class="version-badge" id="version-badge">v7.6</button></h1>
     <div class="topbar-right">
       <div class="menu-wrap">
         <button class="export-btn" id="records-btn">查看紀錄 ▾</button>
@@ -872,6 +872,10 @@ function render(){
         state[m.key].startTime = '';
         state[m.key].actualEnd = '';
         await saveState(m.key);
+        const syncHint = document.getElementById('save-hint').textContent;
+        if(syncHint.indexOf('失敗') !== -1){
+          alert(`提醒：${m.key} 的今日進度已經確實存進紀錄了，但清空開始/結束時間這一步同步失敗（可能是網路瞬間不穩）。畫面可能還會顯示舊時間，麻煩重新整理一次，如果還是沒清空，手動把開始/結束時間改回空白即可，不會影響已經存好的進度紀錄。`);
+        }
         await loadState();
         renderViewer('daily', true);
         render();
@@ -1479,6 +1483,7 @@ document.addEventListener('click', (e) => {
 
 // ---------- 版本紀錄 ----------
 const VERSION_LOG = [
+  {v:'v7.6', d:'「記錄今日進度」如果清空開始/結束時間這一步同步失敗，現在會跳出明確提醒（進度紀錄本身一定有存成功，不受影響）'},
   {v:'v7.5', d:'查看紀錄新增機台篩選（跟日期篩選一起用），並加入統計列顯示篩選結果的總筆數與總數量，統計列只在畫面上顯示，不會出現在匯出的 CSV 裡'},
   {v:'v7.4', d:'匯出紀錄新增日期篩選，可選擇匯出全部或指定某一天的資料，判斷依據跟畫面上的日期分頁一致（機台產能記錄用開始時間、異常記錄用發生日期、每日進度記錄用日期）'},
   {v:'v7.3', d:'新增資料警語提醒，放在頁面頂端：說明時間為概略時間、箱數已扣除刷一貼一作業，避免與後台數據核對時對不起來'},
