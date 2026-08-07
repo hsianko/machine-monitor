@@ -361,6 +361,20 @@
     cursor:pointer;
   }
   .date-tab.active{border-color:var(--status-run); color:var(--status-run);}
+  .viewer-stats{
+    display:none;
+    align-items:baseline;
+    gap:24px;
+    background:var(--bg-field);
+    border-radius:8px;
+    padding:9px 16px;
+    margin-bottom:12px;
+    font-size:12.5px;
+  }
+  .viewer-stats.show{display:flex; flex-wrap:wrap;}
+  .viewer-stats .stats-muted{color:var(--text-muted); font-size:10.5px;}
+  .viewer-stats b{font-size:15px; color:var(--text-primary);}
+  .viewer-stats b.stats-accent{color:#e8a33d;}
   .remark-filter-btn.active{border-color:#e8a33d; color:#e8a33d;}
   table.viewer-table tr.remark-row{background:rgba(232,163,61,0.10);}
   table.viewer-table .remark-icon{margin-right:5px;}
@@ -405,7 +419,7 @@
 
 <div class="wrap">
   <div class="topbar">
-    <h1>產線即時監看板 <button class="version-badge" id="version-badge">v7.4</button></h1>
+    <h1>產線即時監看板 <button class="version-badge" id="version-badge">v7.5</button></h1>
     <div class="topbar-right">
       <div class="menu-wrap">
         <button class="export-btn" id="records-btn">查看紀錄 ▾</button>
@@ -438,7 +452,9 @@
       <button class="viewer-close" id="viewer-close">關閉</button>
     </div>
     <div class="date-tabs" id="viewer-date-tabs"></div>
+    <div class="date-tabs" id="viewer-machine-tabs"></div>
     <div class="date-tabs" id="viewer-remark-filter"></div>
+    <div class="viewer-stats" id="viewer-stats"></div>
     <div class="viewer-table-wrap" id="viewer-body"></div>
   </div>
 
@@ -1145,6 +1161,8 @@ const VIEW_CONFIG = {
     fieldTypes:{machine:{type:'select', options:MACHINE_OPTS}, startTime:{type:'datetime'}, actualEnd:{type:'datetime'}},
     dateKey:'loggedAt',
     groupDateKey:'startTime',
+    statKey:'dayBoxes',
+    statLabel:'總完成箱數',
     remarkKey:'remark',
     getData: () => completedLog,
     toApi: (obj) => toChinese(LOG_MAP, obj)
@@ -1157,6 +1175,8 @@ const VIEW_CONFIG = {
     fieldTypes:{'機台':{type:'select', options:MACHINE_OPTS}, '異常類型':{type:'select', options:AB_TYPE_OPTS}, '異常次數':{type:'select', options:SCAN_COUNT_OPTS}, '發生日期':{type:'date'}},
     dateKey:'紀錄時間',
     groupDateKey:'發生日期',
+    statKey:'異常次數',
+    statLabel:'總異常次數',
     getData: () => abnormalLog,
     toApi: (obj) => obj
   },
@@ -1168,6 +1188,8 @@ const VIEW_CONFIG = {
     fieldTypes:{'機台':{type:'select', options:MACHINE_OPTS}, '異常次數':{type:'select', options:SCAN_COUNT_OPTS}, 'Scan位置':{type:'select', options:SCAN_POS_OPTS}, '發生日期':{type:'date'}},
     dateKey:'紀錄時間',
     groupDateKey:'發生日期',
+    statKey:'異常次數',
+    statLabel:'總異常次數',
     getData: () => scanLog,
     toApi: (obj) => obj
   },
@@ -1179,6 +1201,8 @@ const VIEW_CONFIG = {
     fieldTypes:{'機台':{type:'select', options:MACHINE_OPTS}, '日期':{type:'date'}, '開始時間':{type:'datetime'}, '結束時間':{type:'datetime'}},
     dateKey:'紀錄時間',
     groupDateKey:'日期',
+    statKey:'今日完成箱數',
+    statLabel:'總完成箱數',
     getData: () => dailyLog,
     toApi: (obj) => obj
   }
@@ -1188,6 +1212,7 @@ let currentViewRows = [];
 let editingIdx = null;
 let currentDateFilter = null; // null = 全部
 let remarkFilterOn = false;
+let currentMachineFilter = null; // null = 全部機台
 
 function recordDateStr(cfg, r){
   const v = r[cfg.groupDateKey || cfg.dateKey];
@@ -1262,11 +1287,12 @@ function displayValue(view, r, k){
 function renderViewer(view, highlightLast, keepDateFilter){
   currentLogView = view;
   editingIdx = null;
-  if(!keepDateFilter){ currentDateFilter = null; remarkFilterOn = false; }
+  if(!keepDateFilter){ currentDateFilter = null; remarkFilterOn = false; currentMachineFilter = null; }
   const cfg = VIEW_CONFIG[view];
   document.getElementById('viewer-title').textContent = cfg.title;
   const allData = cfg.getData();
   const body = document.getElementById('viewer-body');
+  const machineKey = cfg.keys.indexOf('machine') !== -1 ? 'machine' : '機台';
 
   // 依日期分組，最新的日期排在最前面
   const dateSet = {};
@@ -1290,6 +1316,15 @@ function renderViewer(view, highlightLast, keepDateFilter){
     tabsWrap.style.display = 'none';
   }
 
+  // 機台篩選：只看某一台機台當天的資料
+  const machineWrap = document.getElementById('viewer-machine-tabs');
+  const machineAllBtn = `<button class="date-tab${currentMachineFilter===null?' active':''}" data-machine="">全部機台</button>`;
+  const machineBtns = MACHINE_OPTS.map(mk =>
+    `<button class="date-tab${currentMachineFilter===mk?' active':''}" data-machine="${mk}">${mk}</button>`
+  ).join('');
+  machineWrap.innerHTML = machineAllBtn + machineBtns;
+  machineWrap.style.display = '';
+
   const remarkWrap = document.getElementById('viewer-remark-filter');
   if(cfg.remarkKey){
     const remarkCount = allData.filter(r => r[cfg.remarkKey]).length;
@@ -1308,7 +1343,21 @@ function renderViewer(view, highlightLast, keepDateFilter){
   if(cfg.remarkKey && remarkFilterOn){
     filtered = filtered.filter(r => r[cfg.remarkKey]);
   }
+  if(currentMachineFilter){
+    filtered = filtered.filter(r => r[machineKey] === currentMachineFilter);
+  }
   currentViewRows = filtered.slice().reverse();
+
+  // 統計列：純畫面顯示用，跟匯出的 CSV 完全無關
+  const statsWrap = document.getElementById('viewer-stats');
+  if(cfg.statKey && filtered.length){
+    const total = filtered.reduce((sum, r) => sum + (parseFloat(r[cfg.statKey]) || 0), 0);
+    statsWrap.innerHTML = `<span class="stats-muted">僅畫面統計・不會匯出</span><span>筆數 <b>${filtered.length}</b></span><span>${cfg.statLabel} <b class="stats-accent">${total}</b></span>`;
+    statsWrap.classList.add('show');
+  } else {
+    statsWrap.innerHTML = '';
+    statsWrap.classList.remove('show');
+  }
 
   if(!currentViewRows.length){
     body.innerHTML = '<div class="viewer-empty">目前還沒有資料</div>';
@@ -1402,6 +1451,13 @@ document.getElementById('viewer-date-tabs').addEventListener('click', (e) => {
   renderViewer(currentLogView, false, true);
 });
 
+document.getElementById('viewer-machine-tabs').addEventListener('click', (e) => {
+  const btn = e.target.closest('.date-tab');
+  if(!btn) return;
+  currentMachineFilter = btn.dataset.machine || null;
+  renderViewer(currentLogView, false, true);
+});
+
 function closeViewer(){
   currentLogView = null;
   document.getElementById('viewer-panel').classList.remove('open');
@@ -1423,6 +1479,7 @@ document.addEventListener('click', (e) => {
 
 // ---------- 版本紀錄 ----------
 const VERSION_LOG = [
+  {v:'v7.5', d:'查看紀錄新增機台篩選（跟日期篩選一起用），並加入統計列顯示篩選結果的總筆數與總數量，統計列只在畫面上顯示，不會出現在匯出的 CSV 裡'},
   {v:'v7.4', d:'匯出紀錄新增日期篩選，可選擇匯出全部或指定某一天的資料，判斷依據跟畫面上的日期分頁一致（機台產能記錄用開始時間、異常記錄用發生日期、每日進度記錄用日期）'},
   {v:'v7.3', d:'新增資料警語提醒，放在頁面頂端：說明時間為概略時間、箱數已扣除刷一貼一作業，避免與後台數據核對時對不起來'},
   {v:'v7.2', d:'修正查看紀錄選了日期分頁後，每 15 秒自動同步會把篩選重置回「全部」的問題，現在會維持你選的日期不跳動'},
