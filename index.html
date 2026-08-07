@@ -419,7 +419,7 @@
 
 <div class="wrap">
   <div class="topbar">
-    <h1>產線即時監看板 <button class="version-badge" id="version-badge">v8.1</button></h1>
+    <h1>產線即時監看板 <button class="version-badge" id="version-badge">v8.2</button></h1>
     <div class="topbar-right">
       <div class="menu-wrap">
         <button class="export-btn" id="records-btn">查看紀錄 ▾</button>
@@ -566,7 +566,7 @@ MACHINES.forEach(m => {
   state[m.key] = {
     customer:'',
     totalBoxes:'', currentBox:'',
-    startTime:'', actualEnd:'', remark:''
+    startTime:'', actualEnd:'', remark:'', jobId:''
   };
 });
 
@@ -574,12 +574,28 @@ let completedLog = [];
 let abnormalLog = [];
 let scanLog = [];
 
-// 找出同一張訂單（機台+客戶+總箱數 相同視為同一張）在機台產能記錄裡最近一筆的累計箱數，
+// 每張訂單第一次記錄進度時，自動產生一組獨一無二的隱形序號跟著這張訂單，
+// 避免「機台+客戶+總箱數」剛好跟另一張訂單重複時，把兩張不同的訂單誤判成同一張。
+function ensureJobId(machineKey){
+  if(!state[machineKey].jobId){
+    state[machineKey].jobId = machineKey + '-' + Date.now().toString(36) + Math.random().toString(36).slice(2,6);
+  }
+  return state[machineKey].jobId;
+}
+
+// 找出同一張訂單在機台產能記錄裡最近一筆的累計箱數，
 // 用來算出「今天／這一段實際多做了幾箱」，不用自己心算。
-function computeDailyDelta(machine, customer, totalBoxes, currentBox){
-  const matches = completedLog.filter(r =>
-    r.machine === machine && r.customer === customer && String(r.totalBoxes) === String(totalBoxes)
-  );
+// 優先用訂單序號精準比對；找不到序號（例如舊資料）才退回用機台+客戶+總箱數比對。
+function computeDailyDelta(machine, customer, totalBoxes, currentBox, jobId){
+  let matches = [];
+  if(jobId){
+    matches = completedLog.filter(r => r.jobId === jobId);
+  }
+  if(!matches.length){
+    matches = completedLog.filter(r =>
+      r.machine === machine && r.customer === customer && String(r.totalBoxes) === String(totalBoxes)
+    );
+  }
   if(!matches.length) return currentBox;
   const last = matches[matches.length - 1];
   const prevCum = parseFloat(last.currentBox) || 0;
@@ -781,7 +797,7 @@ function render(){
 
     card.querySelector('[data-clear]').addEventListener('click', () => {
       if(confirm(`確定要清空 ${m.key} 的資料嗎？`)){
-        state[m.key] = { customer:'', totalBoxes:'', currentBox:'', startTime:'', actualEnd:'', remark:'' };
+        state[m.key] = { customer:'', totalBoxes:'', currentBox:'', startTime:'', actualEnd:'', remark:'', jobId:'' };
         saveState(m.key);
         render();
       }
@@ -795,10 +811,11 @@ function render(){
       }
       const endHasTime = parseComposite(dd.actualEnd).time;
       const finishTime = endHasTime ? dd.actualEnd : nowComposite();
-      const dayBoxes = computeDailyDelta(m.key, dd.customer, dd.totalBoxes, parseFloat(dd.currentBox) || 0);
+      const jobId = ensureJobId(m.key);
+      const dayBoxes = computeDailyDelta(m.key, dd.customer, dd.totalBoxes, parseFloat(dd.currentBox) || 0, jobId);
       const record = {
         machine:m.key, customer:dd.customer, totalBoxes:dd.totalBoxes, currentBox:dd.currentBox,
-        dayBoxes, startTime:dd.startTime, actualEnd:finishTime, remark:dd.remark, pct:computePct(m.key)
+        dayBoxes, startTime:dd.startTime, actualEnd:finishTime, remark:dd.remark, pct:computePct(m.key), jobId
       };
 
       try{
@@ -808,7 +825,7 @@ function render(){
         return;
       }
 
-      state[m.key] = { customer:'', totalBoxes:'', currentBox:'', startTime:'', actualEnd:'', remark:'' };
+      state[m.key] = { customer:'', totalBoxes:'', currentBox:'', startTime:'', actualEnd:'', remark:'', jobId:'' };
       await saveState(m.key);
       const syncHint = document.getElementById('save-hint').textContent;
       if(syncHint.indexOf('失敗') !== -1){
@@ -829,14 +846,15 @@ function render(){
       const cur = parseFloat(dd.currentBox) || 0;
       const endHasTime = parseComposite(dd.actualEnd).time;
       const finishTime = endHasTime ? dd.actualEnd : nowComposite();
-      const dayBoxes = computeDailyDelta(m.key, dd.customer, dd.totalBoxes, cur);
+      const jobId = ensureJobId(m.key);
+      const dayBoxes = computeDailyDelta(m.key, dd.customer, dd.totalBoxes, cur, jobId);
       const record = {
         machine:m.key, customer:dd.customer, totalBoxes:dd.totalBoxes, currentBox:cur,
-        dayBoxes, startTime:dd.startTime, actualEnd:finishTime, remark:dd.remark, pct:computePct(m.key)
+        dayBoxes, startTime:dd.startTime, actualEnd:finishTime, remark:dd.remark, pct:computePct(m.key), jobId
       };
       try{
         await saveLog(record);
-        // 這張訂單還沒做完，只清開始／結束時間，客戶、箱數都留著，方便明天接續。
+        // 這張訂單還沒做完，只清開始／結束時間，客戶、箱數、訂單序號都留著，方便明天接續。
         state[m.key].startTime = '';
         state[m.key].actualEnd = '';
         await saveState(m.key);
@@ -917,11 +935,11 @@ async function apiPost(payload){
 // 網頁內部用英文欄位名稱，試算表用中文標題列 -> 這裡做雙向轉換，避免對不上
 const STATE_MAP = {
   customer:'客戶名稱', totalBoxes:'總箱數', currentBox:'目前第幾箱',
-  startTime:'開始作業時間', actualEnd:'實際結束時間', remark:'備註'
+  startTime:'開始作業時間', actualEnd:'實際結束時間', remark:'備註', jobId:'任務序號'
 };
 const LOG_MAP = {
   machine:'機台', customer:'客戶名稱', totalBoxes:'總箱數', currentBox:'完成箱數', dayBoxes:'當日箱數',
-  startTime:'開始作業時間', actualEnd:'實際結束時間', remark:'備註', pct:'完成率', loggedAt:'紀錄時間'
+  startTime:'開始作業時間', actualEnd:'實際結束時間', remark:'備註', pct:'完成率', loggedAt:'紀錄時間', jobId:'任務序號'
 };
 
 function toChinese(map, obj){
@@ -1424,6 +1442,7 @@ document.addEventListener('click', (e) => {
 
 // ---------- 版本紀錄 ----------
 const VERSION_LOG = [
+  {v:'v8.2', d:'修正機台+客戶名稱+總箱數剛好跟另一張訂單重複時，當日箱數被誤判算錯的問題：每張訂單第一次記錄進度時，系統會自動產生隱形的訂單序號精準比對，不用手動操作'},
   {v:'v8.1', d:'「記錄今日進度」改為只需要填客戶名稱即可按（不用先填總箱數），適合總箱數要等全部做完才會知道的訂單；「確定完成並加入紀錄」維持一定要填總箱數才能按'},
   {v:'v8.0', d:'取消獨立的「每日進度記錄」，統一併入「機台產能記錄」：不管做到一半還是全部做完，「記錄今日進度」跟「確定完成並加入紀錄」都會直接寫入機台產能記錄，完成率會照實際進度顯示，不用切頁面就能瀏覽整天各機台的箱數'},
   {v:'v7.6', d:'「記錄今日進度」如果清空開始/結束時間這一步同步失敗，現在會跳出明確提醒（進度紀錄本身一定有存成功，不受影響）'},
