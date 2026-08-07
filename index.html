@@ -419,7 +419,7 @@
 
 <div class="wrap">
   <div class="topbar">
-    <h1>產線即時監看板 <button class="version-badge" id="version-badge">v8.0</button></h1>
+    <h1>產線即時監看板 <button class="version-badge" id="version-badge">v8.1</button></h1>
     <div class="topbar-right">
       <div class="menu-wrap">
         <button class="export-btn" id="records-btn">查看紀錄 ▾</button>
@@ -821,8 +821,8 @@ function render(){
 
     card.querySelector('[data-daily]').addEventListener('click', async () => {
       const dd = state[m.key];
-      if(!dd.customer || !dd.totalBoxes){
-        alert('請先填寫客戶名稱與總箱數，再記錄今日進度。');
+      if(!dd.customer){
+        alert('請先填寫客戶名稱，再記錄今日進度。');
         return;
       }
       if(!API_URL){ alert('尚未設定 API 網址，請先點右上角「設定 API 網址」。'); return; }
@@ -1424,6 +1424,7 @@ document.addEventListener('click', (e) => {
 
 // ---------- 版本紀錄 ----------
 const VERSION_LOG = [
+  {v:'v8.1', d:'「記錄今日進度」改為只需要填客戶名稱即可按（不用先填總箱數），適合總箱數要等全部做完才會知道的訂單；「確定完成並加入紀錄」維持一定要填總箱數才能按'},
   {v:'v8.0', d:'取消獨立的「每日進度記錄」，統一併入「機台產能記錄」：不管做到一半還是全部做完，「記錄今日進度」跟「確定完成並加入紀錄」都會直接寫入機台產能記錄，完成率會照實際進度顯示，不用切頁面就能瀏覽整天各機台的箱數'},
   {v:'v7.6', d:'「記錄今日進度」如果清空開始/結束時間這一步同步失敗，現在會跳出明確提醒（進度紀錄本身一定有存成功，不受影響）'},
   {v:'v7.5', d:'查看紀錄新增機台篩選（跟日期篩選一起用），並加入統計列顯示篩選結果的總筆數與總數量，統計列只在畫面上顯示，不會出現在匯出的 CSV 裡'},
