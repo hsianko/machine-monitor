@@ -419,7 +419,7 @@
 
 <div class="wrap">
   <div class="topbar">
-    <h1>產線即時監看板 <button class="version-badge" id="version-badge">v7.6</button></h1>
+    <h1>產線即時監看板 <button class="version-badge" id="version-badge">v8.0</button></h1>
     <div class="topbar-right">
       <div class="menu-wrap">
         <button class="export-btn" id="records-btn">查看紀錄 ▾</button>
@@ -427,7 +427,6 @@
           <button data-view="log">機台產能記錄</button>
           <button data-view="abnormal">機台異常記錄</button>
           <button data-view="scan">機台掃碼異常記錄</button>
-          <button data-view="daily">每日進度紀錄</button>
         </div>
       </div>
       <button class="export-btn" id="settings-btn">設定 API 網址</button>
@@ -574,23 +573,19 @@ MACHINES.forEach(m => {
 let completedLog = [];
 let abnormalLog = [];
 let scanLog = [];
-let dailyLog = [];
 
-// 找出同一張訂單（機台+客戶+總箱數 相同視為同一張）最近一次「記錄今日進度」的累計箱數，
-// 用來算出「今天實際多做了幾箱」，不用自己心算。
+// 找出同一張訂單（機台+客戶+總箱數 相同視為同一張）在機台產能記錄裡最近一筆的累計箱數，
+// 用來算出「今天／這一段實際多做了幾箱」，不用自己心算。
 function computeDailyDelta(machine, customer, totalBoxes, currentBox){
-  const matches = dailyLog.filter(r =>
-    r['機台'] === machine && r['客戶名稱'] === customer && String(r['總箱數']) === String(totalBoxes)
+  const matches = completedLog.filter(r =>
+    r.machine === machine && r.customer === customer && String(r.totalBoxes) === String(totalBoxes)
   );
   if(!matches.length) return currentBox;
   const last = matches[matches.length - 1];
-  const prevCum = parseFloat(last['累計箱數']) || 0;
+  const prevCum = parseFloat(last.currentBox) || 0;
   return Math.max(0, currentBox - prevCum);
 }
 
-// 訂單全部完成時，「開始時間」要呈現「整張訂單真正開始」的那一刻，
-// 不是只有最後一天這一段的開始時間。所以去每日進度紀錄裡找同一張訂單最早一筆有填開始時間的紀錄。
-// 如果完全沒有每日進度紀錄（單日就做完的訂單），就用卡片上目前的開始時間。
 let currentLogView = null;
 
 function fmtClock(){
@@ -800,36 +795,14 @@ function render(){
       }
       const endHasTime = parseComposite(dd.actualEnd).time;
       const finishTime = endHasTime ? dd.actualEnd : nowComposite();
-      const total = parseFloat(dd.totalBoxes) || 0;
-
-      // 把這張訂單先前每一天的進度，各自變成一筆機台產能記錄，
-      // 這樣機台產能記錄本身就能直接看到每天分別做了多少箱、花了多久，不用切去別的頁面看。
-      const priorDaily = dailyLog.filter(r =>
-        r['機台'] === m.key && r['客戶名稱'] === dd.customer && String(r['總箱數']) === String(dd.totalBoxes)
-      );
+      const dayBoxes = computeDailyDelta(m.key, dd.customer, dd.totalBoxes, parseFloat(dd.currentBox) || 0);
+      const record = {
+        machine:m.key, customer:dd.customer, totalBoxes:dd.totalBoxes, currentBox:dd.currentBox,
+        dayBoxes, startTime:dd.startTime, actualEnd:finishTime, remark:dd.remark, pct:computePct(m.key)
+      };
 
       try{
-        const records = priorDaily.map(dRec => {
-          const cum = parseFloat(dRec['累計箱數']) || 0;
-          const dayPct = total > 0 ? Math.max(0, Math.min(100, Math.round((cum/total)*100))) : '';
-          return {
-            machine:m.key, customer:dd.customer, totalBoxes:dd.totalBoxes, currentBox:cum,
-            dayBoxes: dRec['今日完成箱數'] !== undefined ? dRec['今日完成箱數'] : cum,
-            startTime:dRec['開始時間']||'', actualEnd:dRec['結束時間']||'', remark:dRec['備註']||'', pct:dayPct
-          };
-        });
-        // 今天最後完成的這一段
-        const todayDayBoxes = computeDailyDelta(m.key, dd.customer, dd.totalBoxes, parseFloat(dd.currentBox) || 0);
-        records.push({
-          machine:m.key, customer:dd.customer, totalBoxes:dd.totalBoxes, currentBox:dd.currentBox,
-          dayBoxes: todayDayBoxes,
-          startTime:dd.startTime, actualEnd:finishTime, remark:dd.remark, pct:computePct(m.key)
-        });
-        // 不管幾天的資料，一次打包送出去，減少手機上多次來回網路請求造成的延遲。
-        await apiPost({action:'appendLogBatch', data: records.map(rec => toChinese(LOG_MAP, rec))});
-        if(priorDaily.length){
-          await apiPost({action:'deleteDailyForJob', machine:m.key, customer:dd.customer, totalBoxes:dd.totalBoxes});
-        }
+        await saveLog(record);
       }catch(err){
         alert('建立完成紀錄失敗：' + err);
         return;
@@ -854,30 +827,25 @@ function render(){
       }
       if(!API_URL){ alert('尚未設定 API 網址，請先點右上角「設定 API 網址」。'); return; }
       const cur = parseFloat(dd.currentBox) || 0;
-      const delta = computeDailyDelta(m.key, dd.customer, dd.totalBoxes, cur);
-      const now = new Date();
+      const endHasTime = parseComposite(dd.actualEnd).time;
+      const finishTime = endHasTime ? dd.actualEnd : nowComposite();
+      const dayBoxes = computeDailyDelta(m.key, dd.customer, dd.totalBoxes, cur);
       const record = {
-        '日期': `${now.getMonth()+1}/${now.getDate()}`,
-        '機台': m.key,
-        '客戶名稱': dd.customer,
-        '今日完成箱數': delta,
-        '累計箱數': cur,
-        '總箱數': dd.totalBoxes,
-        '開始時間': dd.startTime,
-        '結束時間': dd.actualEnd,
-        '完成率(%)': computePct(m.key)
+        machine:m.key, customer:dd.customer, totalBoxes:dd.totalBoxes, currentBox:cur,
+        dayBoxes, startTime:dd.startTime, actualEnd:finishTime, remark:dd.remark, pct:computePct(m.key)
       };
       try{
-        await apiPost({action:'appendDaily', data: record});
+        await saveLog(record);
+        // 這張訂單還沒做完，只清開始／結束時間，客戶、箱數都留著，方便明天接續。
         state[m.key].startTime = '';
         state[m.key].actualEnd = '';
         await saveState(m.key);
         const syncHint = document.getElementById('save-hint').textContent;
         if(syncHint.indexOf('失敗') !== -1){
-          alert(`提醒：${m.key} 的今日進度已經確實存進紀錄了，但清空開始/結束時間這一步同步失敗（可能是網路瞬間不穩）。畫面可能還會顯示舊時間，麻煩重新整理一次，如果還是沒清空，手動把開始/結束時間改回空白即可，不會影響已經存好的進度紀錄。`);
+          alert(`提醒：${m.key} 的今日進度已經確實存進機台產能記錄了，但清空開始/結束時間這一步同步失敗（可能是網路瞬間不穩）。畫面可能還會顯示舊時間，麻煩重新整理一次，如果還是沒清空，手動把開始/結束時間改回空白即可，不會影響已經存好的進度紀錄。`);
         }
         await loadState();
-        renderViewer('daily', true);
+        renderViewer('log', true);
         render();
       }catch(err){
         alert('記錄今日進度失敗：' + err);
@@ -1018,7 +986,6 @@ async function loadState(){
     if(json.log){ completedLog = json.log.map(r => fromChinese(LOG_MAP, r)); }
     if(json.abnormal){ abnormalLog = json.abnormal; }
     if(json.scan){ scanLog = json.scan; }
-    if(json.daily){ dailyLog = json.daily; }
     if(currentLogView){ renderViewer(currentLogView, false, true); }
     const beTag = json.backendVersion ? (' · 後端 ' + json.backendVersion) : ' · 後端版本未知（請確認 Apps Script 是否為最新版）';
     hint.textContent = '已同步至試算表 · ' + fmtClock() + beTag;
@@ -1040,11 +1007,10 @@ function exportCsv(){
   const filterDate = (monthV && dayV) ? `${monthV.padStart(2,'0')}-${dayV.padStart(2,'0')}` : null;
 
   const fLog = filterDate ? completedLog.filter(r => recordDateStr(VIEW_CONFIG.log, r) === filterDate) : completedLog;
-  const fDaily = filterDate ? dailyLog.filter(r => recordDateStr(VIEW_CONFIG.daily, r) === filterDate) : dailyLog;
   const fAbnormal = filterDate ? abnormalLog.filter(r => recordDateStr(VIEW_CONFIG.abnormal, r) === filterDate) : abnormalLog;
   const fScan = filterDate ? scanLog.filter(r => recordDateStr(VIEW_CONFIG.scan, r) === filterDate) : scanLog;
 
-  if(!fLog.length && !fDaily.length && !fAbnormal.length && !fScan.length){
+  if(!fLog.length && !fAbnormal.length && !fScan.length){
     alert(filterDate ? `${monthV}/${dayV} 沒有任何紀錄可以匯出。` : '目前還沒有任何紀錄可以匯出。');
     return;
   }
@@ -1056,17 +1022,6 @@ function exportCsv(){
     csv += headers1.map(csvEscape).join(',') + '\r\n';
     fLog.forEach(r => {
       const row = [r.machine, r.customer, r.totalBoxes, r.currentBox, r.dayBoxes, cleanDisplayTime(r.startTime), cleanDisplayTime(r.actualEnd), r.remark, displayValue('log', r, 'pct')];
-      csv += row.map(csvEscape).join(',') + '\r\n';
-    });
-    csv += '\r\n';
-  }
-
-  if(fDaily.length){
-    csv += '每日進度記錄\r\n';
-    const headers2 = ['日期','機台','客戶名稱','今日完成箱數','累計箱數','總箱數','開始時間','結束時間','完成率(%)'];
-    csv += headers2.map(csvEscape).join(',') + '\r\n';
-    fDaily.forEach(r => {
-      const row = headers2.map(h => cleanDisplayTime(r[h]));
       csv += row.map(csvEscape).join(',') + '\r\n';
     });
     csv += '\r\n';
@@ -1124,8 +1079,7 @@ async function purgeOldRecords(){
   const n1 = countOld(completedLog, VIEW_CONFIG.log);
   const n2 = countOld(abnormalLog, VIEW_CONFIG.abnormal);
   const n3 = countOld(scanLog, VIEW_CONFIG.scan);
-  const n4 = countOld(dailyLog, VIEW_CONFIG.daily);
-  const total = n1 + n2 + n3 + n4;
+  const total = n1 + n2 + n3;
 
   if(total === 0){
     alert('目前沒有超過兩週的舊紀錄可以清除。');
@@ -1133,7 +1087,7 @@ async function purgeOldRecords(){
   }
 
   const msg = `即將清除 ${cutoffDate.getMonth()+1}/${cutoffDate.getDate()} 之前建立的紀錄，共 ${total} 筆：\n`
-    + `機台產能記錄 ${n1} 筆\n機台異常記錄 ${n2} 筆\n機台掃碼異常記錄 ${n3} 筆\n每日進度紀錄 ${n4} 筆\n\n此動作無法復原，確定要清除嗎？`;
+    + `機台產能記錄 ${n1} 筆\n機台異常記錄 ${n2} 筆\n機台掃碼異常記錄 ${n3} 筆\n\n此動作無法復原，確定要清除嗎？`;
   if(!confirm(msg)) return;
 
   if(!API_URL){ alert('尚未設定 API 網址。'); return; }
@@ -1195,19 +1149,6 @@ const VIEW_CONFIG = {
     statKey:'異常次數',
     statLabel:'總異常次數',
     getData: () => scanLog,
-    toApi: (obj) => obj
-  },
-  daily: {
-    title:'每日進度紀錄',
-    sheet:'DailyProgress',
-    headers:['日期','機台','客戶名稱','今日完成箱數','累計箱數','總箱數','開始時間','結束時間','完成率(%)'],
-    keys:['日期','機台','客戶名稱','今日完成箱數','累計箱數','總箱數','開始時間','結束時間','完成率(%)'],
-    fieldTypes:{'機台':{type:'select', options:MACHINE_OPTS}, '日期':{type:'date'}, '開始時間':{type:'datetime'}, '結束時間':{type:'datetime'}},
-    dateKey:'紀錄時間',
-    groupDateKey:'日期',
-    statKey:'今日完成箱數',
-    statLabel:'總完成箱數',
-    getData: () => dailyLog,
     toApi: (obj) => obj
   }
 };
@@ -1483,6 +1424,7 @@ document.addEventListener('click', (e) => {
 
 // ---------- 版本紀錄 ----------
 const VERSION_LOG = [
+  {v:'v8.0', d:'取消獨立的「每日進度記錄」，統一併入「機台產能記錄」：不管做到一半還是全部做完，「記錄今日進度」跟「確定完成並加入紀錄」都會直接寫入機台產能記錄，完成率會照實際進度顯示，不用切頁面就能瀏覽整天各機台的箱數'},
   {v:'v7.6', d:'「記錄今日進度」如果清空開始/結束時間這一步同步失敗，現在會跳出明確提醒（進度紀錄本身一定有存成功，不受影響）'},
   {v:'v7.5', d:'查看紀錄新增機台篩選（跟日期篩選一起用），並加入統計列顯示篩選結果的總筆數與總數量，統計列只在畫面上顯示，不會出現在匯出的 CSV 裡'},
   {v:'v7.4', d:'匯出紀錄新增日期篩選，可選擇匯出全部或指定某一天的資料，判斷依據跟畫面上的日期分頁一致（機台產能記錄用開始時間、異常記錄用發生日期、每日進度記錄用日期）'},
