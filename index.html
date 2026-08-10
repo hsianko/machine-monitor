@@ -419,7 +419,7 @@
 
 <div class="wrap">
   <div class="topbar">
-    <h1>產線即時監看板 <button class="version-badge" id="version-badge">v8.3</button></h1>
+    <h1>產線即時監看板 <button class="version-badge" id="version-badge">v8.4</button></h1>
     <div class="topbar-right">
       <div class="menu-wrap">
         <button class="export-btn" id="records-btn">查看紀錄 ▾</button>
@@ -1021,6 +1021,13 @@ function csvEscape(v){
 function exportCsv(){
   const monthV = document.getElementById('export-month').value;
   const dayV = document.getElementById('export-day').value;
+
+  // 只選了「月」或只選了「日」其中一個，不會套用日期篩選，容易誤以為篩選有生效，先跟使用者確認一次。
+  if((monthV && !dayV) || (!monthV && dayV)){
+    const proceed = confirm('你只選了「月」或「日」其中一個，這樣不會套用日期篩選，會匯出全部紀錄。\n\n要繼續匯出全部紀錄嗎？\n如果要匯出指定日期，請按「取消」，把月和日都選好後再重新匯出。');
+    if(!proceed) return;
+  }
+
   const filterDate = (monthV && dayV) ? `${monthV.padStart(2,'0')}-${dayV.padStart(2,'0')}` : null;
 
   const fLog = filterDate ? completedLog.filter(r => recordDateStr(VIEW_CONFIG.log, r) === filterDate) : completedLog;
@@ -1441,6 +1448,7 @@ document.addEventListener('click', (e) => {
 
 // ---------- 版本紀錄 ----------
 const VERSION_LOG = [
+  {v:'v8.4', d:'匯出紀錄時，如果只選了「月」或只選了「日」其中一個（沒選完整日期），會先跳出提醒確認，避免誤以為篩選已生效、卻不小心匯出了全部資料'},
   {v:'v8.3', d:'徹底修正當日箱數誤判成 0 的問題：拿掉「機台+客戶+總箱數」的備用比對邏輯，改成完全只認訂單序號，新訂單第一筆記錄一律直接用目前箱數，不會再被剛好相同條件的歷史訂單誤判'},
   {v:'v8.2', d:'修正機台+客戶名稱+總箱數剛好跟另一張訂單重複時，當日箱數被誤判算錯的問題：每張訂單第一次記錄進度時，系統會自動產生隱形的訂單序號精準比對，不用手動操作'},
   {v:'v8.1', d:'「記錄今日進度」改為只需要填客戶名稱即可按（不用先填總箱數），適合總箱數要等全部做完才會知道的訂單；「確定完成並加入紀錄」維持一定要填總箱數才能按'},
