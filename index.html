@@ -460,7 +460,7 @@
 
 <div class="wrap">
   <div class="topbar">
-    <h1>產線即時監看板 <button class="version-badge" id="version-badge">v8.5</button></h1>
+    <h1>產線即時監看板 <button class="version-badge" id="version-badge">v8.6</button></h1>
     <div class="topbar-right">
       <div class="menu-wrap">
         <button class="export-btn" id="records-btn">查看紀錄 ▾</button>
@@ -891,7 +891,8 @@ function render(){
         alert('提醒：完成紀錄已經確實存進機台產能記錄了，但清空這張卡片時同步失敗（可能是網路瞬間不穩）。畫面可能還會顯示舊資料，麻煩重新整理一次，如果還是沒清空，再點一次「清空本機台資料」即可，不會影響已經存好的紀錄。');
       }
       await loadState();
-      renderViewer('log', true);
+      focusTodayInLog();
+      renderViewer('log', true, true);
       render();
     });
 
@@ -922,7 +923,8 @@ function render(){
           alert(`提醒：${m.key} 的今日進度已經確實存進機台產能記錄了，但清空開始/結束時間這一步同步失敗（可能是網路瞬間不穩）。畫面可能還會顯示舊時間，麻煩重新整理一次，如果還是沒清空，手動把開始/結束時間改回空白即可，不會影響已經存好的進度紀錄。`);
         }
         await loadState();
-        renderViewer('log', true);
+        focusTodayInLog();
+        renderViewer('log', true, true);
         render();
       }catch(err){
         alert('記錄今日進度失敗：' + err);
@@ -1199,7 +1201,15 @@ function findIncompleteJobs(){
     }
   });
   return Object.values(latestByJob)
-    .filter(r => r.status !== '已完成')
+    .filter(r => {
+      if(r.status === '已完成') return false;
+      // 保險：就算不小心用「記錄今日進度」按到最後一筆、狀態沒被標記完成，
+      // 只要箱數已經補滿總箱數，也視為完成，不繼續卡在未完成清單裡。
+      const total = parseFloat(r.totalBoxes);
+      const cur = parseFloat(r.currentBox);
+      if(total > 0 && cur >= total) return false;
+      return true;
+    })
     .sort((a,b) => String(b.loggedAt||'').localeCompare(String(a.loggedAt||'')));
 }
 
@@ -1322,6 +1332,16 @@ let editingIdx = null;
 let currentDateFilter = null; // null = 全部
 let remarkFilterOn = false;
 let currentMachineFilter = null; // null = 全部機台
+
+// 加入一筆新紀錄後，把「機台產能記錄」直接篩選到「今天」，
+// 不用還要自己再點一次日期分頁去找剛剛新增的那筆。
+function focusTodayInLog(){
+  const now = new Date();
+  const pad = n => String(n).padStart(2,'0');
+  currentDateFilter = `${pad(now.getMonth()+1)}-${pad(now.getDate())}`;
+  remarkFilterOn = false;
+  currentMachineFilter = null;
+}
 
 function recordDateStr(cfg, r){
   const v = r[cfg.groupDateKey || cfg.dateKey];
@@ -1588,6 +1608,7 @@ document.addEventListener('click', (e) => {
 
 // ---------- 版本紀錄 ----------
 const VERSION_LOG = [
+  {v:'v8.6', d:'未完成訂單清單加入保險：箱數已達總箱數時自動視為完成，不會因為誤按「記錄今日進度」而永久卡在清單裡；新增/完成紀錄後，機台產能記錄改為自動篩選到當天，不用再自己找剛新增的那筆'},
   {v:'v8.5', d:'總箱數還沒填、但已經有累計箱數時，卡片改用明顯的「已累計 X 箱（尚未確定總箱數）」提示取代原本容易誤會的「X / 0 箱」顯示，避免以為資料被清空'},
   {v:'v8.4', d:'匯出紀錄時，如果只選了「月」或只選了「日」其中一個（沒選完整日期），會先跳出提醒確認，避免誤以為篩選已生效、卻不小心匯出了全部資料'},
   {v:'v8.3', d:'徹底修正當日箱數誤判成 0 的問題：拿掉「機台+客戶+總箱數」的備用比對邏輯，改成完全只認訂單序號，新訂單第一筆記錄一律直接用目前箱數，不會再被剛好相同條件的歷史訂單誤判'},
