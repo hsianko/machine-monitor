@@ -148,6 +148,34 @@
     font-size:14px;
   }
   .version-modal-body .vdesc{color:var(--text-secondary); line-height:1.6;}
+  .pending-row{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:14px;
+    padding:12px 4px;
+    border-bottom:1px solid var(--border);
+    font-size:13px;
+  }
+  .pending-row:last-child{border-bottom:none;}
+  .pending-info .pmachine{font-weight:700; margin-right:8px;}
+  .pending-info .pmachine.大寶{color:var(--m-daibao);}
+  .pending-info .pmachine.二寶{color:var(--m-erbao);}
+  .pending-info .pmachine.三寶{color:var(--m-sanbao);}
+  .pending-info .pmachine.四寶{color:var(--m-sibao);}
+  .pending-info .pmeta{color:var(--text-muted); font-size:11.5px; margin-top:3px;}
+  .pending-resume-btn{
+    flex-shrink:0;
+    background:var(--bg-field);
+    border:1px solid var(--border-strong);
+    color:var(--text-primary);
+    font-family:var(--font-mono);
+    font-size:12px;
+    padding:7px 14px;
+    border-radius:6px;
+    cursor:pointer;
+  }
+  .pending-resume-btn:hover{border-color:var(--status-run); color:var(--status-run);}
   .topbar-right{display:flex; align-items:center; gap:10px; flex-wrap:wrap;}
   .topbar .clock{font-size:14px; color:var(--text-secondary); letter-spacing:0.5px;}
   .export-btn{
@@ -246,6 +274,19 @@
   .gauge-label .pct{color:var(--text-primary); font-weight:600;}
   .qty-warning{color:#d5654a; font-weight:700; font-size:11.5px; margin-top:6px;}
   .qty-overflow{color:#d5654a; font-weight:700;}
+  .qty-pending{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    flex-wrap:wrap;
+    gap:6px;
+    background:rgba(232,163,61,0.10);
+    border:1px solid rgba(232,163,61,0.35);
+    border-radius:8px;
+    padding:9px 12px;
+  }
+  .qty-pending-num{font-size:15px; font-weight:700; color:#e8a33d;}
+  .qty-pending-note{font-size:10.5px; color:var(--text-muted);}
   .gauge-track{
     position:relative; height:16px;
     background:repeating-linear-gradient(135deg, var(--bg-field), var(--bg-field) 6px, #262c34 6px, #262c34 12px);
@@ -419,7 +460,7 @@
 
 <div class="wrap">
   <div class="topbar">
-    <h1>產線即時監看板 <button class="version-badge" id="version-badge">v8.4</button></h1>
+    <h1>產線即時監看板 <button class="version-badge" id="version-badge">v8.5</button></h1>
     <div class="topbar-right">
       <div class="menu-wrap">
         <button class="export-btn" id="records-btn">查看紀錄 ▾</button>
@@ -436,6 +477,7 @@
       </div>
       <button class="export-btn" id="export-btn">匯出紀錄 (CSV)</button>
       <button class="export-btn" id="purge-btn">清除兩週前舊紀錄</button>
+      <button class="export-btn" id="pending-btn">未完成訂單</button>
       <div class="clock" id="clock">--:--:--</div>
     </div>
   </div>
@@ -544,6 +586,16 @@
       <button class="modal-close-x" id="version-close-x">✕</button>
     </div>
     <div class="version-modal-body" id="version-modal-body"></div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="pending-overlay">
+  <div class="version-modal">
+    <div class="version-modal-head">
+      <span class="vtitle">未完成訂單</span>
+      <button class="modal-close-x" id="pending-close-x">✕</button>
+    </div>
+    <div class="version-modal-body" id="pending-modal-body"></div>
   </div>
 </div>
 
@@ -699,6 +751,7 @@ function render(){
     const sp = parseComposite(d.startTime);
     const ep = parseComposite(d.actualEnd);
     const isOverflow = d.totalBoxes && d.currentBox && parseFloat(d.currentBox) > parseFloat(d.totalBoxes);
+    const pendingTotal = !d.totalBoxes && parseFloat(d.currentBox) > 0;
 
     const card = document.createElement('div');
     card.className = 'card';
@@ -726,6 +779,12 @@ function render(){
         </div>
       </div>
       <div class="gauge-wrap">
+        ${pendingTotal ? `
+        <div class="qty-pending">
+          <span class="qty-pending-num">已累計 ${d.currentBox} 箱</span>
+          <span class="qty-pending-note">尚未確定總箱數，做完最後一天再回頭補上</span>
+        </div>
+        ` : `
         <div class="gauge-label">
           <span class="${isOverflow ? 'qty-overflow' : ''}">${(d.currentBox||0)} / ${(d.totalBoxes||0)} 箱</span>
           <span class="pct">${pct}%</span>
@@ -734,6 +793,7 @@ function render(){
           <div class="gauge-fill" style="width:${pct}%"></div>
           <div class="gauge-crate" style="left:${pct}%">▣</div>
         </div>
+        `}
         ${isOverflow ? '<div class="qty-warning">⚠ 目前箱數已超過總箱數，請確認並修正！</div>' : ''}
       </div>
       <div class="times">
@@ -814,7 +874,7 @@ function render(){
       const dayBoxes = computeDailyDelta(m.key, dd.customer, dd.totalBoxes, parseFloat(dd.currentBox) || 0, jobId);
       const record = {
         machine:m.key, customer:dd.customer, totalBoxes:dd.totalBoxes, currentBox:dd.currentBox,
-        dayBoxes, startTime:dd.startTime, actualEnd:finishTime, remark:dd.remark, pct:computePct(m.key), jobId
+        dayBoxes, startTime:dd.startTime, actualEnd:finishTime, remark:dd.remark, pct:computePct(m.key), jobId, status:'已完成'
       };
 
       try{
@@ -849,7 +909,7 @@ function render(){
       const dayBoxes = computeDailyDelta(m.key, dd.customer, dd.totalBoxes, cur, jobId);
       const record = {
         machine:m.key, customer:dd.customer, totalBoxes:dd.totalBoxes, currentBox:cur,
-        dayBoxes, startTime:dd.startTime, actualEnd:finishTime, remark:dd.remark, pct:computePct(m.key), jobId
+        dayBoxes, startTime:dd.startTime, actualEnd:finishTime, remark:dd.remark, pct:computePct(m.key), jobId, status:'進行中'
       };
       try{
         await saveLog(record);
@@ -938,7 +998,7 @@ const STATE_MAP = {
 };
 const LOG_MAP = {
   machine:'機台', customer:'客戶名稱', totalBoxes:'總箱數', currentBox:'完成箱數', dayBoxes:'當日箱數',
-  startTime:'開始作業時間', actualEnd:'實際結束時間', remark:'備註', pct:'完成率', loggedAt:'紀錄時間', jobId:'任務序號'
+  startTime:'開始作業時間', actualEnd:'實際結束時間', remark:'備註', pct:'完成率', loggedAt:'紀錄時間', jobId:'任務序號', status:'狀態'
 };
 
 function toChinese(map, obj){
@@ -1126,6 +1186,86 @@ async function purgeOldRecords(){
 }
 
 document.getElementById('purge-btn').addEventListener('click', purgeOldRecords);
+
+// ---------- 未完成訂單 ----------
+// 一張訂單只要「最新一筆」的狀態不是「已完成」，就代表還沒做完，需要接續。
+function findIncompleteJobs(){
+  const latestByJob = {};
+  completedLog.forEach(r => {
+    if(!r.jobId) return;
+    const existing = latestByJob[r.jobId];
+    if(!existing || String(r.loggedAt||'') > String(existing.loggedAt||'')){
+      latestByJob[r.jobId] = r;
+    }
+  });
+  return Object.values(latestByJob)
+    .filter(r => r.status !== '已完成')
+    .sort((a,b) => String(b.loggedAt||'').localeCompare(String(a.loggedAt||'')));
+}
+
+function renderPendingJobs(){
+  const body = document.getElementById('pending-modal-body');
+  const jobs = findIncompleteJobs();
+  if(!jobs.length){
+    body.innerHTML = '<div class="viewer-empty">目前沒有未完成的訂單。</div>';
+    return;
+  }
+  body.innerHTML = jobs.map(r => {
+    const totalText = r.totalBoxes ? `／總箱數 ${r.totalBoxes}` : '（總箱數尚未確定）';
+    return `
+      <div class="pending-row">
+        <div class="pending-info">
+          <div><span class="pmachine ${escapeHtml(r.machine)}">${escapeHtml(r.machine)}</span>${escapeHtml(r.customer)}</div>
+          <div class="pmeta">目前累計 ${escapeHtml(r.currentBox)} 箱${totalText}・最後更新 ${escapeHtml(cleanDisplayTime(r.loggedAt))}</div>
+        </div>
+        <button class="pending-resume-btn" data-resume-job="${escapeHtml(r.jobId)}">接續此訂單</button>
+      </div>`;
+  }).join('');
+}
+
+async function resumeJob(jobId){
+  const latestByJob = {};
+  completedLog.forEach(r => {
+    if(r.jobId === jobId){
+      if(!latestByJob[jobId] || String(r.loggedAt||'') > String(latestByJob[jobId].loggedAt||'')){
+        latestByJob[jobId] = r;
+      }
+    }
+  });
+  const r = latestByJob[jobId];
+  if(!r) return;
+  const machine = r.machine;
+  if(state[machine].customer && state[machine].jobId !== jobId){
+    const ok = confirm(`${machine} 卡片目前有其他資料（${state[machine].customer}），接續這張訂單會覆蓋掉。確定要繼續嗎？`);
+    if(!ok) return;
+  }
+  state[machine] = {
+    customer:r.customer, totalBoxes:r.totalBoxes||'', currentBox:r.currentBox||'',
+    startTime:'', actualEnd:'', remark:'', jobId:jobId
+  };
+  await saveState(machine);
+  closePendingModal();
+  await loadState();
+  render();
+}
+
+function openPendingModal(){
+  renderPendingJobs();
+  document.getElementById('pending-overlay').classList.add('open');
+}
+function closePendingModal(){
+  document.getElementById('pending-overlay').classList.remove('open');
+}
+document.getElementById('pending-btn').addEventListener('click', openPendingModal);
+document.getElementById('pending-close-x').addEventListener('click', closePendingModal);
+document.getElementById('pending-overlay').addEventListener('click', (e) => {
+  if(e.target.id === 'pending-overlay') closePendingModal();
+});
+document.getElementById('pending-modal-body').addEventListener('click', (e) => {
+  const btn = e.target.closest('[data-resume-job]');
+  if(!btn) return;
+  resumeJob(btn.dataset.resumeJob);
+});
 
 
 // ---------- 紀錄查看選單（可編輯／刪除） ----------
@@ -1448,6 +1588,7 @@ document.addEventListener('click', (e) => {
 
 // ---------- 版本紀錄 ----------
 const VERSION_LOG = [
+  {v:'v8.5', d:'總箱數還沒填、但已經有累計箱數時，卡片改用明顯的「已累計 X 箱（尚未確定總箱數）」提示取代原本容易誤會的「X / 0 箱」顯示，避免以為資料被清空'},
   {v:'v8.4', d:'匯出紀錄時，如果只選了「月」或只選了「日」其中一個（沒選完整日期），會先跳出提醒確認，避免誤以為篩選已生效、卻不小心匯出了全部資料'},
   {v:'v8.3', d:'徹底修正當日箱數誤判成 0 的問題：拿掉「機台+客戶+總箱數」的備用比對邏輯，改成完全只認訂單序號，新訂單第一筆記錄一律直接用目前箱數，不會再被剛好相同條件的歷史訂單誤判'},
   {v:'v8.2', d:'修正機台+客戶名稱+總箱數剛好跟另一張訂單重複時，當日箱數被誤判算錯的問題：每張訂單第一次記錄進度時，系統會自動產生隱形的訂單序號精準比對，不用手動操作'},
@@ -1518,7 +1659,7 @@ document.getElementById('version-overlay').addEventListener('click', (e) => {
   if(e.target.id === 'version-overlay') closeVersionModal();
 });
 document.addEventListener('keydown', (e) => {
-  if(e.key === 'Escape') closeVersionModal();
+  if(e.key === 'Escape'){ closeVersionModal(); closePendingModal(); }
 });
 
 document.getElementById('export-btn').addEventListener('click', exportCsv);
