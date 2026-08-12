@@ -467,7 +467,7 @@
 
 <div class="wrap">
   <div class="topbar">
-    <h1>產線即時監看板 <button class="version-badge" id="version-badge">v8.7</button></h1>
+    <h1>產線即時監看板 <button class="version-badge" id="version-badge">v8.8</button></h1>
     <div class="topbar-right">
       <div class="menu-wrap">
         <button class="export-btn" id="records-btn">查看紀錄 ▾</button>
@@ -538,6 +538,20 @@
       <div class="field">
         <label>料盤產地</label>
         <input type="text" id="ab-origin" placeholder="輸入料盤產地">
+      </div>
+      <div class="field" id="ab-reason-wrap" style="display:none;">
+        <label>原因</label>
+        <select id="ab-reason">
+          <option value="">請選擇</option>
+          <option value="落料歪斜">落料歪斜</option>
+          <option value="箱內就破">箱內就破</option>
+          <option value="載台推擠">載台推擠</option>
+          <option value="其他">其他（自行輸入）</option>
+        </select>
+      </div>
+      <div class="field" id="ab-reason-other-wrap" style="display:none;">
+        <label>其他原因</label>
+        <input type="text" id="ab-reason-other" placeholder="輸入原因">
       </div>
       <button class="log-submit" id="ab-submit">新增紀錄</button>
     </div>
@@ -1122,7 +1136,7 @@ function exportCsv(){
 
   if(fAbnormal.length){
     csv += '機台異常記錄\r\n';
-    const headers3 = ['發生日期','機台','異常類型','異常次數','料盤產地'];
+    const headers3 = ['發生日期','機台','異常類型','異常次數','料盤產地','原因'];
     csv += headers3.map(csvEscape).join(',') + '\r\n';
     fAbnormal.forEach(r => {
       const row = headers3.map(h => cleanDisplayTime(r[h]));
@@ -1309,8 +1323,8 @@ const VIEW_CONFIG = {
   abnormal: {
     title:'機台異常記錄',
     sheet:'MachineAbnormal',
-    headers:['發生日期','機台','異常類型','異常次數','料盤產地'],
-    keys:['發生日期','機台','異常類型','異常次數','料盤產地'],
+    headers:['發生日期','機台','異常類型','異常次數','料盤產地','原因'],
+    keys:['發生日期','機台','異常類型','異常次數','料盤產地','原因'],
     fieldTypes:{'機台':{type:'select', options:MACHINE_OPTS}, '異常類型':{type:'select', options:AB_TYPE_OPTS}, '異常次數':{type:'select', options:SCAN_COUNT_OPTS}, '發生日期':{type:'date'}},
     dateKey:'紀錄時間',
     groupDateKey:'發生日期',
@@ -1615,6 +1629,7 @@ document.addEventListener('click', (e) => {
 
 // ---------- 版本紀錄 ----------
 const VERSION_LOG = [
+  {v:'v8.8', d:'機台異常記錄：異常類型選「料盤毀損」時，新增「原因」欄位（可選常見原因或自行輸入其他原因），對齊 Excel 上新增的原因欄'},
   {v:'v8.7', d:'加入 PWA 設定（manifest.json + 專屬圖示），加到手機主畫面後圖示、名稱、開啟畫面會更接近正式 App，不影響任何原本功能，不需要可以隨時拿掉'},
   {v:'v8.6', d:'未完成訂單清單加入保險：箱數已達總箱數時自動視為完成，不會因為誤按「記錄今日進度」而永久卡在清單裡；新增/完成紀錄後，機台產能記錄改為自動篩選到當天，不用再自己找剛新增的那筆'},
   {v:'v8.5', d:'總箱數還沒填、但已經有累計箱數時，卡片改用明顯的「已累計 X 箱（尚未確定總箱數）」提示取代原本容易誤會的「X / 0 箱」顯示，避免以為資料被清空'},
@@ -1719,6 +1734,21 @@ document.getElementById('sc-day').innerHTML = dayOptionsHtml('');
   document.getElementById('ab-count').innerHTML = out;
 })();
 
+// 異常類型選「料盤毀損」時才顯示「原因」欄位；選「其他」再顯示自行輸入框。
+document.getElementById('ab-type').addEventListener('change', (e) => {
+  const isDamage = e.target.value === '料盤毀損';
+  document.getElementById('ab-reason-wrap').style.display = isDamage ? '' : 'none';
+  document.getElementById('ab-reason-other-wrap').style.display = 'none';
+  if(!isDamage){
+    document.getElementById('ab-reason').value = '';
+    document.getElementById('ab-reason-other').value = '';
+  }
+});
+document.getElementById('ab-reason').addEventListener('change', (e) => {
+  document.getElementById('ab-reason-other-wrap').style.display = e.target.value === '其他' ? '' : 'none';
+  if(e.target.value !== '其他'){ document.getElementById('ab-reason-other').value = ''; }
+});
+
 document.getElementById('ab-submit').addEventListener('click', async () => {
   const month = document.getElementById('ab-month').value;
   const day = document.getElementById('ab-day').value;
@@ -1726,6 +1756,9 @@ document.getElementById('ab-submit').addEventListener('click', async () => {
   const type = document.getElementById('ab-type').value;
   const count = document.getElementById('ab-count').value;
   const origin = document.getElementById('ab-origin').value.trim();
+  const reasonSel = document.getElementById('ab-reason').value;
+  const reasonOther = document.getElementById('ab-reason-other').value.trim();
+  const reason = type === '料盤毀損' ? (reasonSel === '其他' ? reasonOther : reasonSel) : '';
   const hint = document.getElementById('ab-hint');
   if(!month || !day || !machine || !type){
     hint.textContent = '請把發生日期、機台、異常類型都選完再送出。';
@@ -1738,7 +1771,8 @@ document.getElementById('ab-submit').addEventListener('click', async () => {
       '機台': machine,
       '異常類型': type,
       '異常次數': count,
-      '料盤產地': origin
+      '料盤產地': origin,
+      '原因': reason
     };
     await apiPost({action:'appendAbnormal', data: record});
     await loadState();
@@ -1749,6 +1783,10 @@ document.getElementById('ab-submit').addEventListener('click', async () => {
     document.getElementById('ab-type').value = '';
     document.getElementById('ab-count').value = '';
     document.getElementById('ab-origin').value = '';
+    document.getElementById('ab-reason').value = '';
+    document.getElementById('ab-reason-other').value = '';
+    document.getElementById('ab-reason-wrap').style.display = 'none';
+    document.getElementById('ab-reason-other-wrap').style.display = 'none';
     renderViewer('abnormal', true);
   }catch(err){
     hint.textContent = '新增失敗：' + err;
