@@ -467,7 +467,7 @@
 
 <div class="wrap">
   <div class="topbar">
-    <h1>產線即時監看板 <button class="version-badge" id="version-badge">v8.8</button></h1>
+    <h1>產線即時監看板 <button class="version-badge" id="version-badge">v8.9</button></h1>
     <div class="topbar-right">
       <div class="menu-wrap">
         <button class="export-btn" id="records-btn">查看紀錄 ▾</button>
@@ -1629,6 +1629,7 @@ document.addEventListener('click', (e) => {
 
 // ---------- 版本紀錄 ----------
 const VERSION_LOG = [
+  {v:'v8.9', d:'修正 iPhone 上滑動時間選單時，偶爾被自動同步誤判成「沒有人在操作」導致選單突然關閉的問題'},
   {v:'v8.8', d:'機台異常記錄：異常類型選「料盤毀損」時，新增「原因」欄位（可選常見原因或自行輸入其他原因），對齊 Excel 上新增的原因欄'},
   {v:'v8.7', d:'加入 PWA 設定（manifest.json + 專屬圖示），加到手機主畫面後圖示、名稱、開啟畫面會更接近正式 App，不影響任何原本功能，不需要可以隨時拿掉'},
   {v:'v8.6', d:'未完成訂單清單加入保險：箱數已達總箱數時自動視為完成，不會因為誤按「記錄今日進度」而永久卡在清單裡；新增/完成紀錄後，機台產能記錄改為自動篩選到當天，不用再自己找剛新增的那筆'},
@@ -1832,12 +1833,22 @@ document.getElementById('sc-submit').addEventListener('click', async () => {
   }
 });
 
+// 追蹤「最近有沒有人在操作表單」，不只看當下那一瞬間的焦點狀態——
+// 在 iPhone 上滑動下拉選單（時間選輪）的過程中，Safari 對焦點的判斷偶爾會有一瞬間的空檔，
+// 如果剛好被自動同步的檢查抓到那個空檔，就會誤判成「沒有人在操作」，把整個畫面重畫、選單被迫關掉。
+// 改成「最近幾秒內只要有任何互動，就先跳過這次同步」，避開這種瞬間空檔。
+let lastInteractionAt = 0;
+document.addEventListener('focusin', () => { lastInteractionAt = Date.now(); });
+document.addEventListener('touchstart', () => { lastInteractionAt = Date.now(); }, {passive:true});
+document.addEventListener('input', () => { lastInteractionAt = Date.now(); });
+
 tickClock();
 setInterval(tickClock, 1000);
 setInterval(() => {
   const active = document.activeElement;
   const isEditing = active && (active.tagName === 'INPUT' || active.tagName === 'SELECT');
-  if(!isEditing){ loadState(); }
+  const recentlyInteracted = Date.now() - lastInteractionAt < 4000;
+  if(!isEditing && !recentlyInteracted){ loadState(); }
 }, 15000);
 loadState();
 </script>
