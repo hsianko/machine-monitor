@@ -281,6 +281,31 @@
   .gauge-label .pct{color:var(--text-primary); font-weight:600;}
   .qty-warning{color:#d5654a; font-weight:700; font-size:11.5px; margin-top:6px;}
   .qty-overflow{color:#d5654a; font-weight:700;}
+  .resume-hint{
+    display:none;
+    align-items:center;
+    justify-content:space-between;
+    flex-wrap:wrap;
+    gap:8px;
+    background:rgba(76,175,109,0.10);
+    border:1px solid rgba(76,175,109,0.35);
+    border-radius:8px;
+    padding:8px 12px;
+    margin:-4px 0 8px;
+    font-size:11.5px;
+  }
+  .resume-hint.show{display:flex;}
+  .resume-hint .resume-hint-text{color:var(--status-run);}
+  .resume-hint button{
+    background:var(--bg-field);
+    border:1px solid var(--status-run);
+    color:var(--status-run);
+    font-family:var(--font-mono);
+    font-size:11px;
+    padding:5px 10px;
+    border-radius:6px;
+    cursor:pointer;
+  }
   .qty-pending{
     display:flex;
     align-items:center;
@@ -467,7 +492,7 @@
 
 <div class="wrap">
   <div class="topbar">
-    <h1>產線即時監看板 <button class="version-badge" id="version-badge">v8.9</button></h1>
+    <h1>產線即時監看板 <button class="version-badge" id="version-badge">v9.0</button></h1>
     <div class="topbar-right">
       <div class="menu-wrap">
         <button class="export-btn" id="records-btn">查看紀錄 ▾</button>
@@ -773,6 +798,9 @@ function render(){
     const ep = parseComposite(d.actualEnd);
     const isOverflow = d.totalBoxes && d.currentBox && parseFloat(d.currentBox) > parseFloat(d.totalBoxes);
     const pendingTotal = !d.totalBoxes && parseFloat(d.currentBox) > 0;
+    const incompleteMatch = (!d.jobId && d.customer)
+      ? findIncompleteJobs().find(r => r.machine === m.key && r.customer === d.customer)
+      : null;
 
     const card = document.createElement('div');
     card.className = 'card';
@@ -788,6 +816,12 @@ function render(){
           <label>客戶名稱</label>
           <input type="text" data-k="customer" placeholder="輸入客戶名稱" value="${escapeHtml(d.customer)}">
         </div>
+      </div>
+      <div class="resume-hint${incompleteMatch ? ' show' : ''}">
+        ${incompleteMatch ? `
+        <span class="resume-hint-text">⚠ 偵測到「${escapeHtml(d.customer)}」在本機台有未完成的訂單（累計 ${incompleteMatch.currentBox} 箱），要接續嗎？</span>
+        <button data-inline-resume="${escapeHtml(incompleteMatch.jobId)}">接續此訂單</button>
+        ` : ''}
       </div>
       <div class="field-row">
         <div class="field">
@@ -857,6 +891,10 @@ function render(){
         saveState(m.key);
         render();
       });
+    });
+
+    card.querySelectorAll('[data-inline-resume]').forEach(btn => {
+      btn.addEventListener('click', () => resumeJob(btn.dataset.inlineResume));
     });
 
     card.querySelectorAll('.time-group').forEach(group => {
@@ -1629,6 +1667,7 @@ document.addEventListener('click', (e) => {
 
 // ---------- 版本紀錄 ----------
 const VERSION_LOG = [
+  {v:'v9.0', d:'卡片新增自動偵測：輸入的客戶名稱如果剛好是本機台某張未完成的訂單，會直接在卡片上跳出提示、一鍵接續，不用先跑去點「未完成訂單」清單找，避免手動重打客戶名稱導致跟前一天對不上而算錯箱數'},
   {v:'v8.9', d:'修正 iPhone 上滑動時間選單時，偶爾被自動同步誤判成「沒有人在操作」導致選單突然關閉的問題'},
   {v:'v8.8', d:'機台異常記錄：異常類型選「料盤毀損」時，新增「原因」欄位（可選常見原因或自行輸入其他原因），對齊 Excel 上新增的原因欄'},
   {v:'v8.7', d:'加入 PWA 設定（manifest.json + 專屬圖示），加到手機主畫面後圖示、名稱、開啟畫面會更接近正式 App，不影響任何原本功能，不需要可以隨時拿掉'},
