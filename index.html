@@ -492,7 +492,7 @@
 
 <div class="wrap">
   <div class="topbar">
-    <h1>產線即時監看板 <button class="version-badge" id="version-badge">v9.0</button></h1>
+    <h1>產線即時監看板 <button class="version-badge" id="version-badge">v9.1</button></h1>
     <div class="topbar-right">
       <div class="menu-wrap">
         <button class="export-btn" id="records-btn">查看紀錄 ▾</button>
@@ -876,7 +876,10 @@ function render(){
         </div>
       </div>
       <div class="card-foot">
-        <button class="clear-btn" data-clear="${m.key}">清空本機台資料</button>
+        <div style="display:flex; gap:10px; align-items:center;">
+          <button class="clear-btn" data-clear="${m.key}">清空本機台資料</button>
+          <button class="clear-btn" data-noop="${m.key}">標記今日無作業</button>
+        </div>
         <div style="display:flex; gap:8px;">
           <button class="done-btn" data-daily="${m.key}">記錄今日進度</button>
           <button class="done-btn" data-done="${m.key}">確定完成並加入紀錄</button>
@@ -918,6 +921,27 @@ function render(){
         state[m.key] = { customer:'', totalBoxes:'', currentBox:'', startTime:'', actualEnd:'', remark:'', jobId:'' };
         saveState(m.key);
         render();
+      }
+    });
+
+    card.querySelector('[data-noop]').addEventListener('click', async () => {
+      if(!API_URL){ alert('尚未設定 API 網址，請先點右上角「設定 API 網址」。'); return; }
+      const reason = prompt(`確定要標記「${m.key}」今天無作業嗎？可以簡單寫一下原因（不填也可以，例如：無訂單、設備保養）：`, '');
+      if(reason === null) return; // 按取消就不送出
+      const now = new Date();
+      const record = {
+        machine:m.key, customer:'（無作業）', totalBoxes:'', currentBox:0, dayBoxes:0,
+        startTime:`${now.getMonth()+1}/${now.getDate()}`, actualEnd:'',
+        remark: reason.trim() || '今日無作業', pct:''
+      };
+      try{
+        await saveLog(record);
+        await loadState();
+        focusTodayInLog();
+        renderViewer('log', true, true);
+        render();
+      }catch(err){
+        alert('標記失敗：' + err);
       }
     });
 
@@ -1667,6 +1691,7 @@ document.addEventListener('click', (e) => {
 
 // ---------- 版本紀錄 ----------
 const VERSION_LOG = [
+  {v:'v9.1', d:'機台卡片新增「標記今日無作業」按鈕，可簡單註明原因（例如無訂單、設備保養），直接記一筆進機台產能記錄，明確區分「今天真的沒開機」跟「有做但忘了記錄」'},
   {v:'v9.0', d:'卡片新增自動偵測：輸入的客戶名稱如果剛好是本機台某張未完成的訂單，會直接在卡片上跳出提示、一鍵接續，不用先跑去點「未完成訂單」清單找，避免手動重打客戶名稱導致跟前一天對不上而算錯箱數'},
   {v:'v8.9', d:'修正 iPhone 上滑動時間選單時，偶爾被自動同步誤判成「沒有人在操作」導致選單突然關閉的問題'},
   {v:'v8.8', d:'機台異常記錄：異常類型選「料盤毀損」時，新增「原因」欄位（可選常見原因或自行輸入其他原因），對齊 Excel 上新增的原因欄'},
