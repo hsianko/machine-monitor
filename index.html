@@ -492,7 +492,7 @@
 
 <div class="wrap">
   <div class="topbar">
-    <h1>產線即時監看板 <button class="version-badge" id="version-badge">v9.2</button></h1>
+    <h1>產線即時監看板 <button class="version-badge" id="version-badge">v9.3</button></h1>
     <div class="topbar-right">
       <div class="menu-wrap">
         <button class="export-btn" id="records-btn">查看紀錄 ▾</button>
@@ -1712,6 +1712,7 @@ document.addEventListener('click', (e) => {
 
 // ---------- 版本紀錄 ----------
 const VERSION_LOG = [
+  {v:'v9.3', d:'後端瘦身：清掉「每日進度記錄」舊制度留下的死程式碼（appendDaily、deleteDailyForJob、DailyProgress 分頁讀取），不影響任何現有功能，讀取資料時也會少一次不必要的分頁查詢'},
   {v:'v9.2', d:'客戶名稱、備註欄位新增自動建議：打字時會跳出之前打過的內容可以直接點選，減少打字量，也能減少客戶名稱因為打錯字（括號、空格）而影響比對的狀況，仍可自由輸入全新內容'},
   {v:'v9.1', d:'機台卡片新增「標記今日無作業」按鈕，可簡單註明原因（例如無訂單、設備保養），直接記一筆進機台產能記錄，明確區分「今天真的沒開機」跟「有做但忘了記錄」'},
   {v:'v9.0', d:'卡片新增自動偵測：輸入的客戶名稱如果剛好是本機台某張未完成的訂單，會直接在卡片上跳出提示、一鍵接續，不用先跑去點「未完成訂單」清單找，避免手動重打客戶名稱導致跟前一天對不上而算錯箱數'},
