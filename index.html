@@ -525,7 +525,7 @@
 
 <div class="wrap">
   <div class="topbar">
-    <h1>產線即時監看板 <button class="version-badge" id="version-badge">v10.2</button></h1>
+    <h1>產線即時監看板 <button class="version-badge" id="version-badge">v10.4</button></h1>
     <div class="topbar-right">
       <div class="menu-wrap">
         <button class="export-btn" id="records-btn">查看紀錄 ▾</button>
@@ -727,6 +727,7 @@
       <div class="dash-section">
         <h3>稼動率趨勢（依日期）</h3>
         <div class="dash-chart-wrap"><canvas id="dash-chart-uptime-trend"></canvas></div>
+        <p class="dash-note" id="dash-uptime-trend-note" style="display:none;"></p>
       </div>
 
       <div class="dash-section">
@@ -1830,6 +1831,8 @@ document.addEventListener('click', (e) => {
 
 // ---------- 版本紀錄 ----------
 const VERSION_LOG = [
+  {v:'v10.4', d:'機台異常類型分布圖表加入掃碼異常（共四類），配色改用藍/紅/綠/紫；稼動率趨勢缺口提示改為引導使用「標記今日無作業」補紀錄；Word 匯出改用強制分頁，每個圖表區塊固定從新頁開始，徹底解決跨頁裁切問題'},
+  {v:'v10.3', d:'異常統計卡片/排行改為完整列出三種機台異常類型+掃碼異常（原本只顯示機台異常總數）；異常類型配色改用藍/靛紫/珊瑚紅，區分度更高；稼動率趨勢遇到資料缺口時會自動顯示提示；修正 Word 匯出圖表位移與跨頁問題'},
   {v:'v10.2', d:'統計儀表板大改版：新增稼動率趨勢折線圖（可個別勾選機台顯示/隱藏）；異常統計改為大數字卡片＋依機台堆疊長條圖＋排行等級標籤＋自動觀察重點；修正匯出 Word/PDF 時圖表被拉伸變形、圖表與表格被拆頁的問題'},
   {v:'v10.1', d:'拿掉「清除兩週前舊紀錄」按鈕，改為資料永久保留在試算表；查看紀錄的日期頁籤改為只列出最近14天，並新增「自訂日期區間」可查更早的歷史資料，避免頁籤無限累積又不會遺失任何資料'},
   {v:'v10.0', d:'新增「統計儀表板」：稼動率（固定7.5小時/天基準）、異常次數依機台/類型統計、異常趨勢圖，可選日期範圍與機台篩選，並能匯出成 Excel／Word／PDF 報表'},
@@ -2182,6 +2185,23 @@ function computeDailyUptimeTrend(logs){
   return {labels: dates.map(d=>d.replace('-','/')), datasets};
 }
 
+// 找出每台機台在目前圖表的日期範圍裡，「頭尾之間」缺資料的日期（不含頭尾以外，那只是還沒開始/已經沒紀錄）。
+// 這些日期會讓折線斷開，用來產生下方的提示文字，只在真的有缺口時才顯示。
+function findUptimeGaps(uptimeTrend){
+  const gaps = {};
+  uptimeTrend.datasets.forEach(ds => {
+    const idxWithData = ds.data.map((v,i)=>v===null?-1:i).filter(i=>i>=0);
+    if(idxWithData.length < 2) return;
+    const first = idxWithData[0], last = idxWithData[idxWithData.length-1];
+    const missing = [];
+    for(let i=first; i<=last; i++){
+      if(ds.data[i]===null) missing.push(uptimeTrend.labels[i]);
+    }
+    if(missing.length) gaps[ds.label] = missing;
+  });
+  return gaps;
+}
+
 // 異常統計：依機台整理出機台異常/掃碼異常次數、依類型分布、排名與等級
 function computeAbnormalStats(abns, scans, logs){
   const byMachine = {};
@@ -2211,7 +2231,8 @@ function computeAbnormalStats(abns, scans, logs){
     const total = info.abnCount + info.scanCount;
     const boxes = boxesByMachine[m.key]||0;
     const rate = boxes>0 ? +((total/boxes)*100).toFixed(2) : null;
-    return {machine:m.key, abnCount:info.abnCount, scanCount:info.scanCount, total, byType:info.byType, boxes, rate};
+    const byTypeAll = Object.assign({}, info.byType, {'掃碼異常': info.scanCount});
+    return {machine:m.key, abnCount:info.abnCount, scanCount:info.scanCount, total, byType:info.byType, byTypeAll, boxes, rate};
   });
 
   const totalAll = perMachine.reduce((s,p)=>s+p.total,0);
@@ -2255,7 +2276,8 @@ function computeTrendStats(abns, scans){
   return {labels: dates.map(d=>d.replace('-','/')), data: dates.map(d=>byDate[d])};
 }
 
-const ABN_TYPE_COLORS = {'單捲標貼歪':'#e8a33d','料盤載台推擠':'#7b8ce0','料盤毀損':'#d5654a'};
+const ABN_TYPE_COLORS = {'單捲標貼歪':'#3b82f6','料盤載台推擠':'#ef4444','料盤毀損':'#22c55e','掃碼異常':'#a855f7'};
+const ABN_ALL_CATEGORIES = ['單捲標貼歪','料盤載台推擠','料盤毀損','掃碼異常'];
 
 function renderDashboard(){
   const {logs, abns, scans} = getDashRecords();
@@ -2285,12 +2307,25 @@ function renderDashboard(){
       scales:{ y:{ beginAtZero:true, max:100, ticks:{color:CHART_TEXT_COLOR}, grid:{color:CHART_GRID_COLOR} }, x:{ ticks:{color:CHART_TEXT_COLOR}, grid:{display:false} } } }
   });
 
+  const uptimeGaps = findUptimeGaps(uptimeTrend);
+  const gapEntries = Object.entries(uptimeGaps);
+  const gapNoteEl = document.getElementById('dash-uptime-trend-note');
+  if(gapEntries.length){
+    gapNoteEl.style.display = '';
+    gapNoteEl.textContent = '⚠ ' + gapEntries.map(([m,dates]) => `${m}在 ${dates.join('、')} 沒有紀錄`).join('；') + '。如果當天機台確實停機，建議到該機台卡片按「標記今日無作業」補一筆紀錄，稼動率才會正確顯示為 0%，而不是被當成沒有資料、圖表出現斷線。';
+  } else {
+    gapNoteEl.style.display = 'none';
+    gapNoteEl.textContent = '';
+  }
+
   document.getElementById('dash-abn-cards').innerHTML = abnStats.perMachine.map(p => `
     <div class="dash-card" style="--accent:${MACHINE_COLORS[p.machine]}">
       <div class="dc-name">${p.machine}</div>
       <div class="dc-total">${p.total}</div>
       <div class="dc-total-label">累計異常次數</div>
-      <div class="dc-sub"><span>機台異常</span><span>${p.abnCount}</span></div>
+      <div class="dc-sub"><span>單捲標貼歪</span><span>${p.byType['單捲標貼歪']}</span></div>
+      <div class="dc-sub"><span>料盤載台推擠</span><span>${p.byType['料盤載台推擠']}</span></div>
+      <div class="dc-sub"><span>料盤毀損</span><span>${p.byType['料盤毀損']}</span></div>
       <div class="dc-sub"><span>掃碼異常</span><span>${p.scanCount}</span></div>
     </div>
   `).join('');
@@ -2300,7 +2335,7 @@ function renderDashboard(){
     type:'bar',
     data:{
       labels: abnStats.perMachine.map(p=>p.machine),
-      datasets: AB_TYPE_OPTS.map(t => ({ label:t, data: abnStats.perMachine.map(p=>p.byType[t]), backgroundColor: ABN_TYPE_COLORS[t] }))
+      datasets: ABN_ALL_CATEGORIES.map(t => ({ label:t, data: abnStats.perMachine.map(p=>p.byTypeAll[t]), backgroundColor: ABN_TYPE_COLORS[t] }))
     },
     options:{
       indexAxis:'y', responsive:true, maintainAspectRatio:false,
@@ -2309,8 +2344,8 @@ function renderDashboard(){
     }
   });
 
-  document.getElementById('dash-abn-rank').innerHTML = `<table><tr><th>排名</th><th>機台</th><th>機台異常</th><th>掃碼異常</th><th>合計</th><th>等級</th></tr>` +
-    abnStats.ranked.map((p,i) => `<tr><td>${i+1}</td><td>${p.machine}</td><td>${p.abnCount}</td><td>${p.scanCount}</td><td>${p.total}</td><td><span class="level ${p.levelCls}">${p.level}</span></td></tr>`).join('') +
+  document.getElementById('dash-abn-rank').innerHTML = `<table><tr><th>排名</th><th>機台</th><th>單捲標貼歪</th><th>料盤載台推擠</th><th>料盤毀損</th><th>掃碼異常</th><th>合計</th><th>等級</th></tr>` +
+    abnStats.ranked.map((p,i) => `<tr><td>${i+1}</td><td>${p.machine}</td><td>${p.byType['單捲標貼歪']}</td><td>${p.byType['料盤載台推擠']}</td><td>${p.byType['料盤毀損']}</td><td>${p.scanCount}</td><td>${p.total}</td><td><span class="level ${p.levelCls}">${p.level}</span></td></tr>`).join('') +
     `</table>`;
 
   document.getElementById('dash-abn-insight').innerHTML = '⚠ 觀察重點：<br>' + buildAbnormalInsight(abnStats);
@@ -2384,7 +2419,8 @@ function buildDashReportHtml(){
   const pad = n => String(n).padStart(2,'0');
   const genTime = `${now.getFullYear()}-${pad(now.getMonth()+1)}-${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())}`;
 
-  const W = 720, H = 340; // 固定匯出圖表尺寸，避免拉伸變形
+  // 縮小到比較接近 Word 版面可印刷寬度的尺寸，避免圖片比版面寬、被擠到右邊或跨頁。
+  const W = 620, H = 290;
 
   const imgUptime = renderChartForExport({
     type:'bar',
@@ -2400,7 +2436,7 @@ function buildDashReportHtml(){
 
   const imgAbnType = renderChartForExport({
     type:'bar',
-    data:{ labels: abnStats.perMachine.map(p=>p.machine), datasets: AB_TYPE_OPTS.map(t => ({ label:t, data: abnStats.perMachine.map(p=>p.byType[t]), backgroundColor: ABN_TYPE_COLORS[t] })) },
+    data:{ labels: abnStats.perMachine.map(p=>p.machine), datasets: ABN_ALL_CATEGORIES.map(t => ({ label:t, data: abnStats.perMachine.map(p=>p.byTypeAll[t]), backgroundColor: ABN_TYPE_COLORS[t] })) },
     options:{ indexAxis:'y', plugins:{legend:{display:true, position:'top'}}, scales:{ x:{ stacked:true, beginAtZero:true }, y:{ stacked:true } } }
   }, W, H);
 
@@ -2411,22 +2447,40 @@ function buildDashReportHtml(){
   }, W, H);
 
   const uptimeRows = uptimeStats.map(s => `<tr><td>${s.machine}</td><td>${s.pct}%</td><td>${s.workedHours}</td><td>${s.availableHours}</td><td>${s.activeDays}</td></tr>`).join('');
-  const cardRows = abnStats.perMachine.map(p => `<tr><td>${p.machine}</td><td>${p.total}</td><td>${p.abnCount}</td><td>${p.scanCount}</td></tr>`).join('');
-  const rankRows = abnStats.ranked.map((p,i) => `<tr><td>${i+1}</td><td>${p.machine}</td><td>${p.abnCount}</td><td>${p.scanCount}</td><td>${p.total}</td><td>${p.level}</td></tr>`).join('');
+  const cardRows = abnStats.perMachine.map(p => `<tr><td>${p.machine}</td><td>${p.total}</td><td>${p.byType['單捲標貼歪']}</td><td>${p.byType['料盤載台推擠']}</td><td>${p.byType['料盤毀損']}</td><td>${p.scanCount}</td></tr>`).join('');
+  const rankRows = abnStats.ranked.map((p,i) => `<tr><td>${i+1}</td><td>${p.machine}</td><td>${p.byType['單捲標貼歪']}</td><td>${p.byType['料盤載台推擠']}</td><td>${p.byType['料盤毀損']}</td><td>${p.scanCount}</td><td>${p.total}</td><td>${p.level}</td></tr>`).join('');
   const insightHtml = buildAbnormalInsight(abnStats);
+  const uptimeGapEntries = Object.entries(findUptimeGaps(uptimeTrend));
+  const gapNoteHtml = uptimeGapEntries.length
+    ? `<p class="note">⚠ ${uptimeGapEntries.map(([m,dates]) => `${m}在 ${dates.join('、')} 沒有紀錄`).join('；')}。如果當天機台確實停機，建議補一筆「無作業」紀錄，稼動率才會正確顯示為 0%。</p>`
+    : '';
 
-  return `<html><head><meta charset="UTF-8"><title>${dashReportTitle()}</title>
+  // Word 對一般 <div> 的分頁控制常常不理會，改用「單一儲存格的表格」包每個區塊，
+  // Word 對表格的 page-break-inside 支援穩定很多，這是常見的相容寫法。
+  const block = (title, bodyHtml, forceNewPage) => `
+    <table class="block-table" style="page-break-inside:avoid; mso-break-inside:avoid; width:100%; border-collapse:collapse; margin-top:26px;${forceNewPage ? ' page-break-before:always; mso-page-break-before:always;' : ''}">
+      <tr><td style="border:none; padding:0;">
+        <h2>${title}</h2>
+        ${bodyHtml}
+      </td></tr>
+    </table>`;
+
+  return `<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="http://www.w3.org/TR/REC-html40">
+  <head><meta charset="UTF-8"><title>${dashReportTitle()}</title>
+  <!--[if gte mso 9]>
+  <xml><w:WordDocument><w:View>Print</w:View><w:Zoom>100</w:Zoom></w:WordDocument></xml>
+  <![endif]-->
   <style>
-    body{font-family:"Microsoft JhengHei","PingFang TC",sans-serif; color:#222; padding:24px;}
+    @page{ size: 21cm 29.7cm; margin: 2cm; }
+    body{font-family:"Microsoft JhengHei","PingFang TC",sans-serif; color:#222; margin:0; padding:0; width:${W+20}px;}
     h1{font-size:20px; margin-bottom:4px;}
     .meta{color:#666; font-size:12px; margin-bottom:20px;}
-    h2{font-size:15px; margin-top:0; border-bottom:1px solid #ccc; padding-bottom:4px;}
-    table{border-collapse:collapse; width:100%; margin-top:8px; font-size:12px;}
-    th,td{border:1px solid #ccc; padding:6px 10px; text-align:left;}
-    th{background:#f2f2f2;}
-    img{width:100%; height:auto; margin-top:10px; display:block;}
+    h2{font-size:15px; margin:0 0 8px; border-bottom:1px solid #ccc; padding-bottom:4px;}
+    table.data-table{border-collapse:collapse; width:${W}px; margin-top:8px; font-size:12px;}
+    table.data-table th, table.data-table td{border:1px solid #ccc; padding:6px 10px; text-align:left;}
+    table.data-table th{background:#f2f2f2;}
+    img{width:${W}px; height:${H}px; margin-top:10px; display:block;}
     .note{font-size:11px; color:#888; margin-top:6px;}
-    .block{page-break-inside:avoid; break-inside:avoid; margin-top:28px;}
     .insight{background:#fff8ec; border:1px solid #e8d7b0; border-radius:6px; padding:10px 14px; font-size:12px; margin-top:10px; line-height:1.7;}
   </style></head>
   <body>
@@ -2434,37 +2488,32 @@ function buildDashReportHtml(){
     <div class="meta">產生時間：${genTime}</div>
     <p class="note">稼動率基準：每台機台每天可作業時數固定 7.5 小時（已扣除三段固定休息時間）。異常統計為次數統計，非良率。</p>
 
-    <div class="block">
-      <h2>稼動率</h2>
+    ${block('稼動率', `
       <img src="${imgUptime}" width="${W}" height="${H}">
-      <table><tr><th>機台</th><th>稼動率</th><th>實際工時(小時)</th><th>可作業工時(小時)</th><th>有紀錄天數</th></tr>${uptimeRows}</table>
-    </div>
+      <table class="data-table"><tr><th>機台</th><th>稼動率</th><th>實際工時(小時)</th><th>可作業工時(小時)</th><th>有紀錄天數</th></tr>${uptimeRows}</table>
+    `)}
 
-    <div class="block">
-      <h2>稼動率趨勢</h2>
+    ${block('稼動率趨勢', `
       <img src="${imgUptimeTrend}" width="${W}" height="${H}">
-    </div>
+      ${gapNoteHtml}
+    `, true)}
 
-    <div class="block">
-      <h2>異常統計 — 總覽</h2>
-      <table><tr><th>機台</th><th>累計異常次數</th><th>機台異常</th><th>掃碼異常</th></tr>${cardRows}</table>
-    </div>
+    ${block('異常統計 — 總覽', `
+      <table class="data-table"><tr><th>機台</th><th>累計異常次數</th><th>單捲標貼歪</th><th>料盤載台推擠</th><th>料盤毀損</th><th>掃碼異常</th></tr>${cardRows}</table>
+    `, true)}
 
-    <div class="block">
-      <h2>機台異常類型分布（依機台）</h2>
+    ${block('機台異常類型分布（依機台）', `
       <img src="${imgAbnType}" width="${W}" height="${H}">
-    </div>
+    `, true)}
 
-    <div class="block">
-      <h2>異常次數排行</h2>
-      <table><tr><th>排名</th><th>機台</th><th>機台異常</th><th>掃碼異常</th><th>合計</th><th>等級</th></tr>${rankRows}</table>
+    ${block('異常次數排行', `
+      <table class="data-table"><tr><th>排名</th><th>機台</th><th>單捲標貼歪</th><th>料盤載台推擠</th><th>料盤毀損</th><th>掃碼異常</th><th>合計</th><th>等級</th></tr>${rankRows}</table>
       <div class="insight">⚠ 觀察重點：<br>${insightHtml}</div>
-    </div>
+    `)}
 
-    <div class="block">
-      <h2>異常趨勢（依日期）</h2>
+    ${block('異常趨勢（依日期）', `
       <img src="${imgTrend}" width="${W}" height="${H}">
-    </div>
+    `, true)}
   </body></html>`;
 }
 
@@ -2476,7 +2525,7 @@ function exportDashboardExcel(){
   const wb = XLSX.utils.book_new();
   const wsUptime = XLSX.utils.json_to_sheet(uptimeStats.map(s => ({機台:s.machine, '稼動率(%)':s.pct, 實際工時:s.workedHours, 可作業工時:s.availableHours, 有紀錄天數:s.activeDays})));
   XLSX.utils.book_append_sheet(wb, wsUptime, '稼動率');
-  const wsAbn = XLSX.utils.json_to_sheet(abnStats.ranked.map((p,i) => ({排名:i+1, 機台:p.machine, 機台異常:p.abnCount, 掃碼異常:p.scanCount, 合計:p.total, 等級:p.level})));
+  const wsAbn = XLSX.utils.json_to_sheet(abnStats.ranked.map((p,i) => ({排名:i+1, 機台:p.machine, 單捲標貼歪:p.byType['單捲標貼歪'], 料盤載台推擠:p.byType['料盤載台推擠'], 料盤毀損:p.byType['料盤毀損'], 掃碼異常:p.scanCount, 合計:p.total, 等級:p.level})));
   XLSX.utils.book_append_sheet(wb, wsAbn, '異常次數排行');
   const wsType = XLSX.utils.json_to_sheet(abnStats.perMachine.map(p => Object.assign({機台:p.machine}, p.byType)));
   XLSX.utils.book_append_sheet(wb, wsType, '異常類型分布');
