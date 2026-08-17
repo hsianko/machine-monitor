@@ -111,6 +111,27 @@
     flex-direction:column;
     box-shadow:0 24px 64px rgba(0,0,0,0.55);
   }
+  .version-modal.wide{max-width:920px;}
+  .dash-controls{display:flex; flex-wrap:wrap; gap:14px; align-items:center; margin-bottom:12px;}
+  .dash-control-group{display:flex; align-items:center; gap:6px;}
+  .dash-control-label{font-size:11px; color:var(--text-muted);}
+  .dash-tilde{color:var(--text-muted); font-size:12px;}
+  .dash-controls select{
+    background:var(--bg-field); border:1px solid var(--border-strong); color:var(--text-primary);
+    font-family:var(--font-mono); font-size:12px; padding:6px 8px; border-radius:6px;
+  }
+  .dash-presets{display:flex; gap:6px;}
+  .dash-note{font-size:10.5px; color:var(--text-muted); margin:0 0 16px; line-height:1.6;}
+  .dash-section{margin-bottom:26px;}
+  .dash-section h3{
+    font-family:var(--font-display); font-size:14px; font-weight:600;
+    color:var(--text-secondary); margin:0 0 10px; padding-bottom:6px; border-bottom:1px solid var(--border);
+  }
+  .dash-chart-wrap{position:relative; width:100%; height:220px; margin-bottom:10px;}
+  .dash-table-wrap table{width:100%; border-collapse:collapse; font-size:11.5px;}
+  .dash-table-wrap th, .dash-table-wrap td{text-align:left; padding:6px 10px; border-bottom:1px solid var(--border);}
+  .dash-table-wrap th{color:var(--text-muted); font-weight:500; font-size:10.5px;}
+  .dash-export{display:flex; align-items:center; gap:10px; padding-top:10px; border-top:1px solid var(--border);}
   .version-modal-head{
     display:flex;
     align-items:center;
@@ -492,7 +513,7 @@
 
 <div class="wrap">
   <div class="topbar">
-    <h1>產線即時監看板 <button class="version-badge" id="version-badge">v9.3</button></h1>
+    <h1>產線即時監看板 <button class="version-badge" id="version-badge">v10.1</button></h1>
     <div class="topbar-right">
       <div class="menu-wrap">
         <button class="export-btn" id="records-btn">查看紀錄 ▾</button>
@@ -508,8 +529,8 @@
         <select id="export-day"></select>
       </div>
       <button class="export-btn" id="export-btn">匯出紀錄 (CSV)</button>
-      <button class="export-btn" id="purge-btn">清除兩週前舊紀錄</button>
       <button class="export-btn" id="pending-btn">未完成訂單</button>
+      <button class="export-btn" id="dashboard-btn">統計儀表板</button>
       <div class="clock" id="clock">--:--:--</div>
     </div>
   </div>
@@ -525,6 +546,17 @@
       <button class="viewer-close" id="viewer-close">關閉</button>
     </div>
     <div class="date-tabs" id="viewer-date-tabs"></div>
+    <div class="dash-controls" style="margin-bottom:10px;">
+      <button class="date-tab" id="viewer-range-toggle">📅 自訂日期區間</button>
+      <div class="dash-control-group" id="viewer-range-picker" style="display:none;">
+        <select id="viewer-range-start-month"></select>
+        <select id="viewer-range-start-day"></select>
+        <span class="dash-tilde">～</span>
+        <select id="viewer-range-end-month"></select>
+        <select id="viewer-range-end-day"></select>
+        <button class="date-tab" id="viewer-range-clear">清除區間</button>
+      </div>
+    </div>
     <div class="date-tabs" id="viewer-machine-tabs"></div>
     <div class="date-tabs" id="viewer-remark-filter"></div>
     <div class="viewer-stats" id="viewer-stats"></div>
@@ -647,6 +679,68 @@
   </div>
 </div>
 
+<div class="modal-overlay" id="dashboard-overlay">
+  <div class="version-modal wide">
+    <div class="version-modal-head">
+      <span class="vtitle">統計儀表板</span>
+      <button class="modal-close-x" id="dashboard-close-x">✕</button>
+    </div>
+    <div class="version-modal-body" id="dashboard-modal-body">
+
+      <div class="dash-controls">
+        <div class="dash-control-group">
+          <span class="dash-control-label">日期範圍</span>
+          <select id="dash-start-month"></select>
+          <select id="dash-start-day"></select>
+          <span class="dash-tilde">～</span>
+          <select id="dash-end-month"></select>
+          <select id="dash-end-day"></select>
+        </div>
+        <div class="dash-presets">
+          <button class="date-tab" data-preset="today">今天</button>
+          <button class="date-tab" data-preset="week">近7天</button>
+          <button class="date-tab" data-preset="month">近30天</button>
+          <button class="date-tab" data-preset="all">全部</button>
+        </div>
+      </div>
+      <div class="date-tabs" id="dash-machine-tabs"></div>
+      <p class="dash-note">稼動率基準：每台機台每天可作業時數固定 7.5 小時（已扣除三段固定休息時間）。異常率為「機台異常記錄＋掃碼異常記錄」的次數換算每百箱異常次數，不是良率。</p>
+
+      <div class="dash-section">
+        <h3>稼動率</h3>
+        <div class="dash-chart-wrap"><canvas id="dash-chart-uptime"></canvas></div>
+        <div class="dash-table-wrap" id="dash-table-uptime"></div>
+      </div>
+
+      <div class="dash-section">
+        <h3>異常次數 — 依機台</h3>
+        <div class="dash-chart-wrap"><canvas id="dash-chart-abnormal-machine"></canvas></div>
+      </div>
+
+      <div class="dash-section">
+        <h3>異常次數 — 依類型</h3>
+        <div class="dash-chart-wrap"><canvas id="dash-chart-abnormal-type"></canvas></div>
+      </div>
+
+      <div class="dash-section">
+        <h3>異常趨勢（依日期）</h3>
+        <div class="dash-chart-wrap"><canvas id="dash-chart-trend"></canvas></div>
+      </div>
+
+      <div class="dash-export">
+        <span class="dash-control-label">匯出報表：</span>
+        <button class="export-btn" id="dash-export-excel">Excel</button>
+        <button class="export-btn" id="dash-export-word">Word</button>
+        <button class="export-btn" id="dash-export-pdf">PDF</button>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script>
 const MACHINES = [
   {key:'大寶', accent:'var(--m-daibao)'},
@@ -1254,44 +1348,7 @@ function exportCsv(){
 
 function tickClock(){ document.getElementById('clock').textContent = fmtClock(); }
 
-async function purgeOldRecords(){
-  const PURGE_DAYS = 14;
-  const cutoffDate = new Date();
-  cutoffDate.setDate(cutoffDate.getDate() - PURGE_DAYS);
-  const pad = n => String(n).padStart(2,'0');
-  const cutoffStr = `${cutoffDate.getFullYear()}-${pad(cutoffDate.getMonth()+1)}-${pad(cutoffDate.getDate())} 00:00`;
 
-  const countOld = (data, cfg) => data.filter(r => {
-    const v = r[cfg.dateKey];
-    return v && String(v) < cutoffStr;
-  }).length;
-
-  const n1 = countOld(completedLog, VIEW_CONFIG.log);
-  const n2 = countOld(abnormalLog, VIEW_CONFIG.abnormal);
-  const n3 = countOld(scanLog, VIEW_CONFIG.scan);
-  const total = n1 + n2 + n3;
-
-  if(total === 0){
-    alert('目前沒有超過兩週的舊紀錄可以清除。');
-    return;
-  }
-
-  const msg = `即將清除 ${cutoffDate.getMonth()+1}/${cutoffDate.getDate()} 之前建立的紀錄，共 ${total} 筆：\n`
-    + `機台產能記錄 ${n1} 筆\n機台異常記錄 ${n2} 筆\n機台掃碼異常記錄 ${n3} 筆\n\n此動作無法復原，確定要清除嗎？`;
-  if(!confirm(msg)) return;
-
-  if(!API_URL){ alert('尚未設定 API 網址。'); return; }
-  try{
-    const res = await apiPost({action:'purgeOldRecords', cutoff:cutoffStr});
-    await loadState();
-    if(currentLogView) renderViewer(currentLogView, false, true);
-    alert(`已清除 ${res.deleted !== undefined ? res.deleted : total} 筆舊紀錄。`);
-  }catch(err){
-    alert('清除失敗：' + err);
-  }
-}
-
-document.getElementById('purge-btn').addEventListener('click', purgeOldRecords);
 
 // ---------- 未完成訂單 ----------
 // 一張訂單只要「最新一筆」的狀態不是「已完成」，就代表還沒做完，需要接續。
@@ -1436,6 +1493,7 @@ let editingIdx = null;
 let currentDateFilter = null; // null = 全部
 let remarkFilterOn = false;
 let currentMachineFilter = null; // null = 全部機台
+let currentRangeFilter = null; // {start:'MM-DD', end:'MM-DD'} 或 null
 
 // 加入一筆新紀錄後，把「機台產能記錄」直接篩選到「今天」，
 // 不用還要自己再點一次日期分頁去找剛剛新增的那筆。
@@ -1520,25 +1578,27 @@ function displayValue(view, r, k){
 function renderViewer(view, highlightLast, keepDateFilter){
   currentLogView = view;
   editingIdx = null;
-  if(!keepDateFilter){ currentDateFilter = null; remarkFilterOn = false; currentMachineFilter = null; }
+  if(!keepDateFilter){ currentDateFilter = null; remarkFilterOn = false; currentMachineFilter = null; currentRangeFilter = null; }
   const cfg = VIEW_CONFIG[view];
   document.getElementById('viewer-title').textContent = cfg.title;
   const allData = cfg.getData();
   const body = document.getElementById('viewer-body');
   const machineKey = cfg.keys.indexOf('machine') !== -1 ? 'machine' : '機台';
 
-  // 依日期分組，最新的日期排在最前面
+  // 依日期分組，最新的日期排在最前面；只列出最近 14 天，避免頁籤越堆越長，
+  // 更早的資料改用「自訂日期區間」查詢，資料本身在試算表裡永久保留，不會被刪除。
   const dateSet = {};
   allData.forEach(r => {
     const d = recordDateStr(cfg, r);
     if(d) dateSet[d] = true;
   });
   const dates = Object.keys(dateSet).sort().reverse();
+  const recentDates = dates.slice(0, 14);
 
   const tabsWrap = document.getElementById('viewer-date-tabs');
-  if(dates.length){
-    const allBtn = `<button class="date-tab${currentDateFilter===null?' active':''}" data-date="">全部</button>`;
-    const dateBtns = dates.map(d => {
+  if(recentDates.length){
+    const allBtn = `<button class="date-tab${(currentDateFilter===null && !currentRangeFilter)?' active':''}" data-date="">全部</button>`;
+    const dateBtns = recentDates.map(d => {
       const label = d.replace('-', '/'); // 'MM-DD' -> 'MM/DD'
       return `<button class="date-tab${currentDateFilter===d?' active':''}" data-date="${d}">${label}</button>`;
     }).join('');
@@ -1572,7 +1632,15 @@ function renderViewer(view, highlightLast, keepDateFilter){
     remarkWrap.style.display = 'none';
   }
 
-  let filtered = currentDateFilter ? allData.filter(r => recordDateStr(cfg, r) === currentDateFilter) : allData;
+  let filtered = allData;
+  if(currentRangeFilter){
+    filtered = filtered.filter(r => {
+      const d = recordDateStr(cfg, r);
+      return d && d >= currentRangeFilter.start && d <= currentRangeFilter.end;
+    });
+  } else if(currentDateFilter){
+    filtered = filtered.filter(r => recordDateStr(cfg, r) === currentDateFilter);
+  }
   if(cfg.remarkKey && remarkFilterOn){
     filtered = filtered.filter(r => r[cfg.remarkKey]);
   }
@@ -1681,6 +1749,7 @@ document.getElementById('viewer-date-tabs').addEventListener('click', (e) => {
   const btn = e.target.closest('.date-tab');
   if(!btn) return;
   currentDateFilter = btn.dataset.date || null;
+  currentRangeFilter = null;
   renderViewer(currentLogView, false, true);
 });
 
@@ -1688,6 +1757,40 @@ document.getElementById('viewer-machine-tabs').addEventListener('click', (e) => 
   const btn = e.target.closest('.date-tab');
   if(!btn) return;
   currentMachineFilter = btn.dataset.machine || null;
+  renderViewer(currentLogView, false, true);
+});
+
+// 自訂日期區間：查更早、超過最近14天頁籤範圍的舊資料（資料本身永久保留在試算表，不會被刪除）
+document.getElementById('viewer-range-toggle').addEventListener('click', () => {
+  const picker = document.getElementById('viewer-range-picker');
+  picker.style.display = picker.style.display === 'none' ? 'flex' : 'none';
+});
+function initViewerRangePicker(){
+  document.getElementById('viewer-range-start-month').innerHTML = monthOptionsHtml('');
+  document.getElementById('viewer-range-start-day').innerHTML = dayOptionsHtml('');
+  document.getElementById('viewer-range-end-month').innerHTML = monthOptionsHtml('');
+  document.getElementById('viewer-range-end-day').innerHTML = dayOptionsHtml('');
+  ['viewer-range-start-month','viewer-range-start-day','viewer-range-end-month','viewer-range-end-day'].forEach(id => {
+    document.getElementById(id).addEventListener('change', () => {
+      const sm = document.getElementById('viewer-range-start-month').value;
+      const sd = document.getElementById('viewer-range-start-day').value;
+      const em = document.getElementById('viewer-range-end-month').value;
+      const ed = document.getElementById('viewer-range-end-day').value;
+      if(sm && sd && em && ed){
+        const pad = n => String(n).padStart(2,'0');
+        currentRangeFilter = {start:`${pad(sm)}-${pad(sd)}`, end:`${pad(em)}-${pad(ed)}`};
+        currentDateFilter = null;
+        renderViewer(currentLogView, false, true);
+      }
+    });
+  });
+}
+initViewerRangePicker();
+document.getElementById('viewer-range-clear').addEventListener('click', () => {
+  currentRangeFilter = null;
+  ['viewer-range-start-month','viewer-range-start-day','viewer-range-end-month','viewer-range-end-day'].forEach(id => {
+    document.getElementById(id).value = '';
+  });
   renderViewer(currentLogView, false, true);
 });
 
@@ -1712,6 +1815,8 @@ document.addEventListener('click', (e) => {
 
 // ---------- 版本紀錄 ----------
 const VERSION_LOG = [
+  {v:'v10.1', d:'拿掉「清除兩週前舊紀錄」按鈕，改為資料永久保留在試算表；查看紀錄的日期頁籤改為只列出最近14天，並新增「自訂日期區間」可查更早的歷史資料，避免頁籤無限累積又不會遺失任何資料'},
+  {v:'v10.0', d:'新增「統計儀表板」：稼動率（固定7.5小時/天基準）、異常次數依機台/類型統計、異常趨勢圖，可選日期範圍與機台篩選，並能匯出成 Excel／Word／PDF 報表'},
   {v:'v9.3', d:'後端瘦身：清掉「每日進度記錄」舊制度留下的死程式碼（appendDaily、deleteDailyForJob、DailyProgress 分頁讀取），不影響任何現有功能，讀取資料時也會少一次不必要的分頁查詢'},
   {v:'v9.2', d:'客戶名稱、備註欄位新增自動建議：打字時會跳出之前打過的內容可以直接點選，減少打字量，也能減少客戶名稱因為打錯字（括號、空格）而影響比對的狀況，仍可自由輸入全新內容'},
   {v:'v9.1', d:'機台卡片新增「標記今日無作業」按鈕，可簡單註明原因（例如無訂單、設備保養），直接記一筆進機台產能記錄，明確區分「今天真的沒開機」跟「有做但忘了記錄」'},
@@ -1928,6 +2033,311 @@ let lastInteractionAt = 0;
 document.addEventListener('focusin', () => { lastInteractionAt = Date.now(); });
 document.addEventListener('touchstart', () => { lastInteractionAt = Date.now(); }, {passive:true});
 document.addEventListener('input', () => { lastInteractionAt = Date.now(); });
+
+// ---------- 統計儀表板 ----------
+const MACHINE_COLORS = {'大寶':'#e8a33d','二寶':'#3f9088','三寶':'#d5654a','四寶':'#7b8ce0'};
+const AVAILABLE_HOURS_PER_DAY = 7.5; // 每台機台每天可作業時數，已扣除固定休息時間
+const CHART_TEXT_COLOR = '#9099a6';
+const CHART_GRID_COLOR = '#2b313a';
+
+let dashRange = {start:null, end:null, label:'近7天'};
+let dashMachineFilter = null;
+let chartUptime=null, chartAbnMachine=null, chartAbnType=null, chartTrend=null;
+
+function mmddToday(offsetDays){
+  const now = new Date();
+  now.setDate(now.getDate() + (offsetDays||0));
+  const pad = n => String(n).padStart(2,'0');
+  return `${pad(now.getMonth()+1)}-${pad(now.getDate())}`;
+}
+
+function setDashPreset(preset){
+  if(preset === 'today'){ dashRange = {start:mmddToday(0), end:mmddToday(0), label:'今天'}; }
+  else if(preset === 'week'){ dashRange = {start:mmddToday(-6), end:mmddToday(0), label:'近7天'}; }
+  else if(preset === 'month'){ dashRange = {start:mmddToday(-29), end:mmddToday(0), label:'近30天'}; }
+  else { dashRange = {start:null, end:null, label:'全部'}; }
+  syncDashDateSelects();
+  renderDashboard();
+}
+
+function syncDashDateSelects(){
+  const sp = dashRange.start ? dashRange.start.split('-') : ['',''];
+  const ep = dashRange.end ? dashRange.end.split('-') : ['',''];
+  document.getElementById('dash-start-month').value = sp[0] ? String(parseInt(sp[0],10)) : '';
+  document.getElementById('dash-start-day').value = sp[1] ? String(parseInt(sp[1],10)) : '';
+  document.getElementById('dash-end-month').value = ep[0] ? String(parseInt(ep[0],10)) : '';
+  document.getElementById('dash-end-day').value = ep[1] ? String(parseInt(ep[1],10)) : '';
+}
+
+function readDashDateSelects(){
+  const sm = document.getElementById('dash-start-month').value;
+  const sd = document.getElementById('dash-start-day').value;
+  const em = document.getElementById('dash-end-month').value;
+  const ed = document.getElementById('dash-end-day').value;
+  const pad = n => String(n).padStart(2,'0');
+  if(sm && sd && em && ed){
+    dashRange = {start:`${pad(sm)}-${pad(sd)}`, end:`${pad(em)}-${pad(ed)}`, label:'自訂區間'};
+  } else {
+    dashRange = {start:null, end:null, label:'全部'};
+  }
+  renderDashboard();
+}
+
+function initDashDatePickers(){
+  ['dash-start-month','dash-end-month'].forEach(id => { document.getElementById(id).innerHTML = monthOptionsHtml(''); });
+  ['dash-start-day','dash-end-day'].forEach(id => { document.getElementById(id).innerHTML = dayOptionsHtml(''); });
+  ['dash-start-month','dash-start-day','dash-end-month','dash-end-day'].forEach(id => {
+    document.getElementById(id).addEventListener('change', readDashDateSelects);
+  });
+}
+
+function dashDateInRange(mmdd){
+  if(!mmdd) return false;
+  if(!dashRange.start || !dashRange.end) return true;
+  return mmdd >= dashRange.start && mmdd <= dashRange.end;
+}
+
+function getDashRecords(){
+  const logs = completedLog.filter(r => (!dashMachineFilter || r.machine===dashMachineFilter) && dashDateInRange(recordDateStr(VIEW_CONFIG.log, r)));
+  const abns = abnormalLog.filter(r => (!dashMachineFilter || r['機台']===dashMachineFilter) && dashDateInRange(recordDateStr(VIEW_CONFIG.abnormal, r)));
+  const scans = scanLog.filter(r => (!dashMachineFilter || r['機台']===dashMachineFilter) && dashDateInRange(recordDateStr(VIEW_CONFIG.scan, r)));
+  return {logs, abns, scans};
+}
+
+function timeToMinutes(hhmm){
+  const m = String(hhmm||'').match(/^(\d{1,2}):(\d{2})$/);
+  if(!m) return null;
+  return parseInt(m[1],10)*60 + parseInt(m[2],10);
+}
+
+// 稼動率 = 該機台在範圍內所有紀錄的實際工作時數加總 ÷（有紀錄的天數 × 每天可作業7.5小時）
+function computeUptimeStats(logs){
+  const byMachine = {};
+  MACHINES.forEach(m => { byMachine[m.key] = {minutes:0, days:new Set()}; });
+  logs.forEach(r => {
+    if(!byMachine[r.machine]) return;
+    const sp = parseComposite(r.startTime);
+    const ep = parseComposite(r.actualEnd);
+    const sMin = timeToMinutes(sp.time);
+    const eMin = timeToMinutes(ep.time);
+    const dateKey = recordDateStr(VIEW_CONFIG.log, r);
+    if(dateKey) byMachine[r.machine].days.add(dateKey);
+    if(sMin !== null && eMin !== null && eMin > sMin){
+      byMachine[r.machine].minutes += (eMin - sMin);
+    }
+  });
+  return MACHINES.map(m => {
+    const info = byMachine[m.key];
+    const activeDays = info.days.size;
+    const availableMinutes = activeDays * AVAILABLE_HOURS_PER_DAY * 60;
+    const pct = availableMinutes > 0 ? Math.min(100, Math.round((info.minutes/availableMinutes)*100)) : 0;
+    return {machine:m.key, workedHours:+(info.minutes/60).toFixed(1), activeDays, availableHours:+(availableMinutes/60).toFixed(1), pct};
+  });
+}
+
+// 異常率（方案B：不是良率，是「每百箱異常次數」）
+function computeAbnormalStats(abns, scans, logs){
+  const byMachine = {};
+  MACHINES.forEach(m => { byMachine[m.key] = 0; });
+  abns.forEach(r => { const c=parseFloat(r['異常次數'])||1; if(byMachine[r['機台']]!==undefined) byMachine[r['機台']]+=c; });
+  scans.forEach(r => { const c=parseFloat(r['異常次數'])||1; if(byMachine[r['機台']]!==undefined) byMachine[r['機台']]+=c; });
+
+  const byType = {};
+  abns.forEach(r => {
+    const t = r['異常類型'] || '未分類';
+    const c = parseFloat(r['異常次數'])||1;
+    byType[t] = (byType[t]||0) + c;
+  });
+  const scanTotal = scans.reduce((s,r)=> s+(parseFloat(r['異常次數'])||1), 0);
+  if(scanTotal>0) byType['掃碼異常'] = scanTotal;
+
+  const boxesByMachine = {};
+  MACHINES.forEach(m => { boxesByMachine[m.key] = 0; });
+  logs.forEach(r => { if(boxesByMachine[r.machine]!==undefined) boxesByMachine[r.machine] += (parseFloat(r.dayBoxes)||0); });
+
+  const rateByMachine = MACHINES.map(m => {
+    const count = byMachine[m.key]||0;
+    const boxes = boxesByMachine[m.key]||0;
+    const rate = boxes>0 ? +((count/boxes)*100).toFixed(2) : null;
+    return {machine:m.key, count, boxes, rate};
+  });
+
+  return {byMachine, byType, rateByMachine};
+}
+
+function computeTrendStats(abns, scans){
+  const byDate = {};
+  abns.forEach(r => { const d=recordDateStr(VIEW_CONFIG.abnormal, r); if(!d) return; byDate[d]=(byDate[d]||0)+(parseFloat(r['異常次數'])||1); });
+  scans.forEach(r => { const d=recordDateStr(VIEW_CONFIG.scan, r); if(!d) return; byDate[d]=(byDate[d]||0)+(parseFloat(r['異常次數'])||1); });
+  const dates = Object.keys(byDate).sort();
+  return {labels: dates.map(d=>d.replace('-','/')), data: dates.map(d=>byDate[d])};
+}
+
+function renderDashboard(){
+  const {logs, abns, scans} = getDashRecords();
+  const uptimeStats = computeUptimeStats(logs);
+  const abnStats = computeAbnormalStats(abns, scans, logs);
+  const trend = computeTrendStats(abns, scans);
+  const colors = uptimeStats.map(s => MACHINE_COLORS[s.machine]);
+
+  if(chartUptime) chartUptime.destroy();
+  chartUptime = new Chart(document.getElementById('dash-chart-uptime'), {
+    type:'bar',
+    data:{ labels: uptimeStats.map(s=>s.machine), datasets:[{ label:'稼動率(%)', data: uptimeStats.map(s=>s.pct), backgroundColor: colors, borderRadius:4 }] },
+    options:{ responsive:true, maintainAspectRatio:false, plugins:{legend:{display:false}},
+      scales:{ y:{ beginAtZero:true, max:100, ticks:{color:CHART_TEXT_COLOR}, grid:{color:CHART_GRID_COLOR} }, x:{ ticks:{color:CHART_TEXT_COLOR}, grid:{display:false} } } }
+  });
+
+  document.getElementById('dash-table-uptime').innerHTML = `<table><tr><th>機台</th><th>稼動率</th><th>實際工時</th><th>可作業工時</th><th>有紀錄天數</th></tr>` +
+    uptimeStats.map(s => `<tr><td>${s.machine}</td><td>${s.pct}%</td><td>${s.workedHours} 小時</td><td>${s.availableHours} 小時</td><td>${s.activeDays} 天</td></tr>`).join('') + `</table>`;
+
+  if(chartAbnMachine) chartAbnMachine.destroy();
+  chartAbnMachine = new Chart(document.getElementById('dash-chart-abnormal-machine'), {
+    type:'bar',
+    data:{ labels: abnStats.rateByMachine.map(s=>s.machine), datasets:[{ label:'異常次數', data: abnStats.rateByMachine.map(s=>s.count), backgroundColor: colors, borderRadius:4 }] },
+    options:{ responsive:true, maintainAspectRatio:false, plugins:{legend:{display:false}},
+      scales:{ y:{ beginAtZero:true, ticks:{color:CHART_TEXT_COLOR}, grid:{color:CHART_GRID_COLOR} }, x:{ ticks:{color:CHART_TEXT_COLOR}, grid:{display:false} } } }
+  });
+
+  const typeLabels = Object.keys(abnStats.byType);
+  const typeColors = ['#e8a33d','#3f9088','#d5654a','#7b8ce0','#9c88d6'];
+  if(chartAbnType) chartAbnType.destroy();
+  chartAbnType = new Chart(document.getElementById('dash-chart-abnormal-type'), {
+    type:'bar',
+    data:{ labels: typeLabels, datasets:[{ label:'次數', data: typeLabels.map(t=>abnStats.byType[t]), backgroundColor: typeLabels.map((_,i)=>typeColors[i%typeColors.length]), borderRadius:4 }] },
+    options:{ indexAxis:'y', responsive:true, maintainAspectRatio:false, plugins:{legend:{display:false}},
+      scales:{ x:{ beginAtZero:true, ticks:{color:CHART_TEXT_COLOR}, grid:{color:CHART_GRID_COLOR} }, y:{ ticks:{color:CHART_TEXT_COLOR}, grid:{display:false} } } }
+  });
+
+  if(chartTrend) chartTrend.destroy();
+  chartTrend = new Chart(document.getElementById('dash-chart-trend'), {
+    type:'line',
+    data:{ labels: trend.labels, datasets:[{ label:'異常次數', data: trend.data, borderColor:'#e8a33d', backgroundColor:'rgba(232,163,61,0.15)', fill:true, tension:0.3 }] },
+    options:{ responsive:true, maintainAspectRatio:false, plugins:{legend:{display:false}},
+      scales:{ y:{ beginAtZero:true, ticks:{color:CHART_TEXT_COLOR}, grid:{color:CHART_GRID_COLOR} }, x:{ ticks:{color:CHART_TEXT_COLOR}, grid:{display:false} } } }
+  });
+}
+
+function renderDashMachineTabs(){
+  const wrap = document.getElementById('dash-machine-tabs');
+  const allBtn = `<button class="date-tab${dashMachineFilter===null?' active':''}" data-dash-machine="">全部機台</button>`;
+  const btns = MACHINES.map(m => `<button class="date-tab${dashMachineFilter===m.key?' active':''}" data-dash-machine="${m.key}">${m.key}</button>`).join('');
+  wrap.innerHTML = allBtn + btns;
+}
+
+function openDashboard(){
+  document.getElementById('dashboard-overlay').classList.add('open');
+  setDashPreset('week');
+  renderDashMachineTabs();
+}
+function closeDashboard(){ document.getElementById('dashboard-overlay').classList.remove('open'); }
+
+document.getElementById('dashboard-btn').addEventListener('click', openDashboard);
+document.getElementById('dashboard-close-x').addEventListener('click', closeDashboard);
+document.getElementById('dashboard-overlay').addEventListener('click', (e) => { if(e.target.id==='dashboard-overlay') closeDashboard(); });
+document.querySelectorAll('.dash-presets [data-preset]').forEach(btn => {
+  btn.addEventListener('click', () => setDashPreset(btn.dataset.preset));
+});
+document.getElementById('dash-machine-tabs').addEventListener('click', (e) => {
+  const btn = e.target.closest('[data-dash-machine]');
+  if(!btn) return;
+  dashMachineFilter = btn.dataset.dashMachine || null;
+  renderDashMachineTabs();
+  renderDashboard();
+});
+initDashDatePickers();
+
+// ---------- 儀表板匯出 ----------
+function dashReportTitle(){
+  const machineLabel = dashMachineFilter || '全部機台';
+  return `產線統計報表（${machineLabel}・${dashRange.label}）`;
+}
+
+function buildDashReportHtml(){
+  const {logs, abns, scans} = getDashRecords();
+  const uptimeStats = computeUptimeStats(logs);
+  const abnStats = computeAbnormalStats(abns, scans, logs);
+  const now = new Date();
+  const pad = n => String(n).padStart(2,'0');
+  const genTime = `${now.getFullYear()}-${pad(now.getMonth()+1)}-${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())}`;
+
+  const imgUptime = chartUptime ? chartUptime.toBase64Image() : '';
+  const imgAbnMachine = chartAbnMachine ? chartAbnMachine.toBase64Image() : '';
+  const imgAbnType = chartAbnType ? chartAbnType.toBase64Image() : '';
+  const imgTrend = chartTrend ? chartTrend.toBase64Image() : '';
+
+  const uptimeRows = uptimeStats.map(s => `<tr><td>${s.machine}</td><td>${s.pct}%</td><td>${s.workedHours}</td><td>${s.availableHours}</td><td>${s.activeDays}</td></tr>`).join('');
+  const abnRows = abnStats.rateByMachine.map(s => `<tr><td>${s.machine}</td><td>${s.count}</td><td>${s.boxes}</td><td>${s.rate===null?'—':s.rate}</td></tr>`).join('');
+
+  return `<html><head><meta charset="UTF-8"><title>${dashReportTitle()}</title>
+  <style>
+    body{font-family:"Microsoft JhengHei","PingFang TC",sans-serif; color:#222; padding:24px;}
+    h1{font-size:20px; margin-bottom:4px;}
+    .meta{color:#666; font-size:12px; margin-bottom:20px;}
+    h2{font-size:15px; margin-top:28px; border-bottom:1px solid #ccc; padding-bottom:4px;}
+    table{border-collapse:collapse; width:100%; margin-top:8px; font-size:12px;}
+    th,td{border:1px solid #ccc; padding:6px 10px; text-align:left;}
+    th{background:#f2f2f2;}
+    img{max-width:100%; margin-top:10px;}
+    .note{font-size:11px; color:#888; margin-top:6px;}
+  </style></head>
+  <body>
+    <h1>${dashReportTitle()}</h1>
+    <div class="meta">產生時間：${genTime}</div>
+    <p class="note">稼動率基準：每台機台每天可作業時數固定 7.5 小時（已扣除三段固定休息時間）。異常率為換算每百箱異常次數，非良率。</p>
+    <h2>稼動率</h2>
+    <img src="${imgUptime}">
+    <table><tr><th>機台</th><th>稼動率</th><th>實際工時(小時)</th><th>可作業工時(小時)</th><th>有紀錄天數</th></tr>${uptimeRows}</table>
+    <h2>異常次數 — 依機台</h2>
+    <img src="${imgAbnMachine}">
+    <table><tr><th>機台</th><th>異常次數</th><th>完成箱數</th><th>每百箱異常次數</th></tr>${abnRows}</table>
+    <h2>異常次數 — 依類型</h2>
+    <img src="${imgAbnType}">
+    <h2>異常趨勢</h2>
+    <img src="${imgTrend}">
+  </body></html>`;
+}
+
+function exportDashboardExcel(){
+  const {logs, abns, scans} = getDashRecords();
+  const uptimeStats = computeUptimeStats(logs);
+  const abnStats = computeAbnormalStats(abns, scans, logs);
+
+  const wb = XLSX.utils.book_new();
+  const wsUptime = XLSX.utils.json_to_sheet(uptimeStats.map(s => ({機台:s.machine, '稼動率(%)':s.pct, 實際工時:s.workedHours, 可作業工時:s.availableHours, 有紀錄天數:s.activeDays})));
+  XLSX.utils.book_append_sheet(wb, wsUptime, '稼動率');
+  const wsAbn = XLSX.utils.json_to_sheet(abnStats.rateByMachine.map(s => ({機台:s.machine, 異常次數:s.count, 完成箱數:s.boxes, 每百箱異常次數:s.rate})));
+  XLSX.utils.book_append_sheet(wb, wsAbn, '異常統計');
+  const wsType = XLSX.utils.json_to_sheet(Object.entries(abnStats.byType).map(([k,v]) => ({異常類型:k, 次數:v})));
+  XLSX.utils.book_append_sheet(wb, wsType, '異常類型分布');
+
+  XLSX.writeFile(wb, `統計報表_${dashRange.label}.xlsx`);
+}
+
+function exportDashboardWord(){
+  const html = buildDashReportHtml();
+  const blob = new Blob(['\ufeff', html], {type:'application/msword'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `統計報表_${dashRange.label}.doc`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+function exportDashboardPdf(){
+  const html = buildDashReportHtml();
+  const win = window.open('', '_blank');
+  win.document.write(html);
+  win.document.close();
+  setTimeout(() => { win.print(); }, 400);
+}
+
+document.getElementById('dash-export-excel').addEventListener('click', exportDashboardExcel);
+document.getElementById('dash-export-word').addEventListener('click', exportDashboardWord);
+document.getElementById('dash-export-pdf').addEventListener('click', exportDashboardPdf);
 
 tickClock();
 setInterval(tickClock, 1000);
