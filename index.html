@@ -525,7 +525,7 @@
 
 <div class="wrap">
   <div class="topbar">
-    <h1>產線即時監看板 <button class="version-badge" id="version-badge">v10.6</button></h1>
+    <h1>產線即時監看板 <button class="version-badge" id="version-badge">v10.7</button></h1>
     <div class="topbar-right">
       <div class="menu-wrap">
         <button class="export-btn" id="records-btn">查看紀錄 ▾</button>
@@ -1855,6 +1855,7 @@ document.addEventListener('click', (e) => {
 
 // ---------- 版本紀錄 ----------
 const VERSION_LOG = [
+  {v:'v10.7', d:'修正稼動率趨勢折線圖的邏輯漏洞：只有日期、沒有完整開始/結束時間的紀錄（例如標記無作業/停機），之前會被整筆跳過導致斷線，現在會正確畫成 0%'},
   {v:'v10.6', d:'簡化備註篩選：拿掉「隱藏箱數相加備註」這個額外按鈕，改成永遠自動排除純數字相加的備註（如13+7），不算進「只看有備註」的統計與篩選，原始資料完全不受影響'},
   {v:'v10.5', d:'查看紀錄改為依日期+時間正確排序（不再只是單純反轉試算表列順序，就算試算表資料沒排整齊，畫面上也一定是正確時間先後）；新增「隱藏箱數相加備註」篩選，可排除純數字相加的備註（如13+7）；Word 匯出分頁改用更保險的寫法，修正表頭與圖表被拆開的問題'},
   {v:'v10.4', d:'機台異常類型分布圖表加入掃碼異常（共四類），配色改用藍/紅/綠/紫；稼動率趨勢缺口提示改為引導使用「標記今日無作業」補紀錄；Word 匯出改用強制分頁，每個圖表區塊固定從新頁開始，徹底解決跨頁裁切問題'},
@@ -2187,13 +2188,16 @@ function computeDailyUptimeTrend(logs){
   logs.forEach(r => {
     const d = recordDateStr(VIEW_CONFIG.log, r);
     if(!d) return;
+    byDateMachine[d] = byDateMachine[d] || {};
+    // 先確保「這天這台機台有紀錄」這件事被記住，就算沒有完整的開始/結束時間區間也一樣
+    // （例如「無作業／停機」只填了日期，沒有時段可以算）——這樣才會被畫成 0%，而不是被當成沒資料、變成斷線。
+    if(byDateMachine[d][r.machine] === undefined) byDateMachine[d][r.machine] = 0;
     const sp = parseComposite(r.startTime);
     const ep = parseComposite(r.actualEnd);
     const sMin = timeToMinutes(sp.time);
     const eMin = timeToMinutes(ep.time);
     if(sMin===null || eMin===null || eMin<=sMin) return;
-    byDateMachine[d] = byDateMachine[d] || {};
-    byDateMachine[d][r.machine] = (byDateMachine[d][r.machine]||0) + (eMin-sMin);
+    byDateMachine[d][r.machine] += (eMin-sMin);
   });
   const dates = Object.keys(byDateMachine).sort();
   const datasets = MACHINES.map(m => ({
