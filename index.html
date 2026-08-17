@@ -132,6 +132,18 @@
   .dash-table-wrap th, .dash-table-wrap td{text-align:left; padding:6px 10px; border-bottom:1px solid var(--border);}
   .dash-table-wrap th{color:var(--text-muted); font-weight:500; font-size:10.5px;}
   .dash-export{display:flex; align-items:center; gap:10px; padding-top:10px; border-top:1px solid var(--border);}
+  .dash-cards{display:grid; grid-template-columns:repeat(4, 1fr); gap:12px; margin-bottom:16px;}
+  .dash-card{background:var(--bg-field); border:1px solid var(--border); border-left:4px solid var(--accent); border-radius:8px; padding:12px 14px;}
+  .dash-card .dc-name{font-family:var(--font-display); font-weight:600; font-size:14px; color:var(--accent); margin-bottom:6px;}
+  .dash-card .dc-total{font-size:26px; font-weight:700; line-height:1.1; margin-bottom:2px;}
+  .dash-card .dc-total-label{font-size:10px; color:var(--text-muted); margin-bottom:8px;}
+  .dash-card .dc-sub{display:flex; justify-content:space-between; font-size:11px; color:var(--text-secondary); padding-top:6px; border-top:1px solid var(--border);}
+  .dash-table-wrap .level{font-size:10.5px; padding:2px 8px; border-radius:999px; font-weight:600;}
+  .level-high{background:rgba(213,101,74,0.18); color:#d5654a;}
+  .level-mid{background:rgba(232,163,61,0.18); color:#e8a33d;}
+  .level-normal{background:rgba(76,175,109,0.18); color:#4caf6d;}
+  .dash-insight{background:rgba(232,163,61,0.08); border:1px solid rgba(232,163,61,0.3); border-radius:8px; padding:10px 14px; font-size:11.5px; color:var(--text-secondary); line-height:1.7; margin-top:10px;}
+  .dash-insight b{color:#e8a33d;}
   .version-modal-head{
     display:flex;
     align-items:center;
@@ -513,7 +525,7 @@
 
 <div class="wrap">
   <div class="topbar">
-    <h1>產線即時監看板 <button class="version-badge" id="version-badge">v10.1</button></h1>
+    <h1>產線即時監看板 <button class="version-badge" id="version-badge">v10.2</button></h1>
     <div class="topbar-right">
       <div class="menu-wrap">
         <button class="export-btn" id="records-btn">查看紀錄 ▾</button>
@@ -713,13 +725,16 @@
       </div>
 
       <div class="dash-section">
-        <h3>異常次數 — 依機台</h3>
-        <div class="dash-chart-wrap"><canvas id="dash-chart-abnormal-machine"></canvas></div>
+        <h3>稼動率趨勢（依日期）</h3>
+        <div class="dash-chart-wrap"><canvas id="dash-chart-uptime-trend"></canvas></div>
       </div>
 
       <div class="dash-section">
-        <h3>異常次數 — 依類型</h3>
+        <h3>異常統計</h3>
+        <div class="dash-cards" id="dash-abn-cards"></div>
         <div class="dash-chart-wrap"><canvas id="dash-chart-abnormal-type"></canvas></div>
+        <div class="dash-table-wrap" id="dash-abn-rank"></div>
+        <div class="dash-insight" id="dash-abn-insight"></div>
       </div>
 
       <div class="dash-section">
@@ -1815,6 +1830,7 @@ document.addEventListener('click', (e) => {
 
 // ---------- 版本紀錄 ----------
 const VERSION_LOG = [
+  {v:'v10.2', d:'統計儀表板大改版：新增稼動率趨勢折線圖（可個別勾選機台顯示/隱藏）；異常統計改為大數字卡片＋依機台堆疊長條圖＋排行等級標籤＋自動觀察重點；修正匯出 Word/PDF 時圖表被拉伸變形、圖表與表格被拆頁的問題'},
   {v:'v10.1', d:'拿掉「清除兩週前舊紀錄」按鈕，改為資料永久保留在試算表；查看紀錄的日期頁籤改為只列出最近14天，並新增「自訂日期區間」可查更早的歷史資料，避免頁籤無限累積又不會遺失任何資料'},
   {v:'v10.0', d:'新增「統計儀表板」：稼動率（固定7.5小時/天基準）、異常次數依機台/類型統計、異常趨勢圖，可選日期範圍與機台篩選，並能匯出成 Excel／Word／PDF 報表'},
   {v:'v9.3', d:'後端瘦身：清掉「每日進度記錄」舊制度留下的死程式碼（appendDaily、deleteDailyForJob、DailyProgress 分頁讀取），不影響任何現有功能，讀取資料時也會少一次不必要的分頁查詢'},
@@ -2042,7 +2058,7 @@ const CHART_GRID_COLOR = '#2b313a';
 
 let dashRange = {start:null, end:null, label:'近7天'};
 let dashMachineFilter = null;
-let chartUptime=null, chartAbnMachine=null, chartAbnType=null, chartTrend=null;
+let chartUptime=null, chartUptimeTrend=null, chartAbnType=null, chartTrend=null;
 
 function mmddToday(offsetDays){
   const now = new Date();
@@ -2136,33 +2152,99 @@ function computeUptimeStats(logs){
 }
 
 // 異常率（方案B：不是良率，是「每百箱異常次數」）
+// 依機台+依日期算出「每天實際工作分鐘」，用來畫稼動率趨勢折線圖（一台機台一條線）
+function computeDailyUptimeTrend(logs){
+  const byDateMachine = {};
+  logs.forEach(r => {
+    const d = recordDateStr(VIEW_CONFIG.log, r);
+    if(!d) return;
+    const sp = parseComposite(r.startTime);
+    const ep = parseComposite(r.actualEnd);
+    const sMin = timeToMinutes(sp.time);
+    const eMin = timeToMinutes(ep.time);
+    if(sMin===null || eMin===null || eMin<=sMin) return;
+    byDateMachine[d] = byDateMachine[d] || {};
+    byDateMachine[d][r.machine] = (byDateMachine[d][r.machine]||0) + (eMin-sMin);
+  });
+  const dates = Object.keys(byDateMachine).sort();
+  const datasets = MACHINES.map(m => ({
+    label: m.key,
+    data: dates.map(d => {
+      const info = byDateMachine[d];
+      if(!info || info[m.key]===undefined) return null;
+      return Math.min(100, Math.round((info[m.key]/(AVAILABLE_HOURS_PER_DAY*60))*100));
+    }),
+    borderColor: MACHINE_COLORS[m.key],
+    backgroundColor: MACHINE_COLORS[m.key],
+    tension:0.3,
+    spanGaps:false
+  }));
+  return {labels: dates.map(d=>d.replace('-','/')), datasets};
+}
+
+// 異常統計：依機台整理出機台異常/掃碼異常次數、依類型分布、排名與等級
 function computeAbnormalStats(abns, scans, logs){
   const byMachine = {};
-  MACHINES.forEach(m => { byMachine[m.key] = 0; });
-  abns.forEach(r => { const c=parseFloat(r['異常次數'])||1; if(byMachine[r['機台']]!==undefined) byMachine[r['機台']]+=c; });
-  scans.forEach(r => { const c=parseFloat(r['異常次數'])||1; if(byMachine[r['機台']]!==undefined) byMachine[r['機台']]+=c; });
+  MACHINES.forEach(m => { byMachine[m.key] = {abnCount:0, scanCount:0, byType:{}}; AB_TYPE_OPTS.forEach(t=>byMachine[m.key].byType[t]=0); });
 
-  const byType = {};
   abns.forEach(r => {
-    const t = r['異常類型'] || '未分類';
     const c = parseFloat(r['異常次數'])||1;
-    byType[t] = (byType[t]||0) + c;
+    const mk = r['機台'];
+    if(!byMachine[mk]) return;
+    byMachine[mk].abnCount += c;
+    const t = r['異常類型'];
+    if(t && byMachine[mk].byType[t] !== undefined) byMachine[mk].byType[t] += c;
   });
-  const scanTotal = scans.reduce((s,r)=> s+(parseFloat(r['異常次數'])||1), 0);
-  if(scanTotal>0) byType['掃碼異常'] = scanTotal;
+  scans.forEach(r => {
+    const c = parseFloat(r['異常次數'])||1;
+    const mk = r['機台'];
+    if(!byMachine[mk]) return;
+    byMachine[mk].scanCount += c;
+  });
 
   const boxesByMachine = {};
   MACHINES.forEach(m => { boxesByMachine[m.key] = 0; });
   logs.forEach(r => { if(boxesByMachine[r.machine]!==undefined) boxesByMachine[r.machine] += (parseFloat(r.dayBoxes)||0); });
 
-  const rateByMachine = MACHINES.map(m => {
-    const count = byMachine[m.key]||0;
+  const perMachine = MACHINES.map(m => {
+    const info = byMachine[m.key];
+    const total = info.abnCount + info.scanCount;
     const boxes = boxesByMachine[m.key]||0;
-    const rate = boxes>0 ? +((count/boxes)*100).toFixed(2) : null;
-    return {machine:m.key, count, boxes, rate};
+    const rate = boxes>0 ? +((total/boxes)*100).toFixed(2) : null;
+    return {machine:m.key, abnCount:info.abnCount, scanCount:info.scanCount, total, byType:info.byType, boxes, rate};
   });
 
-  return {byMachine, byType, rateByMachine};
+  const totalAll = perMachine.reduce((s,p)=>s+p.total,0);
+  const avg = totalAll / MACHINES.length;
+  const ranked = perMachine.slice().sort((a,b)=>b.total-a.total).map(p => {
+    let level = '中等', levelCls = 'level-mid';
+    if(p.total >= avg*1.3){ level='偏高'; levelCls='level-high'; }
+    else if(p.total <= avg*0.7){ level='正常'; levelCls='level-normal'; }
+    return Object.assign({}, p, {level, levelCls});
+  });
+
+  return {perMachine, ranked, avg, totalAll};
+}
+
+// 自動生成一兩句「觀察重點」文字，純粹用來提示，不是精確的統計推論
+function buildAbnormalInsight(abnStats){
+  if(abnStats.totalAll === 0) return '目前篩選範圍內沒有異常紀錄。';
+  const sentences = [];
+  const top = abnStats.ranked[0];
+  const bottom = abnStats.ranked[abnStats.ranked.length-1];
+  if(top.level === '偏高' && bottom.total > 0){
+    const ratio = (top.total / bottom.total).toFixed(1);
+    const topType = Object.entries(top.byType).sort((a,b)=>b[1]-a[1])[0];
+    const typeNote = (topType && topType[1] > 0) ? `，且集中在「${topType[0]}」（${topType[1]}次）` : '';
+    sentences.push(`<b>${top.machine}</b>異常次數明顯高於其他機台（${top.total}次，是最低${bottom.machine}的${ratio}倍）${typeNote}。`);
+  }
+  abnStats.perMachine.forEach(p => {
+    if(p.scanCount >= 5 && p.abnCount <= 1 && p.scanCount > p.abnCount*3){
+      sentences.push(`<b>${p.machine}</b>掃碼異常偏多（${p.scanCount}次）但機台異常極少（${p.abnCount}次），型態與其他機台不同，值得個別追查原因。`);
+    }
+  });
+  if(!sentences.length) sentences.push('目前各機台異常次數分布沒有明顯異常，維持正常觀察即可。');
+  return sentences.join('<br>');
 }
 
 function computeTrendStats(abns, scans){
@@ -2173,11 +2255,14 @@ function computeTrendStats(abns, scans){
   return {labels: dates.map(d=>d.replace('-','/')), data: dates.map(d=>byDate[d])};
 }
 
+const ABN_TYPE_COLORS = {'單捲標貼歪':'#e8a33d','料盤載台推擠':'#7b8ce0','料盤毀損':'#d5654a'};
+
 function renderDashboard(){
   const {logs, abns, scans} = getDashRecords();
   const uptimeStats = computeUptimeStats(logs);
   const abnStats = computeAbnormalStats(abns, scans, logs);
   const trend = computeTrendStats(abns, scans);
+  const uptimeTrend = computeDailyUptimeTrend(logs);
   const colors = uptimeStats.map(s => MACHINE_COLORS[s.machine]);
 
   if(chartUptime) chartUptime.destroy();
@@ -2191,23 +2276,44 @@ function renderDashboard(){
   document.getElementById('dash-table-uptime').innerHTML = `<table><tr><th>機台</th><th>稼動率</th><th>實際工時</th><th>可作業工時</th><th>有紀錄天數</th></tr>` +
     uptimeStats.map(s => `<tr><td>${s.machine}</td><td>${s.pct}%</td><td>${s.workedHours} 小時</td><td>${s.availableHours} 小時</td><td>${s.activeDays} 天</td></tr>`).join('') + `</table>`;
 
-  if(chartAbnMachine) chartAbnMachine.destroy();
-  chartAbnMachine = new Chart(document.getElementById('dash-chart-abnormal-machine'), {
-    type:'bar',
-    data:{ labels: abnStats.rateByMachine.map(s=>s.machine), datasets:[{ label:'異常次數', data: abnStats.rateByMachine.map(s=>s.count), backgroundColor: colors, borderRadius:4 }] },
-    options:{ responsive:true, maintainAspectRatio:false, plugins:{legend:{display:false}},
-      scales:{ y:{ beginAtZero:true, ticks:{color:CHART_TEXT_COLOR}, grid:{color:CHART_GRID_COLOR} }, x:{ ticks:{color:CHART_TEXT_COLOR}, grid:{display:false} } } }
+  if(chartUptimeTrend) chartUptimeTrend.destroy();
+  chartUptimeTrend = new Chart(document.getElementById('dash-chart-uptime-trend'), {
+    type:'line',
+    data:{ labels: uptimeTrend.labels, datasets: uptimeTrend.datasets },
+    options:{ responsive:true, maintainAspectRatio:false,
+      plugins:{legend:{display:true, position:'top', labels:{color:CHART_TEXT_COLOR, boxWidth:12, font:{size:10}}}},
+      scales:{ y:{ beginAtZero:true, max:100, ticks:{color:CHART_TEXT_COLOR}, grid:{color:CHART_GRID_COLOR} }, x:{ ticks:{color:CHART_TEXT_COLOR}, grid:{display:false} } } }
   });
 
-  const typeLabels = Object.keys(abnStats.byType);
-  const typeColors = ['#e8a33d','#3f9088','#d5654a','#7b8ce0','#9c88d6'];
+  document.getElementById('dash-abn-cards').innerHTML = abnStats.perMachine.map(p => `
+    <div class="dash-card" style="--accent:${MACHINE_COLORS[p.machine]}">
+      <div class="dc-name">${p.machine}</div>
+      <div class="dc-total">${p.total}</div>
+      <div class="dc-total-label">累計異常次數</div>
+      <div class="dc-sub"><span>機台異常</span><span>${p.abnCount}</span></div>
+      <div class="dc-sub"><span>掃碼異常</span><span>${p.scanCount}</span></div>
+    </div>
+  `).join('');
+
   if(chartAbnType) chartAbnType.destroy();
   chartAbnType = new Chart(document.getElementById('dash-chart-abnormal-type'), {
     type:'bar',
-    data:{ labels: typeLabels, datasets:[{ label:'次數', data: typeLabels.map(t=>abnStats.byType[t]), backgroundColor: typeLabels.map((_,i)=>typeColors[i%typeColors.length]), borderRadius:4 }] },
-    options:{ indexAxis:'y', responsive:true, maintainAspectRatio:false, plugins:{legend:{display:false}},
-      scales:{ x:{ beginAtZero:true, ticks:{color:CHART_TEXT_COLOR}, grid:{color:CHART_GRID_COLOR} }, y:{ ticks:{color:CHART_TEXT_COLOR}, grid:{display:false} } } }
+    data:{
+      labels: abnStats.perMachine.map(p=>p.machine),
+      datasets: AB_TYPE_OPTS.map(t => ({ label:t, data: abnStats.perMachine.map(p=>p.byType[t]), backgroundColor: ABN_TYPE_COLORS[t] }))
+    },
+    options:{
+      indexAxis:'y', responsive:true, maintainAspectRatio:false,
+      plugins:{legend:{display:true, position:'top', labels:{color:CHART_TEXT_COLOR, boxWidth:12, font:{size:10}}}},
+      scales:{ x:{ stacked:true, beginAtZero:true, ticks:{color:CHART_TEXT_COLOR}, grid:{color:CHART_GRID_COLOR} }, y:{ stacked:true, ticks:{color:CHART_TEXT_COLOR}, grid:{display:false} } }
+    }
   });
+
+  document.getElementById('dash-abn-rank').innerHTML = `<table><tr><th>排名</th><th>機台</th><th>機台異常</th><th>掃碼異常</th><th>合計</th><th>等級</th></tr>` +
+    abnStats.ranked.map((p,i) => `<tr><td>${i+1}</td><td>${p.machine}</td><td>${p.abnCount}</td><td>${p.scanCount}</td><td>${p.total}</td><td><span class="level ${p.levelCls}">${p.level}</span></td></tr>`).join('') +
+    `</table>`;
+
+  document.getElementById('dash-abn-insight').innerHTML = '⚠ 觀察重點：<br>' + buildAbnormalInsight(abnStats);
 
   if(chartTrend) chartTrend.destroy();
   chartTrend = new Chart(document.getElementById('dash-chart-trend'), {
@@ -2253,48 +2359,112 @@ function dashReportTitle(){
   return `產線統計報表（${machineLabel}・${dashRange.label}）`;
 }
 
+// 匯出用的圖表，固定用一個看不到的畫布、固定寬高去畫，
+// 跟畫面上會隨螢幕寬度變動的圖表分開，才不會塞進 Word/PDF 後比例被拉伸變形。
+function renderChartForExport(config, width, height){
+  const canvas = document.createElement('canvas');
+  canvas.width = width;
+  canvas.height = height;
+  const chart = new Chart(canvas, Object.assign({}, config, {
+    options: Object.assign({}, config.options, {responsive:false, animation:false})
+  }));
+  const img = chart.toBase64Image();
+  chart.destroy();
+  return img;
+}
+
 function buildDashReportHtml(){
   const {logs, abns, scans} = getDashRecords();
   const uptimeStats = computeUptimeStats(logs);
   const abnStats = computeAbnormalStats(abns, scans, logs);
+  const trend = computeTrendStats(abns, scans);
+  const uptimeTrend = computeDailyUptimeTrend(logs);
+  const colors = uptimeStats.map(s => MACHINE_COLORS[s.machine]);
   const now = new Date();
   const pad = n => String(n).padStart(2,'0');
   const genTime = `${now.getFullYear()}-${pad(now.getMonth()+1)}-${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())}`;
 
-  const imgUptime = chartUptime ? chartUptime.toBase64Image() : '';
-  const imgAbnMachine = chartAbnMachine ? chartAbnMachine.toBase64Image() : '';
-  const imgAbnType = chartAbnType ? chartAbnType.toBase64Image() : '';
-  const imgTrend = chartTrend ? chartTrend.toBase64Image() : '';
+  const W = 720, H = 340; // 固定匯出圖表尺寸，避免拉伸變形
+
+  const imgUptime = renderChartForExport({
+    type:'bar',
+    data:{ labels: uptimeStats.map(s=>s.machine), datasets:[{ label:'稼動率(%)', data: uptimeStats.map(s=>s.pct), backgroundColor: colors, borderRadius:4 }] },
+    options:{ plugins:{legend:{display:false}}, scales:{ y:{ beginAtZero:true, max:100 } } }
+  }, W, H);
+
+  const imgUptimeTrend = renderChartForExport({
+    type:'line',
+    data:{ labels: uptimeTrend.labels, datasets: uptimeTrend.datasets },
+    options:{ plugins:{legend:{display:true, position:'top'}}, scales:{ y:{ beginAtZero:true, max:100 } } }
+  }, W, H);
+
+  const imgAbnType = renderChartForExport({
+    type:'bar',
+    data:{ labels: abnStats.perMachine.map(p=>p.machine), datasets: AB_TYPE_OPTS.map(t => ({ label:t, data: abnStats.perMachine.map(p=>p.byType[t]), backgroundColor: ABN_TYPE_COLORS[t] })) },
+    options:{ indexAxis:'y', plugins:{legend:{display:true, position:'top'}}, scales:{ x:{ stacked:true, beginAtZero:true }, y:{ stacked:true } } }
+  }, W, H);
+
+  const imgTrend = renderChartForExport({
+    type:'line',
+    data:{ labels: trend.labels, datasets:[{ label:'異常次數', data: trend.data, borderColor:'#e8a33d', backgroundColor:'rgba(232,163,61,0.15)', fill:true, tension:0.3 }] },
+    options:{ plugins:{legend:{display:false}}, scales:{ y:{ beginAtZero:true } } }
+  }, W, H);
 
   const uptimeRows = uptimeStats.map(s => `<tr><td>${s.machine}</td><td>${s.pct}%</td><td>${s.workedHours}</td><td>${s.availableHours}</td><td>${s.activeDays}</td></tr>`).join('');
-  const abnRows = abnStats.rateByMachine.map(s => `<tr><td>${s.machine}</td><td>${s.count}</td><td>${s.boxes}</td><td>${s.rate===null?'—':s.rate}</td></tr>`).join('');
+  const cardRows = abnStats.perMachine.map(p => `<tr><td>${p.machine}</td><td>${p.total}</td><td>${p.abnCount}</td><td>${p.scanCount}</td></tr>`).join('');
+  const rankRows = abnStats.ranked.map((p,i) => `<tr><td>${i+1}</td><td>${p.machine}</td><td>${p.abnCount}</td><td>${p.scanCount}</td><td>${p.total}</td><td>${p.level}</td></tr>`).join('');
+  const insightHtml = buildAbnormalInsight(abnStats);
 
   return `<html><head><meta charset="UTF-8"><title>${dashReportTitle()}</title>
   <style>
     body{font-family:"Microsoft JhengHei","PingFang TC",sans-serif; color:#222; padding:24px;}
     h1{font-size:20px; margin-bottom:4px;}
     .meta{color:#666; font-size:12px; margin-bottom:20px;}
-    h2{font-size:15px; margin-top:28px; border-bottom:1px solid #ccc; padding-bottom:4px;}
+    h2{font-size:15px; margin-top:0; border-bottom:1px solid #ccc; padding-bottom:4px;}
     table{border-collapse:collapse; width:100%; margin-top:8px; font-size:12px;}
     th,td{border:1px solid #ccc; padding:6px 10px; text-align:left;}
     th{background:#f2f2f2;}
-    img{max-width:100%; margin-top:10px;}
+    img{width:100%; height:auto; margin-top:10px; display:block;}
     .note{font-size:11px; color:#888; margin-top:6px;}
+    .block{page-break-inside:avoid; break-inside:avoid; margin-top:28px;}
+    .insight{background:#fff8ec; border:1px solid #e8d7b0; border-radius:6px; padding:10px 14px; font-size:12px; margin-top:10px; line-height:1.7;}
   </style></head>
   <body>
     <h1>${dashReportTitle()}</h1>
     <div class="meta">產生時間：${genTime}</div>
-    <p class="note">稼動率基準：每台機台每天可作業時數固定 7.5 小時（已扣除三段固定休息時間）。異常率為換算每百箱異常次數，非良率。</p>
-    <h2>稼動率</h2>
-    <img src="${imgUptime}">
-    <table><tr><th>機台</th><th>稼動率</th><th>實際工時(小時)</th><th>可作業工時(小時)</th><th>有紀錄天數</th></tr>${uptimeRows}</table>
-    <h2>異常次數 — 依機台</h2>
-    <img src="${imgAbnMachine}">
-    <table><tr><th>機台</th><th>異常次數</th><th>完成箱數</th><th>每百箱異常次數</th></tr>${abnRows}</table>
-    <h2>異常次數 — 依類型</h2>
-    <img src="${imgAbnType}">
-    <h2>異常趨勢</h2>
-    <img src="${imgTrend}">
+    <p class="note">稼動率基準：每台機台每天可作業時數固定 7.5 小時（已扣除三段固定休息時間）。異常統計為次數統計，非良率。</p>
+
+    <div class="block">
+      <h2>稼動率</h2>
+      <img src="${imgUptime}" width="${W}" height="${H}">
+      <table><tr><th>機台</th><th>稼動率</th><th>實際工時(小時)</th><th>可作業工時(小時)</th><th>有紀錄天數</th></tr>${uptimeRows}</table>
+    </div>
+
+    <div class="block">
+      <h2>稼動率趨勢</h2>
+      <img src="${imgUptimeTrend}" width="${W}" height="${H}">
+    </div>
+
+    <div class="block">
+      <h2>異常統計 — 總覽</h2>
+      <table><tr><th>機台</th><th>累計異常次數</th><th>機台異常</th><th>掃碼異常</th></tr>${cardRows}</table>
+    </div>
+
+    <div class="block">
+      <h2>機台異常類型分布（依機台）</h2>
+      <img src="${imgAbnType}" width="${W}" height="${H}">
+    </div>
+
+    <div class="block">
+      <h2>異常次數排行</h2>
+      <table><tr><th>排名</th><th>機台</th><th>機台異常</th><th>掃碼異常</th><th>合計</th><th>等級</th></tr>${rankRows}</table>
+      <div class="insight">⚠ 觀察重點：<br>${insightHtml}</div>
+    </div>
+
+    <div class="block">
+      <h2>異常趨勢（依日期）</h2>
+      <img src="${imgTrend}" width="${W}" height="${H}">
+    </div>
   </body></html>`;
 }
 
@@ -2306,9 +2476,9 @@ function exportDashboardExcel(){
   const wb = XLSX.utils.book_new();
   const wsUptime = XLSX.utils.json_to_sheet(uptimeStats.map(s => ({機台:s.machine, '稼動率(%)':s.pct, 實際工時:s.workedHours, 可作業工時:s.availableHours, 有紀錄天數:s.activeDays})));
   XLSX.utils.book_append_sheet(wb, wsUptime, '稼動率');
-  const wsAbn = XLSX.utils.json_to_sheet(abnStats.rateByMachine.map(s => ({機台:s.machine, 異常次數:s.count, 完成箱數:s.boxes, 每百箱異常次數:s.rate})));
-  XLSX.utils.book_append_sheet(wb, wsAbn, '異常統計');
-  const wsType = XLSX.utils.json_to_sheet(Object.entries(abnStats.byType).map(([k,v]) => ({異常類型:k, 次數:v})));
+  const wsAbn = XLSX.utils.json_to_sheet(abnStats.ranked.map((p,i) => ({排名:i+1, 機台:p.machine, 機台異常:p.abnCount, 掃碼異常:p.scanCount, 合計:p.total, 等級:p.level})));
+  XLSX.utils.book_append_sheet(wb, wsAbn, '異常次數排行');
+  const wsType = XLSX.utils.json_to_sheet(abnStats.perMachine.map(p => Object.assign({機台:p.machine}, p.byType)));
   XLSX.utils.book_append_sheet(wb, wsType, '異常類型分布');
 
   XLSX.writeFile(wb, `統計報表_${dashRange.label}.xlsx`);
