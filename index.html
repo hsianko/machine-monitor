@@ -525,7 +525,7 @@
 
 <div class="wrap">
   <div class="topbar">
-    <h1>產線即時監看板 <button class="version-badge" id="version-badge">v10.4</button></h1>
+    <h1>產線即時監看板 <button class="version-badge" id="version-badge">v10.6</button></h1>
     <div class="topbar-right">
       <div class="menu-wrap">
         <button class="export-btn" id="records-btn">查看紀錄 ▾</button>
@@ -1511,6 +1511,29 @@ let remarkFilterOn = false;
 let currentMachineFilter = null; // null = 全部機台
 let currentRangeFilter = null; // {start:'MM-DD', end:'MM-DD'} 或 null
 
+// 判斷備註是不是「純粹把箱數相加」這種計算式（例如 "13+7"、"22+2"、"7+5+7+6+5"），
+// 這種備註只是用來湊數字，不是真正想特別記錄的異常/特殊事項，永遠不算進「有備註」裡。
+function isBoxMathRemark(v){
+  return /^[\d\s+]+$/.test(String(v).trim());
+}
+function hasMeaningfulRemark(cfg, r){
+  const v = cfg.remarkKey && r[cfg.remarkKey];
+  return !!v && !isBoxMathRemark(v);
+}
+
+// 把「M/D」或「M/D HH:MM」轉成可以直接比大小的數字，用來排序查看紀錄的列表，
+// 不管試算表裡實際的列順序如何都能正確排出時間先後。
+function sortKeyForRow(cfg, r){
+  const raw = r[cfg.groupDateKey || cfg.dateKey];
+  if(!raw) return -1;
+  const m = String(raw).trim().match(/^(\d{1,2})\/(\d{1,2})(?:\s+(\d{1,2}):(\d{2}))?/);
+  if(!m) return -1;
+  const month = parseInt(m[1],10), day = parseInt(m[2],10);
+  const hour = m[3] ? parseInt(m[3],10) : 0;
+  const min = m[4] ? parseInt(m[4],10) : 0;
+  return month*1000000 + day*10000 + hour*100 + min;
+}
+
 // 加入一筆新紀錄後，把「機台產能記錄」直接篩選到「今天」，
 // 不用還要自己再點一次日期分頁去找剛剛新增的那筆。
 function focusTodayInLog(){
@@ -1636,7 +1659,7 @@ function renderViewer(view, highlightLast, keepDateFilter){
 
   const remarkWrap = document.getElementById('viewer-remark-filter');
   if(cfg.remarkKey){
-    const remarkCount = allData.filter(r => r[cfg.remarkKey]).length;
+    const remarkCount = allData.filter(r => hasMeaningfulRemark(cfg, r)).length;
     remarkWrap.innerHTML = `<button class="date-tab remark-filter-btn${remarkFilterOn?' active':''}" id="remark-filter-btn">📌 只看有備註 (${remarkCount})</button>`;
     remarkWrap.style.display = '';
     document.getElementById('remark-filter-btn').addEventListener('click', () => {
@@ -1658,12 +1681,13 @@ function renderViewer(view, highlightLast, keepDateFilter){
     filtered = filtered.filter(r => recordDateStr(cfg, r) === currentDateFilter);
   }
   if(cfg.remarkKey && remarkFilterOn){
-    filtered = filtered.filter(r => r[cfg.remarkKey]);
+    filtered = filtered.filter(r => hasMeaningfulRemark(cfg, r));
   }
   if(currentMachineFilter){
     filtered = filtered.filter(r => r[machineKey] === currentMachineFilter);
   }
-  currentViewRows = filtered.slice().reverse();
+  // 依日期＋時間排序（最新在最前面），不管試算表裡實際的列順序是不是亂的都一樣正確。
+  currentViewRows = filtered.slice().sort((a,b) => sortKeyForRow(cfg,b) - sortKeyForRow(cfg,a));
 
   // 統計列：純畫面顯示用，跟匯出的 CSV 完全無關
   const statsWrap = document.getElementById('viewer-stats');
@@ -1682,7 +1706,7 @@ function renderViewer(view, highlightLast, keepDateFilter){
     const headHtml = '<tr>' + cfg.headers.map(h => `<th>${h}</th>`).join('') + '<th>操作</th></tr>';
     const bodyHtml = currentViewRows.map((r, idx) => {
       const isNew = highlightLast && idx === 0;
-      const hasRemark = cfg.remarkKey && r[cfg.remarkKey];
+      const hasRemark = hasMeaningfulRemark(cfg, r);
       const cells = cfg.keys.map((k, ci) => {
         const val = escapeHtml(cleanDisplayTime(displayValue(view, r, k)));
         const icon = (hasRemark && ci === 0) ? '<span class="remark-icon">📌</span>' : '';
@@ -1831,6 +1855,8 @@ document.addEventListener('click', (e) => {
 
 // ---------- 版本紀錄 ----------
 const VERSION_LOG = [
+  {v:'v10.6', d:'簡化備註篩選：拿掉「隱藏箱數相加備註」這個額外按鈕，改成永遠自動排除純數字相加的備註（如13+7），不算進「只看有備註」的統計與篩選，原始資料完全不受影響'},
+  {v:'v10.5', d:'查看紀錄改為依日期+時間正確排序（不再只是單純反轉試算表列順序，就算試算表資料沒排整齊，畫面上也一定是正確時間先後）；新增「隱藏箱數相加備註」篩選，可排除純數字相加的備註（如13+7）；Word 匯出分頁改用更保險的寫法，修正表頭與圖表被拆開的問題'},
   {v:'v10.4', d:'機台異常類型分布圖表加入掃碼異常（共四類），配色改用藍/紅/綠/紫；稼動率趨勢缺口提示改為引導使用「標記今日無作業」補紀錄；Word 匯出改用強制分頁，每個圖表區塊固定從新頁開始，徹底解決跨頁裁切問題'},
   {v:'v10.3', d:'異常統計卡片/排行改為完整列出三種機台異常類型+掃碼異常（原本只顯示機台異常總數）；異常類型配色改用藍/靛紫/珊瑚紅，區分度更高；稼動率趨勢遇到資料缺口時會自動顯示提示；修正 Word 匯出圖表位移與跨頁問題'},
   {v:'v10.2', d:'統計儀表板大改版：新增稼動率趨勢折線圖（可個別勾選機台顯示/隱藏）；異常統計改為大數字卡片＋依機台堆疊長條圖＋排行等級標籤＋自動觀察重點；修正匯出 Word/PDF 時圖表被拉伸變形、圖表與表格被拆頁的問題'},
@@ -2457,8 +2483,11 @@ function buildDashReportHtml(){
 
   // Word 對一般 <div> 的分頁控制常常不理會，改用「單一儲存格的表格」包每個區塊，
   // Word 對表格的 page-break-inside 支援穩定很多，這是常見的相容寫法。
+  // Word 對「表格加 page-break-before 樣式」的支援不穩定，改用 Word 自己存檔時也會用的寫法：
+  // 一個獨立的 <br style="page-break-before:always"> 分頁標記，放在區塊「外面」，Word 認得的機率高很多。
   const block = (title, bodyHtml, forceNewPage) => `
-    <table class="block-table" style="page-break-inside:avoid; mso-break-inside:avoid; width:100%; border-collapse:collapse; margin-top:26px;${forceNewPage ? ' page-break-before:always; mso-page-break-before:always;' : ''}">
+    ${forceNewPage ? '<br clear="all" style="page-break-before:always; mso-page-break-before:always;">' : ''}
+    <table class="block-table" style="page-break-inside:avoid; mso-break-inside:avoid; width:100%; border-collapse:collapse; margin-top:26px;">
       <tr><td style="border:none; padding:0;">
         <h2>${title}</h2>
         ${bodyHtml}
