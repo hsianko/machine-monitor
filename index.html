@@ -525,7 +525,7 @@
 
 <div class="wrap">
   <div class="topbar">
-    <h1>產線即時監看板 <button class="version-badge" id="version-badge">v10.7</button></h1>
+    <h1>產線即時監看板 <button class="version-badge" id="version-badge">v11.0</button></h1>
     <div class="topbar-right">
       <div class="menu-wrap">
         <button class="export-btn" id="records-btn">查看紀錄 ▾</button>
@@ -716,7 +716,7 @@
         </div>
       </div>
       <div class="date-tabs" id="dash-machine-tabs"></div>
-      <p class="dash-note">稼動率基準：每台機台每天可作業時數固定 7.5 小時（已扣除三段固定休息時間）。異常率為「機台異常記錄＋掃碼異常記錄」的次數換算每百箱異常次數，不是良率。</p>
+      <p class="dash-note">稼動率基準：可作業時數依當天該機台實際記錄到的最早開始~最晚結束動態計算，並扣除窗口內涵蓋到的固定休息時段（10:30-10:45、12:00-13:00、15:00-15:15，加班另扣18:00-18:15）；完全沒有時間紀錄的日子（如標記無作業）則以標準7.5小時當備用分母。異常率為「機台異常記錄＋掃碼異常記錄」的次數換算每百箱異常次數，不是良率。</p>
 
       <div class="dash-section">
         <h3>稼動率</h3>
@@ -1855,6 +1855,7 @@ document.addEventListener('click', (e) => {
 
 // ---------- 版本紀錄 ----------
 const VERSION_LOG = [
+  {v:'v11.0', d:'稼動率計算改為方案A：可作業時數不再固定7.5小時，改成依當天實際記錄到的最早開始~最晚結束動態計算，並扣除窗口內的固定休息（含加班18:00-18:15），自動涵蓋加班與操作員跨機台支援的情況；無時間紀錄的日子仍以標準7.5小時當備用分母'},
   {v:'v10.7', d:'修正稼動率趨勢折線圖的邏輯漏洞：只有日期、沒有完整開始/結束時間的紀錄（例如標記無作業/停機），之前會被整筆跳過導致斷線，現在會正確畫成 0%'},
   {v:'v10.6', d:'簡化備註篩選：拿掉「隱藏箱數相加備註」這個額外按鈕，改成永遠自動排除純數字相加的備註（如13+7），不算進「只看有備註」的統計與篩選，原始資料完全不受影響'},
   {v:'v10.5', d:'查看紀錄改為依日期+時間正確排序（不再只是單純反轉試算表列順序，就算試算表資料沒排整齊，畫面上也一定是正確時間先後）；新增「隱藏箱數相加備註」篩選，可排除純數字相加的備註（如13+7）；Word 匯出分頁改用更保險的寫法，修正表頭與圖表被拆開的問題'},
@@ -2082,7 +2083,7 @@ document.addEventListener('input', () => { lastInteractionAt = Date.now(); });
 
 // ---------- 統計儀表板 ----------
 const MACHINE_COLORS = {'大寶':'#e8a33d','二寶':'#3f9088','三寶':'#d5654a','四寶':'#7b8ce0'};
-const AVAILABLE_HOURS_PER_DAY = 7.5; // 每台機台每天可作業時數，已扣除固定休息時間
+const AVAILABLE_HOURS_PER_DAY = 7.5; // 標準班表下的可作業時數，僅在當天完全沒有時間紀錄時當備用分母；一般情況下可作業時數是依當天實際窗口動態計算的
 const CHART_TEXT_COLOR = '#9099a6';
 const CHART_GRID_COLOR = '#2b313a';
 
@@ -2156,56 +2157,92 @@ function timeToMinutes(hhmm){
   return parseInt(m[1],10)*60 + parseInt(m[2],10);
 }
 
-// 稼動率 = 該機台在範圍內所有紀錄的實際工作時數加總 ÷（有紀錄的天數 × 每天可作業7.5小時）
-function computeUptimeStats(logs){
-  const byMachine = {};
-  MACHINES.forEach(m => { byMachine[m.key] = {minutes:0, days:new Set()}; });
+// 固定休息時段（分鐘計）：10:30-10:45、12:00-13:00、15:00-15:15，加班時段另外還有 18:00-18:15。
+// 只有「當天實際窗口」有涵蓋到的休息時段，才會被扣掉。
+const FIXED_BREAKS_MIN = [
+  [10*60+30, 10*60+45],
+  [12*60, 13*60],
+  [15*60, 15*60+15],
+  [18*60, 18*60+15]
+];
+const DEFAULT_AVAILABLE_MINUTES = AVAILABLE_HOURS_PER_DAY * 60; // 沒有實際時間窗口可用時的備用分母（例如標記無作業/停機）
+
+// 方案A：可作業時數不是每天都固定7.5小時，而是依「當天這台機台實際記錄到的最早開始~最晚結束」動態抓出當天的作業窗口，
+// 再扣掉窗口內涵蓋到的固定休息時段。這樣加班、或操作員換機台導致當天窗口變長/變短，都會自動反映進去，不用額外設定。
+function computeDayAvailableMinutes(windowStartMin, windowEndMin){
+  let total = windowEndMin - windowStartMin;
+  FIXED_BREAKS_MIN.forEach(([bs, be]) => {
+    const os = Math.max(windowStartMin, bs);
+    const oe = Math.min(windowEndMin, be);
+    if(oe > os) total -= (oe - os);
+  });
+  return Math.max(0, total);
+}
+
+// 把紀錄依「機台→日期」彙整成 {minStart, maxEnd, worked}，是稼動率統計跟趨勢圖共用的基礎資料。
+function buildDailyMachineStats(logs){
+  const result = {};
+  MACHINES.forEach(m => { result[m.key] = {}; });
   logs.forEach(r => {
-    if(!byMachine[r.machine]) return;
+    if(!result[r.machine]) return;
+    const d = recordDateStr(VIEW_CONFIG.log, r);
+    if(!d) return;
+    if(!result[r.machine][d]) result[r.machine][d] = {minStart:null, maxEnd:null, worked:0};
+    const day = result[r.machine][d];
     const sp = parseComposite(r.startTime);
     const ep = parseComposite(r.actualEnd);
     const sMin = timeToMinutes(sp.time);
     const eMin = timeToMinutes(ep.time);
-    const dateKey = recordDateStr(VIEW_CONFIG.log, r);
-    if(dateKey) byMachine[r.machine].days.add(dateKey);
-    if(sMin !== null && eMin !== null && eMin > sMin){
-      byMachine[r.machine].minutes += (eMin - sMin);
-    }
+    if(sMin !== null) day.minStart = day.minStart===null ? sMin : Math.min(day.minStart, sMin);
+    if(eMin !== null) day.maxEnd = day.maxEnd===null ? eMin : Math.max(day.maxEnd, eMin);
+    if(sMin !== null && eMin !== null && eMin > sMin) day.worked += (eMin - sMin);
   });
+  return result;
+}
+
+// 這一天的可作業分鐘數：有實際窗口就動態算，沒有窗口（例如無作業/停機只填日期沒填時間）就用標準7.5小時當備用分母，
+// 確保停機日還是會正確拖累稼動率，不會因為沒有時間資料就被整個忽略。
+function dayAvailableMinutes(day){
+  if(day.minStart !== null && day.maxEnd !== null && day.maxEnd > day.minStart){
+    return computeDayAvailableMinutes(day.minStart, day.maxEnd);
+  }
+  return DEFAULT_AVAILABLE_MINUTES;
+}
+
+function dayPct(day){
+  const avail = dayAvailableMinutes(day);
+  if(avail <= 0) return 0;
+  return Math.min(100, Math.round((day.worked/avail)*100));
+}
+
+// 稼動率 = 範圍內每一天「實際工作分鐘」加總 ÷ 每一天「動態算出的可作業分鐘」加總
+function computeUptimeStats(logs){
+  const byMachine = buildDailyMachineStats(logs);
   return MACHINES.map(m => {
-    const info = byMachine[m.key];
-    const activeDays = info.days.size;
-    const availableMinutes = activeDays * AVAILABLE_HOURS_PER_DAY * 60;
-    const pct = availableMinutes > 0 ? Math.min(100, Math.round((info.minutes/availableMinutes)*100)) : 0;
-    return {machine:m.key, workedHours:+(info.minutes/60).toFixed(1), activeDays, availableHours:+(availableMinutes/60).toFixed(1), pct};
+    const days = byMachine[m.key];
+    const dateKeys = Object.keys(days);
+    let totalWorked = 0, totalAvailable = 0;
+    dateKeys.forEach(d => {
+      totalWorked += days[d].worked;
+      totalAvailable += dayAvailableMinutes(days[d]);
+    });
+    const pct = totalAvailable > 0 ? Math.min(100, Math.round((totalWorked/totalAvailable)*100)) : 0;
+    return {machine:m.key, workedHours:+(totalWorked/60).toFixed(1), activeDays:dateKeys.length, availableHours:+(totalAvailable/60).toFixed(1), pct};
   });
 }
 
-// 異常率（方案B：不是良率，是「每百箱異常次數」）
-// 依機台+依日期算出「每天實際工作分鐘」，用來畫稼動率趨勢折線圖（一台機台一條線）
+// 依機台+依日期算出每天的稼動率百分比，用來畫稼動率趨勢折線圖（一台機台一條線）
 function computeDailyUptimeTrend(logs){
-  const byDateMachine = {};
-  logs.forEach(r => {
-    const d = recordDateStr(VIEW_CONFIG.log, r);
-    if(!d) return;
-    byDateMachine[d] = byDateMachine[d] || {};
-    // 先確保「這天這台機台有紀錄」這件事被記住，就算沒有完整的開始/結束時間區間也一樣
-    // （例如「無作業／停機」只填了日期，沒有時段可以算）——這樣才會被畫成 0%，而不是被當成沒資料、變成斷線。
-    if(byDateMachine[d][r.machine] === undefined) byDateMachine[d][r.machine] = 0;
-    const sp = parseComposite(r.startTime);
-    const ep = parseComposite(r.actualEnd);
-    const sMin = timeToMinutes(sp.time);
-    const eMin = timeToMinutes(ep.time);
-    if(sMin===null || eMin===null || eMin<=sMin) return;
-    byDateMachine[d][r.machine] += (eMin-sMin);
-  });
-  const dates = Object.keys(byDateMachine).sort();
+  const byMachine = buildDailyMachineStats(logs);
+  const allDates = new Set();
+  MACHINES.forEach(m => Object.keys(byMachine[m.key]).forEach(d => allDates.add(d)));
+  const dates = Array.from(allDates).sort();
   const datasets = MACHINES.map(m => ({
     label: m.key,
     data: dates.map(d => {
-      const info = byDateMachine[d];
-      if(!info || info[m.key]===undefined) return null;
-      return Math.min(100, Math.round((info[m.key]/(AVAILABLE_HOURS_PER_DAY*60))*100));
+      const day = byMachine[m.key][d];
+      if(!day) return null;
+      return dayPct(day);
     }),
     borderColor: MACHINE_COLORS[m.key],
     backgroundColor: MACHINE_COLORS[m.key],
@@ -2519,7 +2556,7 @@ function buildDashReportHtml(){
   <body>
     <h1>${dashReportTitle()}</h1>
     <div class="meta">產生時間：${genTime}</div>
-    <p class="note">稼動率基準：每台機台每天可作業時數固定 7.5 小時（已扣除三段固定休息時間）。異常統計為次數統計，非良率。</p>
+    <p class="note">稼動率基準：可作業時數依當天實際窗口動態計算並扣除固定休息時段，無時間紀錄的日子以標準7.5小時當備用分母。異常統計為次數統計，非良率。</p>
 
     ${block('稼動率', `
       <img src="${imgUptime}" width="${W}" height="${H}">
