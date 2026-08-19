@@ -537,7 +537,7 @@
 
 <div class="wrap">
   <div class="topbar">
-    <h1>產線即時監看板 <button class="version-badge" id="version-badge">v11.4</button></h1>
+    <h1>產線即時監看板 <button class="version-badge" id="version-badge">v11.5</button></h1>
     <div class="topbar-right">
       <div class="menu-wrap">
         <button class="export-btn" id="records-btn">查看紀錄 ▾</button>
@@ -1891,6 +1891,7 @@ document.addEventListener('click', (e) => {
 
 // ---------- 版本紀錄 ----------
 const VERSION_LOG = [
+  {v:'v11.5', d:'修正匯出 Excel 報表的兩個顯示問題：(1) 第2列「產生時間」文字被截斷，原因是空字串把儲存格擋住導致文字無法跑版顯示，改成只填第一欄、其餘保持真正空白；(2) 表頭文字被切，改成整張表統一欄寬（取表頭與資料中最長的內容），不會再有欄位忽寬忽窄的問題'},
   {v:'v11.4', d:'修正「讀取失敗」訊息看不懂原因的問題：後端讀取資料時如果發生錯誤，現在會回傳看得懂的錯誤原因（需搭配後端 gs-2026-08-19-v8 以上），前端也會正確辨識這種錯誤、不會誤判成同步成功；讀取失敗時錯誤訊息也會區分「後端執行出錯」跟「連線本身有問題」兩種情況'},
   {v:'v11.3', d:'統計儀表板匯出的 Excel 報表改為正式格式：加上標題列與產生時間、表頭底色、資料格外框、稼動率改為真正的百分比格式、異常等級（偏高／中等／正常）依顏色標示，欄寬也會自動加寬避免文字被截斷'},
   {v:'v11.2', d:'卡片自動偵測未完成訂單時，支援同一客戶有多筆未完成訂單的情況：改為列出全部符合的訂單（各自標示機台、累計箱數、最後更新時間），每一筆都有獨立的「接續此訂單」按鈕，可自行挑選要接哪一筆'},
@@ -2691,9 +2692,11 @@ const XLSX_STYLE_LEVEL = {
 function buildStyledSheet(title, subtitle, headers, rows, opts){
   opts = opts || {};
   const ncols = headers.length;
+  // 標題列跟副標題列只填第一欄，其餘欄位保持真正空白（不能塞空字串），
+  // 這樣合併儲存格、以及副標題文字超出欄寬時才能正常「跑版」顯示到隔壁欄位，不會被截斷。
   const aoa = [
-    [title, ...Array(ncols-1).fill('')],
-    [subtitle, ...Array(ncols-1).fill('')],
+    [title],
+    [subtitle],
     headers,
     ...rows
   ];
@@ -2726,15 +2729,18 @@ function buildStyledSheet(title, subtitle, headers, rows, opts){
     });
   });
 
-  // 欄寬：依標題與資料內容估算，中文字元較寬所以用字元數 x2.15 估算
-  ws['!cols'] = headers.map((h, c) => {
-    let maxlen = Math.max(6, String(h).length * 2.15);
-    rows.forEach(row => {
-      const v = row[c];
+  // 欄寬：所有欄位統一寬度，取整張表裡「最長的那個內容」（表頭或資料）需要的寬度，
+  // 避免拉寬某一欄的表頭時，其他欄位跟著被撐開變得參差不齊。
+  // 表頭是粗體字，實際顯示比同樣字數的細體字寬，所以表頭額外多留一點空間。
+  let maxlen = 6;
+  headers.forEach(h => { maxlen = Math.max(maxlen, String(h).length * 2.3 + 2); });
+  rows.forEach(row => {
+    row.forEach(v => {
       if(v !== undefined && v !== null) maxlen = Math.max(maxlen, String(v).length * 2.15);
     });
-    return { wch: Math.min(maxlen, 22) };
   });
+  const colWidth = Math.min(maxlen, 22);
+  ws['!cols'] = headers.map(() => ({ wch: colWidth }));
 
   return ws;
 }
