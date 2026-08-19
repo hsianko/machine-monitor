@@ -537,7 +537,7 @@
 
 <div class="wrap">
   <div class="topbar">
-    <h1>產線即時監看板 <button class="version-badge" id="version-badge">v11.3</button></h1>
+    <h1>產線即時監看板 <button class="version-badge" id="version-badge">v11.4</button></h1>
     <div class="topbar-right">
       <div class="menu-wrap">
         <button class="export-btn" id="records-btn">查看紀錄 ▾</button>
@@ -1289,6 +1289,12 @@ async function loadState(){
     }catch(parseErr){
       throw new Error('伺服器回應不是有效資料，請確認 API 網址與部署權限是否為「任何人」');
     }
+    // 後端如果自己接住了錯誤（例如試算表暫時被鎖住、執行時發生例外），
+    // 會回傳一個看得懂的 { error: '...' } 訊息，這裡要主動檢查並丟出，
+    // 不然會被底下的程式誤判成「有回應就是同步成功」，明明失敗卻顯示已同步。
+    if(json.error){
+      throw new Error(json.error);
+    }
     if(json.state){
       MACHINES.forEach(m => {
         const stillDirty = dirtyUntil[m.key] && Date.now() < dirtyUntil[m.key];
@@ -1304,7 +1310,15 @@ async function loadState(){
     const beTag = json.backendVersion ? (' · 後端 ' + json.backendVersion) : ' · 後端版本未知（請確認 Apps Script 是否為最新版）';
     hint.textContent = '已同步至試算表 · ' + fmtClock() + beTag;
   }catch(err){
-    hint.textContent = '讀取失敗，請檢查網路或 API 網址：' + err;
+    const msg = String(err.message || err);
+    // 區分兩種失敗原因，訊息會不一樣：
+    // 「後端執行錯誤」代表有連上、Google 有回應，只是試算表那邊執行時出了狀況（例如暫時被鎖住）；
+    // 其他情況才比較像是連線本身有問題（網路不穩、API 網址錯誤）。
+    if(/^後端執行錯誤/.test(msg)){
+      hint.textContent = '讀取失敗（後端執行時出錯，稍後會自動重試）：' + msg;
+    } else {
+      hint.textContent = '讀取失敗，請檢查網路或 API 網址：' + msg;
+    }
   }
   render();
 }
@@ -1877,6 +1891,7 @@ document.addEventListener('click', (e) => {
 
 // ---------- 版本紀錄 ----------
 const VERSION_LOG = [
+  {v:'v11.4', d:'修正「讀取失敗」訊息看不懂原因的問題：後端讀取資料時如果發生錯誤，現在會回傳看得懂的錯誤原因（需搭配後端 gs-2026-08-19-v8 以上），前端也會正確辨識這種錯誤、不會誤判成同步成功；讀取失敗時錯誤訊息也會區分「後端執行出錯」跟「連線本身有問題」兩種情況'},
   {v:'v11.3', d:'統計儀表板匯出的 Excel 報表改為正式格式：加上標題列與產生時間、表頭底色、資料格外框、稼動率改為真正的百分比格式、異常等級（偏高／中等／正常）依顏色標示，欄寬也會自動加寬避免文字被截斷'},
   {v:'v11.2', d:'卡片自動偵測未完成訂單時，支援同一客戶有多筆未完成訂單的情況：改為列出全部符合的訂單（各自標示機台、累計箱數、最後更新時間），每一筆都有獨立的「接續此訂單」按鈕，可自行挑選要接哪一筆'},
   {v:'v11.1', d:'「接續此訂單」支援跨機台：卡片自動偵測不再限制同一台機台，只要客戶名稱對得上、任何機台的未完成訂單都會被抓到，接續後訂單序號會跟著換到目前這台機台，正確累計箱數不會重複計算'},
