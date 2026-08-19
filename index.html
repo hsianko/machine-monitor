@@ -537,7 +537,7 @@
 
 <div class="wrap">
   <div class="topbar">
-    <h1>產線即時監看板 <button class="version-badge" id="version-badge">v11.2</button></h1>
+    <h1>產線即時監看板 <button class="version-badge" id="version-badge">v11.3</button></h1>
     <div class="topbar-right">
       <div class="menu-wrap">
         <button class="export-btn" id="records-btn">查看紀錄 ▾</button>
@@ -767,7 +767,7 @@
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.bundle.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script>
 const MACHINES = [
@@ -1877,6 +1877,7 @@ document.addEventListener('click', (e) => {
 
 // ---------- 版本紀錄 ----------
 const VERSION_LOG = [
+  {v:'v11.3', d:'統計儀表板匯出的 Excel 報表改為正式格式：加上標題列與產生時間、表頭底色、資料格外框、稼動率改為真正的百分比格式、異常等級（偏高／中等／正常）依顏色標示，欄寬也會自動加寬避免文字被截斷'},
   {v:'v11.2', d:'卡片自動偵測未完成訂單時，支援同一客戶有多筆未完成訂單的情況：改為列出全部符合的訂單（各自標示機台、累計箱數、最後更新時間），每一筆都有獨立的「接續此訂單」按鈕，可自行挑選要接哪一筆'},
   {v:'v11.1', d:'「接續此訂單」支援跨機台：卡片自動偵測不再限制同一台機台，只要客戶名稱對得上、任何機台的未完成訂單都會被抓到，接續後訂單序號會跟著換到目前這台機台，正確累計箱數不會重複計算'},
   {v:'v11.0', d:'稼動率計算改為方案A：可作業時數不再固定7.5小時，改成依當天實際記錄到的最早開始~最晚結束動態計算，並扣除窗口內的固定休息（含加班18:00-18:15），自動涵蓋加班與操作員跨機台支援的情況；無時間紀錄的日子仍以標準7.5小時當備用分母'},
@@ -2615,16 +2616,112 @@ function exportDashboardExcel(){
   const {logs, abns, scans} = getDashRecords();
   const uptimeStats = computeUptimeStats(logs);
   const abnStats = computeAbnormalStats(abns, scans, logs);
+  const title = dashReportTitle();
+  const rangeText = (dashRange.start && dashRange.end) ? `${dashRange.start} ～ ${dashRange.end}` : dashRange.label;
+  const subtitle = `產生時間：${formatNowForReport()}　資料範圍：${rangeText}`;
 
   const wb = XLSX.utils.book_new();
-  const wsUptime = XLSX.utils.json_to_sheet(uptimeStats.map(s => ({機台:s.machine, '稼動率(%)':s.pct, 實際工時:s.workedHours, 可作業工時:s.availableHours, 有紀錄天數:s.activeDays})));
+
+  const wsUptime = buildStyledSheet(title, subtitle,
+    ['機台', '稼動率', '實際工時', '可作業工時', '有紀錄天數'],
+    uptimeStats.map(s => [s.machine, s.pct, s.workedHours, s.availableHours, s.activeDays]),
+    { pctCols:[1] }
+  );
   XLSX.utils.book_append_sheet(wb, wsUptime, '稼動率');
-  const wsAbn = XLSX.utils.json_to_sheet(abnStats.ranked.map((p,i) => ({排名:i+1, 機台:p.machine, 單捲標貼歪:p.byType['單捲標貼歪'], 料盤載台推擠:p.byType['料盤載台推擠'], 料盤毀損:p.byType['料盤毀損'], 掃碼異常:p.scanCount, 合計:p.total, 等級:p.level})));
+
+  const wsAbn = buildStyledSheet(title, subtitle,
+    ['排名', '機台', '單捲標貼歪', '料盤載台推擠', '料盤毀損', '掃碼異常', '合計', '等級'],
+    abnStats.ranked.map((p,i) => [i+1, p.machine, p.byType['單捲標貼歪'], p.byType['料盤載台推擠'], p.byType['料盤毀損'], p.scanCount, p.total, p.level]),
+    { levelCol:7 }
+  );
   XLSX.utils.book_append_sheet(wb, wsAbn, '異常次數排行');
-  const wsType = XLSX.utils.json_to_sheet(abnStats.perMachine.map(p => Object.assign({機台:p.machine}, p.byType)));
+
+  const wsType = buildStyledSheet(title, subtitle,
+    ['機台', ...AB_TYPE_OPTS],
+    abnStats.perMachine.map(p => [p.machine, ...AB_TYPE_OPTS.map(t => p.byType[t])]),
+    {}
+  );
   XLSX.utils.book_append_sheet(wb, wsType, '異常類型分布');
 
   XLSX.writeFile(wb, `統計報表_${dashRange.label}.xlsx`);
+}
+
+// 產生報表用的「現在時間」文字，格式跟畫面上其他地方一致：西元年/月/日 時:分
+function formatNowForReport(){
+  const now = new Date();
+  const pad = n => String(n).padStart(2,'0');
+  return `${now.getFullYear()}/${pad(now.getMonth()+1)}/${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())}`;
+}
+
+// ---------- 匯出 Excel 的共用樣式 ----------
+const XLSX_THIN_BORDER = {
+  top:{style:'thin', color:{rgb:'B9B9B9'}},
+  bottom:{style:'thin', color:{rgb:'B9B9B9'}},
+  left:{style:'thin', color:{rgb:'B9B9B9'}},
+  right:{style:'thin', color:{rgb:'B9B9B9'}}
+};
+const XLSX_STYLE_TITLE = { font:{name:'微軟正黑體', sz:16, bold:true, color:{rgb:'FFFFFF'}}, fill:{fgColor:{rgb:'4A7FB5'}}, alignment:{horizontal:'center', vertical:'center'} };
+const XLSX_STYLE_SUBTITLE = { font:{name:'微軟正黑體', sz:10, color:{rgb:'6B6B6B'}}, alignment:{horizontal:'left', vertical:'center'} };
+const XLSX_STYLE_HEADER = { font:{name:'微軟正黑體', sz:11, bold:true, color:{rgb:'FFFFFF'}}, fill:{fgColor:{rgb:'5B93C9'}}, alignment:{horizontal:'center', vertical:'center'}, border:XLSX_THIN_BORDER };
+const XLSX_STYLE_DATA = { font:{name:'微軟正黑體', sz:11}, alignment:{horizontal:'center', vertical:'center'}, border:XLSX_THIN_BORDER };
+const XLSX_STYLE_LEVEL = {
+  '偏高': { fill:{fgColor:{rgb:'F4C7C3'}}, font:{name:'微軟正黑體', sz:11, bold:true, color:{rgb:'9C3B33'}}, alignment:{horizontal:'center', vertical:'center'}, border:XLSX_THIN_BORDER },
+  '中等': { fill:{fgColor:{rgb:'FCE8B2'}}, font:{name:'微軟正黑體', sz:11, bold:true, color:{rgb:'946F13'}}, alignment:{horizontal:'center', vertical:'center'}, border:XLSX_THIN_BORDER },
+  '正常': { fill:{fgColor:{rgb:'C6E0B4'}}, font:{name:'微軟正黑體', sz:11, bold:true, color:{rgb:'2E6B2E'}}, alignment:{horizontal:'center', vertical:'center'}, border:XLSX_THIN_BORDER }
+};
+
+// 建立一個套好格式的分頁：標題列（合併）＋副標題列＋表頭列＋資料列，並自動調整欄寬。
+// opts.pctCols：要用百分比格式顯示的欄位索引（資料本身已是 0~100 的數字，不用再除以 100）
+// opts.levelCol：如果有「等級」欄位，指定它是第幾欄（0-based），依偏高/中等/正常上色
+function buildStyledSheet(title, subtitle, headers, rows, opts){
+  opts = opts || {};
+  const ncols = headers.length;
+  const aoa = [
+    [title, ...Array(ncols-1).fill('')],
+    [subtitle, ...Array(ncols-1).fill('')],
+    headers,
+    ...rows
+  ];
+  const ws = XLSX.utils.aoa_to_sheet(aoa);
+
+  ws['!merges'] = [{ s:{r:0,c:0}, e:{r:0,c:ncols-1} }];
+  ws['A1'].s = XLSX_STYLE_TITLE;
+  ws['A2'].s = XLSX_STYLE_SUBTITLE;
+
+  for(let c = 0; c < ncols; c++){
+    const ref = XLSX.utils.encode_cell({r:2, c});
+    if(ws[ref]) ws[ref].s = XLSX_STYLE_HEADER;
+  }
+
+  rows.forEach((row, ri) => {
+    const r = ri + 3;
+    row.forEach((val, c) => {
+      const ref = XLSX.utils.encode_cell({r, c});
+      const cell = ws[ref];
+      if(!cell) return;
+      if(opts.levelCol !== undefined && c === opts.levelCol && XLSX_STYLE_LEVEL[val]){
+        cell.s = XLSX_STYLE_LEVEL[val];
+      } else if(opts.pctCols && opts.pctCols.includes(c) && typeof val === 'number'){
+        // 百分比格式要放進獨立的樣式物件裡（不能共用參考再另外設定 z），
+        // 不然套件計算樣式時會把同一參考的其他儲存格也一起套用百分比格式。
+        cell.s = Object.assign({}, XLSX_STYLE_DATA, { numFmt: '0"%"' });
+      } else {
+        cell.s = XLSX_STYLE_DATA;
+      }
+    });
+  });
+
+  // 欄寬：依標題與資料內容估算，中文字元較寬所以用字元數 x2.15 估算
+  ws['!cols'] = headers.map((h, c) => {
+    let maxlen = Math.max(6, String(h).length * 2.15);
+    rows.forEach(row => {
+      const v = row[c];
+      if(v !== undefined && v !== null) maxlen = Math.max(maxlen, String(v).length * 2.15);
+    });
+    return { wch: Math.min(maxlen, 22) };
+  });
+
+  return ws;
 }
 
 function exportDashboardWord(){
