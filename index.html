@@ -328,6 +328,7 @@
     font-size:11.5px;
   }
   .resume-hint.show{display:flex;}
+  .resume-hint.multi{flex-direction:column; align-items:stretch;}
   .resume-hint .resume-hint-text{color:var(--status-run);}
   .resume-hint button{
     background:var(--bg-field);
@@ -338,6 +339,17 @@
     padding:5px 10px;
     border-radius:6px;
     cursor:pointer;
+  }
+  .resume-hint-row{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:8px;
+  }
+  .resume-hint-row + .resume-hint-row{
+    margin-top:6px;
+    padding-top:6px;
+    border-top:1px dashed rgba(76,175,109,0.35);
   }
   .qty-pending{
     display:flex;
@@ -525,7 +537,7 @@
 
 <div class="wrap">
   <div class="topbar">
-    <h1>產線即時監看板 <button class="version-badge" id="version-badge">v11.1</button></h1>
+    <h1>產線即時監看板 <button class="version-badge" id="version-badge">v11.2</button></h1>
     <div class="topbar-right">
       <div class="menu-wrap">
         <button class="export-btn" id="records-btn">查看紀錄 ▾</button>
@@ -911,9 +923,10 @@ function render(){
     const isOverflow = d.totalBoxes && d.currentBox && parseFloat(d.currentBox) > parseFloat(d.totalBoxes);
     const pendingTotal = !d.totalBoxes && parseFloat(d.currentBox) > 0;
     // 偵測未完成訂單時，不限制同一台機台——訂單常常會換機台接力做完，所以全部機台都要一起找。
-    const incompleteMatch = (!d.jobId && d.customer)
-      ? findIncompleteJobs().find(r => r.customer === d.customer)
-      : null;
+    // 同一個客戶名稱可能同時有好幾張未完成訂單，全部抓出來讓使用者自己選要接哪一筆。
+    const incompleteMatches = (!d.jobId && d.customer)
+      ? findIncompleteJobs().filter(r => r.customer === d.customer)
+      : [];
 
     const card = document.createElement('div');
     card.className = 'card';
@@ -930,10 +943,17 @@ function render(){
           <input type="text" data-k="customer" list="customer-suggestions" placeholder="輸入客戶名稱" value="${escapeHtml(d.customer)}">
         </div>
       </div>
-      <div class="resume-hint${incompleteMatch ? ' show' : ''}">
-        ${incompleteMatch ? `
-        <span class="resume-hint-text">⚠ 偵測到「${escapeHtml(d.customer)}」${incompleteMatch.machine === m.key ? '在本機台' : `在${incompleteMatch.machine}`}有未完成的訂單（累計 ${incompleteMatch.currentBox} 箱），要接續${incompleteMatch.machine === m.key ? '' : `到${m.key}`}嗎？</span>
-        <button data-inline-resume="${escapeHtml(incompleteMatch.jobId)}" data-inline-resume-machine="${m.key}">接續此訂單</button>
+      <div class="resume-hint${incompleteMatches.length ? ' show' : ''}${incompleteMatches.length > 1 ? ' multi' : ''}">
+        ${incompleteMatches.length === 1 ? `
+        <span class="resume-hint-text">⚠ 偵測到「${escapeHtml(d.customer)}」${incompleteMatches[0].machine === m.key ? '在本機台' : `在${incompleteMatches[0].machine}`}有未完成的訂單（累計 ${incompleteMatches[0].currentBox} 箱），要接續${incompleteMatches[0].machine === m.key ? '' : `到${m.key}`}嗎？</span>
+        <button data-inline-resume="${escapeHtml(incompleteMatches[0].jobId)}" data-inline-resume-machine="${m.key}">接續此訂單</button>
+        ` : incompleteMatches.length > 1 ? `
+        <span class="resume-hint-text">⚠ 偵測到「${escapeHtml(d.customer)}」有 ${incompleteMatches.length} 筆未完成的訂單，請選要接續哪一筆：</span>
+        ${incompleteMatches.map(r => `
+        <div class="resume-hint-row">
+          <span class="resume-hint-text">${r.machine === m.key ? '本機台' : r.machine}・累計 ${r.currentBox} 箱・最後更新 ${escapeHtml(cleanDisplayTime(r.loggedAt))}</span>
+          <button data-inline-resume="${escapeHtml(r.jobId)}" data-inline-resume-machine="${m.key}">接續此訂單</button>
+        </div>`).join('')}
         ` : ''}
       </div>
       <div class="field-row">
@@ -1857,6 +1877,7 @@ document.addEventListener('click', (e) => {
 
 // ---------- 版本紀錄 ----------
 const VERSION_LOG = [
+  {v:'v11.2', d:'卡片自動偵測未完成訂單時，支援同一客戶有多筆未完成訂單的情況：改為列出全部符合的訂單（各自標示機台、累計箱數、最後更新時間），每一筆都有獨立的「接續此訂單」按鈕，可自行挑選要接哪一筆'},
   {v:'v11.1', d:'「接續此訂單」支援跨機台：卡片自動偵測不再限制同一台機台，只要客戶名稱對得上、任何機台的未完成訂單都會被抓到，接續後訂單序號會跟著換到目前這台機台，正確累計箱數不會重複計算'},
   {v:'v11.0', d:'稼動率計算改為方案A：可作業時數不再固定7.5小時，改成依當天實際記錄到的最早開始~最晚結束動態計算，並扣除窗口內的固定休息（含加班18:00-18:15），自動涵蓋加班與操作員跨機台支援的情況；無時間紀錄的日子仍以標準7.5小時當備用分母'},
   {v:'v10.7', d:'修正稼動率趨勢折線圖的邏輯漏洞：只有日期、沒有完整開始/結束時間的紀錄（例如標記無作業/停機），之前會被整筆跳過導致斷線，現在會正確畫成 0%'},
