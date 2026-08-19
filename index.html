@@ -525,7 +525,7 @@
 
 <div class="wrap">
   <div class="topbar">
-    <h1>產線即時監看板 <button class="version-badge" id="version-badge">v11.0</button></h1>
+    <h1>產線即時監看板 <button class="version-badge" id="version-badge">v11.1</button></h1>
     <div class="topbar-right">
       <div class="menu-wrap">
         <button class="export-btn" id="records-btn">查看紀錄 ▾</button>
@@ -910,8 +910,9 @@ function render(){
     const ep = parseComposite(d.actualEnd);
     const isOverflow = d.totalBoxes && d.currentBox && parseFloat(d.currentBox) > parseFloat(d.totalBoxes);
     const pendingTotal = !d.totalBoxes && parseFloat(d.currentBox) > 0;
+    // 偵測未完成訂單時，不限制同一台機台——訂單常常會換機台接力做完，所以全部機台都要一起找。
     const incompleteMatch = (!d.jobId && d.customer)
-      ? findIncompleteJobs().find(r => r.machine === m.key && r.customer === d.customer)
+      ? findIncompleteJobs().find(r => r.customer === d.customer)
       : null;
 
     const card = document.createElement('div');
@@ -931,8 +932,8 @@ function render(){
       </div>
       <div class="resume-hint${incompleteMatch ? ' show' : ''}">
         ${incompleteMatch ? `
-        <span class="resume-hint-text">⚠ 偵測到「${escapeHtml(d.customer)}」在本機台有未完成的訂單（累計 ${incompleteMatch.currentBox} 箱），要接續嗎？</span>
-        <button data-inline-resume="${escapeHtml(incompleteMatch.jobId)}">接續此訂單</button>
+        <span class="resume-hint-text">⚠ 偵測到「${escapeHtml(d.customer)}」${incompleteMatch.machine === m.key ? '在本機台' : `在${incompleteMatch.machine}`}有未完成的訂單（累計 ${incompleteMatch.currentBox} 箱），要接續${incompleteMatch.machine === m.key ? '' : `到${m.key}`}嗎？</span>
+        <button data-inline-resume="${escapeHtml(incompleteMatch.jobId)}" data-inline-resume-machine="${m.key}">接續此訂單</button>
         ` : ''}
       </div>
       <div class="field-row">
@@ -1009,7 +1010,7 @@ function render(){
     });
 
     card.querySelectorAll('[data-inline-resume]').forEach(btn => {
-      btn.addEventListener('click', () => resumeJob(btn.dataset.inlineResume));
+      btn.addEventListener('click', () => resumeJob(btn.dataset.inlineResume, btn.dataset.inlineResumeMachine));
     });
 
     card.querySelectorAll('.time-group').forEach(group => {
@@ -1410,7 +1411,7 @@ function renderPendingJobs(){
   }).join('');
 }
 
-async function resumeJob(jobId){
+async function resumeJob(jobId, targetMachine){
   const latestByJob = {};
   completedLog.forEach(r => {
     if(r.jobId === jobId){
@@ -1421,7 +1422,8 @@ async function resumeJob(jobId){
   });
   const r = latestByJob[jobId];
   if(!r) return;
-  const machine = r.machine;
+  // 可以指定要接到哪一台機台（例如訂單換機台接力），沒指定時預設接回原本那台機台。
+  const machine = targetMachine || r.machine;
   if(state[machine].customer && state[machine].jobId !== jobId){
     const ok = confirm(`${machine} 卡片目前有其他資料（${state[machine].customer}），接續這張訂單會覆蓋掉。確定要繼續嗎？`);
     if(!ok) return;
@@ -1855,6 +1857,7 @@ document.addEventListener('click', (e) => {
 
 // ---------- 版本紀錄 ----------
 const VERSION_LOG = [
+  {v:'v11.1', d:'「接續此訂單」支援跨機台：卡片自動偵測不再限制同一台機台，只要客戶名稱對得上、任何機台的未完成訂單都會被抓到，接續後訂單序號會跟著換到目前這台機台，正確累計箱數不會重複計算'},
   {v:'v11.0', d:'稼動率計算改為方案A：可作業時數不再固定7.5小時，改成依當天實際記錄到的最早開始~最晚結束動態計算，並扣除窗口內的固定休息（含加班18:00-18:15），自動涵蓋加班與操作員跨機台支援的情況；無時間紀錄的日子仍以標準7.5小時當備用分母'},
   {v:'v10.7', d:'修正稼動率趨勢折線圖的邏輯漏洞：只有日期、沒有完整開始/結束時間的紀錄（例如標記無作業/停機），之前會被整筆跳過導致斷線，現在會正確畫成 0%'},
   {v:'v10.6', d:'簡化備註篩選：拿掉「隱藏箱數相加備註」這個額外按鈕，改成永遠自動排除純數字相加的備註（如13+7），不算進「只看有備註」的統計與篩選，原始資料完全不受影響'},
