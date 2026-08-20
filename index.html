@@ -375,6 +375,8 @@
   .times{display:grid; grid-template-columns:1fr; gap:14px; margin-top:10px; padding-top:12px; border-top:1px solid var(--border);}
   .times .field label{font-size:10.5px;}
   .time-row{display:flex; gap:6px;}
+  .crossday-label{display:flex; align-items:center; gap:6px; font-size:11px; color:var(--text-muted); cursor:pointer; user-select:none;}
+  .crossday-label input{cursor:pointer;}
   .time-row select{flex:1; min-width:0; font-size:13px; padding:6px 4px;}
 
   .card-foot{display:flex; justify-content:space-between; align-items:center; margin-top:12px; flex-wrap:wrap; gap:8px;}
@@ -537,7 +539,7 @@
 
 <div class="wrap">
   <div class="topbar">
-    <h1>產線即時監看板 <button class="version-badge" id="version-badge">v11.8</button></h1>
+    <h1>產線即時監看板 <button class="version-badge" id="version-badge">v11.9</button></h1>
     <div class="topbar-right">
       <div class="menu-wrap">
         <button class="export-btn" id="records-btn">查看紀錄 ▾</button>
@@ -796,6 +798,10 @@ let completedLog = [];
 let abnormalLog = [];
 let scanLog = [];
 
+// 「結束時間跨到隔天」是不是有勾選——只是畫面上的顯示狀態，不會存進試算表，
+// 是跨日（例如夜班）還是同一天，最終都是看開始/結束時間本身的日期判斷。
+const crossDayToggle = {};
+
 // 記錄哪些機台目前正在存檔（記錄今日進度／確定完成並加入紀錄）途中。
 // render() 每次都會整個重畫卡片，所以這個鎖要放在外面，重畫時才讀得到目前是不是還在存檔中。
 const savingLock = {};
@@ -918,12 +924,20 @@ function nowComposite(){
 function render(){
   const grid = document.getElementById('grid');
   grid.innerHTML = '';
+  const todayM = new Date().getMonth()+1;
+  const todayD = new Date().getDate();
   MACHINES.forEach(m => {
     const d = state[m.key];
     const st = computeStatus(m.key);
     const pct = computePct(m.key);
     const sp = parseComposite(d.startTime);
     const ep = parseComposite(d.actualEnd);
+    // 日期欄位：如果還沒選過，畫面上直接預設顯示今天，不用每次都手動選月/日。
+    const sMonthDefault = sp.month || todayM;
+    const sDayDefault = sp.day || todayD;
+    // 是否為跨日：使用者手動勾選過就照勾選的；沒勾選過的話，如果原本存的資料開始/結束日期本來就不同天，也視為跨日，避免舊資料顯示錯誤。
+    const datesDiffer = sp.month && sp.day && ep.month && ep.day && (String(ep.month) !== String(sp.month) || String(ep.day) !== String(sp.day));
+    const crossDay = (m.key in crossDayToggle) ? crossDayToggle[m.key] : !!datesDiffer;
     const isOverflow = d.totalBoxes && d.currentBox && parseFloat(d.currentBox) > parseFloat(d.totalBoxes);
     const pendingTotal = !d.totalBoxes && parseFloat(d.currentBox) > 0;
     // 偵測未完成訂單時，不限制同一台機台——訂單常常會換機台接力做完，所以全部機台都要一起找。
@@ -989,22 +1003,36 @@ function render(){
         ${isOverflow ? '<div class="qty-warning">⚠ 目前箱數已超過總箱數，請確認並修正！</div>' : ''}
       </div>
       <div class="times">
-        <div class="field time-group" data-group="start">
-          <label>開始時間</label>
+        <div class="field time-group" data-role="shared-date">
+          <label>日期</label>
           <div class="time-row">
-            <select data-part="month">${monthOptionsHtml(sp.month)}</select>
-            <select data-part="day">${dayOptionsHtml(sp.day)}</select>
-            <select data-part="time">${timeOptions(sp.time)}</select>
+            <select data-part="s-month">${monthOptionsHtml(sMonthDefault)}</select>
+            <select data-part="s-day">${dayOptionsHtml(sDayDefault)}</select>
           </div>
         </div>
-        <div class="field time-group" data-group="end">
-          <label>結束時間</label>
-          <div class="time-row">
-            <select data-part="month">${monthOptionsHtml(ep.month)}</select>
-            <select data-part="day">${dayOptionsHtml(ep.day)}</select>
-            <select data-part="time">${timeOptions(ep.time)}</select>
+        <div class="field-row">
+          <div class="field">
+            <label>開始時間</label>
+            <select data-part="s-time">${timeOptions(sp.time)}</select>
+          </div>
+          <div class="field">
+            <label>結束時間</label>
+            <select data-part="e-time">${timeOptions(ep.time)}</select>
           </div>
         </div>
+        <label class="crossday-label">
+          <input type="checkbox" data-role="crossday" ${crossDay ? 'checked' : ''}>
+          結束時間跨到隔天
+        </label>
+        ${crossDay ? `
+        <div class="field time-group" data-role="end-date">
+          <label>結束日期</label>
+          <div class="time-row">
+            <select data-part="e-month">${monthOptionsHtml(ep.month || sMonthDefault)}</select>
+            <select data-part="e-day">${dayOptionsHtml(ep.day || sDayDefault)}</select>
+          </div>
+        </div>
+        ` : ''}
       </div>
       <div class="field-row">
         <div class="field full">
@@ -1037,25 +1065,44 @@ function render(){
       btn.addEventListener('click', () => resumeJob(btn.dataset.inlineResume, btn.dataset.inlineResumeMachine));
     });
 
-    card.querySelectorAll('.time-group').forEach(group => {
-      const grp = group.dataset.group;
-      group.querySelectorAll('select').forEach(sel => {
-        sel.addEventListener('change', () => {
-          const monthV = group.querySelector('[data-part="month"]').value;
-          const dayV = group.querySelector('[data-part="day"]').value;
-          const timeV = group.querySelector('[data-part="time"]').value;
-          const composite = buildComposite(monthV, dayV, timeV);
-          if(grp === 'start'){ state[m.key].startTime = composite; }
-          else { state[m.key].actualEnd = composite; }
-          saveState(m.key);
-          render();
-        });
-      });
+    // 日期只需要選一次（預設就是今天），開始/結束時間各自只留時間選單；
+    // 不管是改日期、改開始時間、還是改結束時間，都用同一套邏輯重新組合成完整的日期時間存進去。
+    function syncTimesFromCard(){
+      const sMonth = card.querySelector('[data-part="s-month"]').value;
+      const sDay = card.querySelector('[data-part="s-day"]').value;
+      const sTime = card.querySelector('[data-part="s-time"]').value;
+      const eTime = card.querySelector('[data-part="e-time"]').value;
+      const eMonthSel = card.querySelector('[data-part="e-month"]');
+      const eDaySel = card.querySelector('[data-part="e-day"]');
+      const eMonth = eMonthSel ? eMonthSel.value : sMonth;
+      const eDay = eDaySel ? eDaySel.value : sDay;
+      state[m.key].startTime = buildComposite(sMonth, sDay, sTime);
+      state[m.key].actualEnd = buildComposite(eMonth, eDay, eTime);
+      saveState(m.key);
+      render();
+    }
+    card.querySelectorAll('[data-part="s-month"], [data-part="s-day"], [data-part="s-time"], [data-part="e-time"], [data-part="e-month"], [data-part="e-day"]').forEach(sel => {
+      sel.addEventListener('change', syncTimesFromCard);
+    });
+    card.querySelector('[data-role="crossday"]').addEventListener('change', (e) => {
+      crossDayToggle[m.key] = e.target.checked;
+      if(!e.target.checked){
+        // 取消勾選時，結束日期直接收回跟開始日期一致，不留下之前跨日選的殘留值。
+        const sMonth = card.querySelector('[data-part="s-month"]').value;
+        const sDay = card.querySelector('[data-part="s-day"]').value;
+        const sTime = card.querySelector('[data-part="s-time"]').value;
+        const eTime = card.querySelector('[data-part="e-time"]').value;
+        state[m.key].startTime = buildComposite(sMonth, sDay, sTime);
+        state[m.key].actualEnd = buildComposite(sMonth, sDay, eTime);
+        saveState(m.key);
+      }
+      render();
     });
 
     card.querySelector('[data-clear]').addEventListener('click', () => {
       if(confirm(`確定要清空 ${m.key} 的資料嗎？`)){
         state[m.key] = { customer:'', totalBoxes:'', currentBox:'', startTime:'', actualEnd:'', remark:'', jobId:'' };
+        delete crossDayToggle[m.key];
         saveState(m.key);
         render();
       }
@@ -1114,6 +1161,7 @@ function render(){
         }
 
         state[m.key] = { customer:'', totalBoxes:'', currentBox:'', startTime:'', actualEnd:'', remark:'', jobId:'' };
+        delete crossDayToggle[m.key];
         await saveState(m.key);
         const syncHint = document.getElementById('save-hint').textContent;
         if(syncHint.indexOf('失敗') !== -1){
@@ -1157,6 +1205,7 @@ function render(){
         // 這張訂單還沒做完，只清開始／結束時間，客戶、箱數、訂單序號都留著，方便明天接續。
         state[m.key].startTime = '';
         state[m.key].actualEnd = '';
+        delete crossDayToggle[m.key];
         await saveState(m.key);
         const syncHint = document.getElementById('save-hint').textContent;
         if(syncHint.indexOf('失敗') !== -1){
@@ -1941,6 +1990,7 @@ document.addEventListener('click', (e) => {
 
 // ---------- 版本紀錄 ----------
 const VERSION_LOG = [
+  {v:'v11.9', d:'開始/結束時間改版：日期只需要選一次（預設就是今天，不用每次手動選月/日），開始時間、結束時間各自只留時間選單；新增「結束時間跨到隔天」勾選框，平常不會看到，只有真的遇到跨夜班時才勾選、才會多跳出一個獨立的結束日期選單，不影響補登舊資料或跨日訂單的彈性'},
   {v:'v11.8', d:'查看紀錄編輯區的「儲存」按鈕，點下去後會變成「儲存中…」並暫時鎖住，純粹是讓使用者知道現在正在處理，避免網路較慢時誤以為沒反應（這裡儲存的是覆蓋同一列，不會有重複資料的風險，所以沒有加卡片那種鎖定機制）'},
   {v:'v11.7', d:'避免「記錄今日進度」「確定完成並加入紀錄」重複點擊造成重複資料：點下去後按鈕會立刻變成「儲存中…」並鎖住，這段期間內再點會被忽略，等這次存檔完成（不管成功或失敗）才會恢復，不會再因為畫面沒有立即反應而誤以為沒送出、重複點擊'},
   {v:'v11.6', d:'修正未完成訂單偵測的誤判：如果一張訂單目前正掛在某台機台的卡片上進行中，不會再被當成「卡在半路、需要接續」的未完成訂單。例如大寶正在做泰達的訂單時，二寶輸入同一個客戶名稱不會再跳出接續提示；卡片自動偵測跟「未完成訂單」清單都一併修正'},
