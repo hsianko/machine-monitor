@@ -537,7 +537,7 @@
 
 <div class="wrap">
   <div class="topbar">
-    <h1>產線即時監看板 <button class="version-badge" id="version-badge">v11.6</button></h1>
+    <h1>產線即時監看板 <button class="version-badge" id="version-badge">v11.7</button></h1>
     <div class="topbar-right">
       <div class="menu-wrap">
         <button class="export-btn" id="records-btn">查看紀錄 ▾</button>
@@ -796,6 +796,10 @@ let completedLog = [];
 let abnormalLog = [];
 let scanLog = [];
 
+// 記錄哪些機台目前正在存檔（記錄今日進度／確定完成並加入紀錄）途中。
+// render() 每次都會整個重畫卡片，所以這個鎖要放在外面，重畫時才讀得到目前是不是還在存檔中。
+const savingLock = {};
+
 // 每張訂單第一次記錄進度時，自動產生一組獨一無二的隱形序號跟著這張訂單，
 // 避免「機台+客戶+總箱數」剛好跟另一張訂單重複時，把兩張不同的訂單誤判成同一張。
 function ensureJobId(machineKey){
@@ -1014,8 +1018,8 @@ function render(){
           <button class="clear-btn" data-noop="${m.key}">標記今日無作業</button>
         </div>
         <div style="display:flex; gap:8px;">
-          <button class="done-btn" data-daily="${m.key}">記錄今日進度</button>
-          <button class="done-btn" data-done="${m.key}">確定完成並加入紀錄</button>
+          <button class="done-btn" data-daily="${m.key}" ${savingLock[m.key] ? 'disabled' : ''}>${savingLock[m.key] ? '儲存中…' : '記錄今日進度'}</button>
+          <button class="done-btn" data-done="${m.key}" ${savingLock[m.key] ? 'disabled' : ''}>${savingLock[m.key] ? '儲存中…' : '確定完成並加入紀錄'}</button>
         </div>
       </div>
     `;
@@ -1079,56 +1083,76 @@ function render(){
     });
 
     card.querySelector('[data-done]').addEventListener('click', async () => {
+      // 已經有一個存檔動作在進行中，忽略這次點擊，避免因為畫面還沒更新而重複送出。
+      if(savingLock[m.key]) return;
       const dd = state[m.key];
       if(!dd.customer || !dd.totalBoxes){
         alert('請先填寫客戶名稱與總箱數，再標記完成。');
         return;
       }
-      const endHasTime = parseComposite(dd.actualEnd).time;
-      const finishTime = endHasTime ? dd.actualEnd : nowComposite();
-      const jobId = ensureJobId(m.key);
-      const dayBoxes = computeDailyDelta(m.key, dd.customer, dd.totalBoxes, parseFloat(dd.currentBox) || 0, jobId);
-      const record = {
-        machine:m.key, customer:dd.customer, totalBoxes:dd.totalBoxes, currentBox:dd.currentBox,
-        dayBoxes, startTime:dd.startTime, actualEnd:finishTime, remark:dd.remark, pct:computePct(m.key), jobId, status:'已完成'
-      };
+      savingLock[m.key] = true;
+      const doneBtn = card.querySelector('[data-done]');
+      const dailyBtn = card.querySelector('[data-daily]');
+      doneBtn.disabled = true; doneBtn.textContent = '儲存中…';
+      dailyBtn.disabled = true; dailyBtn.textContent = '儲存中…';
 
       try{
-        await saveLog(record);
-      }catch(err){
-        alert('建立完成紀錄失敗：' + err);
-        return;
-      }
+        const endHasTime = parseComposite(dd.actualEnd).time;
+        const finishTime = endHasTime ? dd.actualEnd : nowComposite();
+        const jobId = ensureJobId(m.key);
+        const dayBoxes = computeDailyDelta(m.key, dd.customer, dd.totalBoxes, parseFloat(dd.currentBox) || 0, jobId);
+        const record = {
+          machine:m.key, customer:dd.customer, totalBoxes:dd.totalBoxes, currentBox:dd.currentBox,
+          dayBoxes, startTime:dd.startTime, actualEnd:finishTime, remark:dd.remark, pct:computePct(m.key), jobId, status:'已完成'
+        };
 
-      state[m.key] = { customer:'', totalBoxes:'', currentBox:'', startTime:'', actualEnd:'', remark:'', jobId:'' };
-      await saveState(m.key);
-      const syncHint = document.getElementById('save-hint').textContent;
-      if(syncHint.indexOf('失敗') !== -1){
-        alert('提醒：完成紀錄已經確實存進機台產能記錄了，但清空這張卡片時同步失敗（可能是網路瞬間不穩）。畫面可能還會顯示舊資料，麻煩重新整理一次，如果還是沒清空，再點一次「清空本機台資料」即可，不會影響已經存好的紀錄。');
+        try{
+          await saveLog(record);
+        }catch(err){
+          alert('建立完成紀錄失敗：' + err);
+          return;
+        }
+
+        state[m.key] = { customer:'', totalBoxes:'', currentBox:'', startTime:'', actualEnd:'', remark:'', jobId:'' };
+        await saveState(m.key);
+        const syncHint = document.getElementById('save-hint').textContent;
+        if(syncHint.indexOf('失敗') !== -1){
+          alert('提醒：完成紀錄已經確實存進機台產能記錄了，但清空這張卡片時同步失敗（可能是網路瞬間不穩）。畫面可能還會顯示舊資料，麻煩重新整理一次，如果還是沒清空，再點一次「清空本機台資料」即可，不會影響已經存好的紀錄。');
+        }
+        await loadState();
+        focusTodayInLog();
+        renderViewer('log', true, true);
+      }finally{
+        savingLock[m.key] = false;
+        render();
       }
-      await loadState();
-      focusTodayInLog();
-      renderViewer('log', true, true);
-      render();
     });
 
     card.querySelector('[data-daily]').addEventListener('click', async () => {
+      // 已經有一個存檔動作在進行中，忽略這次點擊，避免因為畫面還沒更新而重複送出。
+      if(savingLock[m.key]) return;
       const dd = state[m.key];
       if(!dd.customer){
         alert('請先填寫客戶名稱，再記錄今日進度。');
         return;
       }
       if(!API_URL){ alert('尚未設定 API 網址，請先點右上角「設定 API 網址」。'); return; }
-      const cur = parseFloat(dd.currentBox) || 0;
-      const endHasTime = parseComposite(dd.actualEnd).time;
-      const finishTime = endHasTime ? dd.actualEnd : nowComposite();
-      const jobId = ensureJobId(m.key);
-      const dayBoxes = computeDailyDelta(m.key, dd.customer, dd.totalBoxes, cur, jobId);
-      const record = {
-        machine:m.key, customer:dd.customer, totalBoxes:dd.totalBoxes, currentBox:cur,
-        dayBoxes, startTime:dd.startTime, actualEnd:finishTime, remark:dd.remark, pct:computePct(m.key), jobId, status:'進行中'
-      };
+      savingLock[m.key] = true;
+      const doneBtn = card.querySelector('[data-done]');
+      const dailyBtn = card.querySelector('[data-daily]');
+      doneBtn.disabled = true; doneBtn.textContent = '儲存中…';
+      dailyBtn.disabled = true; dailyBtn.textContent = '儲存中…';
+
       try{
+        const cur = parseFloat(dd.currentBox) || 0;
+        const endHasTime = parseComposite(dd.actualEnd).time;
+        const finishTime = endHasTime ? dd.actualEnd : nowComposite();
+        const jobId = ensureJobId(m.key);
+        const dayBoxes = computeDailyDelta(m.key, dd.customer, dd.totalBoxes, cur, jobId);
+        const record = {
+          machine:m.key, customer:dd.customer, totalBoxes:dd.totalBoxes, currentBox:cur,
+          dayBoxes, startTime:dd.startTime, actualEnd:finishTime, remark:dd.remark, pct:computePct(m.key), jobId, status:'進行中'
+        };
         await saveLog(record);
         // 這張訂單還沒做完，只清開始／結束時間，客戶、箱數、訂單序號都留著，方便明天接續。
         state[m.key].startTime = '';
@@ -1141,9 +1165,11 @@ function render(){
         await loadState();
         focusTodayInLog();
         renderViewer('log', true, true);
-        render();
       }catch(err){
         alert('記錄今日進度失敗：' + err);
+      }finally{
+        savingLock[m.key] = false;
+        render();
       }
     });
 
@@ -1906,6 +1932,7 @@ document.addEventListener('click', (e) => {
 
 // ---------- 版本紀錄 ----------
 const VERSION_LOG = [
+  {v:'v11.7', d:'避免「記錄今日進度」「確定完成並加入紀錄」重複點擊造成重複資料：點下去後按鈕會立刻變成「儲存中…」並鎖住，這段期間內再點會被忽略，等這次存檔完成（不管成功或失敗）才會恢復，不會再因為畫面沒有立即反應而誤以為沒送出、重複點擊'},
   {v:'v11.6', d:'修正未完成訂單偵測的誤判：如果一張訂單目前正掛在某台機台的卡片上進行中，不會再被當成「卡在半路、需要接續」的未完成訂單。例如大寶正在做泰達的訂單時，二寶輸入同一個客戶名稱不會再跳出接續提示；卡片自動偵測跟「未完成訂單」清單都一併修正'},
   {v:'v11.5', d:'修正匯出 Excel 報表的兩個顯示問題：(1) 第2列「產生時間」文字被截斷，原因是空字串把儲存格擋住導致文字無法跑版顯示，改成只填第一欄、其餘保持真正空白；(2) 表頭文字被切，改成整張表統一欄寬（取表頭與資料中最長的內容），不會再有欄位忽寬忽窄的問題'},
   {v:'v11.4', d:'修正「讀取失敗」訊息看不懂原因的問題：後端讀取資料時如果發生錯誤，現在會回傳看得懂的錯誤原因（需搭配後端 gs-2026-08-19-v8 以上），前端也會正確辨識這種錯誤、不會誤判成同步成功；讀取失敗時錯誤訊息也會區分「後端執行出錯」跟「連線本身有問題」兩種情況'},
