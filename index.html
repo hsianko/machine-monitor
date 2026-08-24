@@ -216,6 +216,62 @@
     cursor:pointer;
   }
   .pending-resume-btn:hover{border-color:var(--status-run); color:var(--status-run);}
+
+  .overview-bar{
+    display:grid;
+    grid-template-columns:repeat(4, 1fr);
+    gap:14px;
+    margin-bottom:16px;
+  }
+  .overview-stat{
+    background:var(--bg-panel);
+    border:1px solid var(--border);
+    border-radius:var(--radius);
+    padding:12px 14px;
+  }
+  .overview-label{font-size:11px; color:var(--text-muted); margin-bottom:6px;}
+  .overview-value{font-family:var(--font-display); font-size:26px; font-weight:700; color:var(--text-primary); line-height:1.1;}
+  .overview-value.overview-accent{color:var(--m-daibao);}
+  .overview-value.overview-warn{color:var(--m-sanbao);}
+  .overview-sub{font-size:12px; color:var(--text-muted); margin-left:4px; font-weight:400;}
+  .overview-track{background:var(--bg-field); border-radius:4px; height:5px; margin-top:8px; overflow:hidden;}
+  .overview-fill{background:var(--m-daibao); height:100%; border-radius:4px;}
+  @media (max-width:760px){
+    .overview-bar{grid-template-columns:repeat(2, 1fr);}
+  }
+
+  .tab-bar{display:flex; gap:8px; margin-bottom:16px; flex-wrap:wrap;}
+  .tab-btn{
+    background:var(--bg-panel);
+    border:1px solid var(--border);
+    color:var(--text-secondary);
+    font-family:var(--font-mono);
+    font-size:12.5px;
+    padding:8px 16px;
+    border-radius:8px;
+    cursor:pointer;
+    display:flex;
+    align-items:center;
+    gap:6px;
+  }
+  .tab-btn.active{background:var(--text-primary); color:var(--bg-page); border-color:var(--text-primary); font-weight:700;}
+  .tab-badge{
+    background:var(--m-sanbao);
+    color:#fff;
+    font-size:10px;
+    font-weight:700;
+    padding:1px 6px;
+    border-radius:999px;
+    line-height:1.5;
+  }
+  .tab-btn.active .tab-badge{background:var(--bg-page); color:var(--m-sanbao);}
+  .tab-content{margin-bottom:20px;}
+  .pending-board{
+    background:var(--bg-panel);
+    border:1px solid var(--border);
+    border-radius:var(--radius);
+    padding:6px 14px;
+  }
   .topbar-right{display:flex; align-items:center; gap:10px; flex-wrap:wrap;}
   .topbar .clock{font-size:14px; color:var(--text-secondary); letter-spacing:0.5px;}
   .export-btn{
@@ -539,26 +595,43 @@
 
 <div class="wrap">
   <div class="topbar">
-    <h1>產線即時監看板 <button class="version-badge" id="version-badge">v11.9</button></h1>
+    <h1>產線即時監看板 <button class="version-badge" id="version-badge">v12.0</button></h1>
     <div class="topbar-right">
-      <div class="menu-wrap">
-        <button class="export-btn" id="records-btn">查看紀錄 ▾</button>
-        <div class="menu-list" id="records-menu">
-          <button data-view="log">機台產能記錄</button>
-          <button data-view="abnormal">機台異常記錄</button>
-          <button data-view="scan">機台掃碼異常記錄</button>
-        </div>
-      </div>
       <button class="export-btn" id="settings-btn">設定 API 網址</button>
       <div class="export-date-picker">
         <select id="export-month"><option value="">全部</option></select>
         <select id="export-day"></select>
       </div>
       <button class="export-btn" id="export-btn">匯出紀錄 (CSV)</button>
-      <button class="export-btn" id="pending-btn">未完成訂單</button>
-      <button class="export-btn" id="dashboard-btn">統計儀表板</button>
       <div class="clock" id="clock">--:--:--</div>
     </div>
+  </div>
+
+  <div class="overview-bar" id="overview-bar">
+    <div class="overview-stat">
+      <div class="overview-label">今日箱數 / 目標</div>
+      <div class="overview-value"><span id="ov-boxes">0</span><span class="overview-sub"> / <span id="ov-target">0</span></span></div>
+    </div>
+    <div class="overview-stat">
+      <div class="overview-label">達成率</div>
+      <div class="overview-value overview-accent"><span id="ov-rate">0%</span></div>
+      <div class="overview-track"><div class="overview-fill" id="ov-rate-fill" style="width:0%"></div></div>
+    </div>
+    <div class="overview-stat">
+      <div class="overview-label">進行中訂單・還差</div>
+      <div class="overview-value"><span id="ov-running">0</span><span class="overview-sub" id="ov-remain">還差 0 箱</span></div>
+    </div>
+    <div class="overview-stat">
+      <div class="overview-label">今日異常<span class="overview-sub" id="ov-abn-rate">（每百箱 0）</span></div>
+      <div class="overview-value overview-warn"><span id="ov-abn-count">0</span></div>
+    </div>
+  </div>
+
+  <div class="tab-bar" id="tab-bar">
+    <button class="tab-btn active" data-tab="board">看板・4台</button>
+    <button class="tab-btn" data-tab="abnormal">異常<span class="tab-badge" id="tab-abn-badge" style="display:none;"></span></button>
+    <button class="tab-btn" data-tab="stats">統計</button>
+    <button class="tab-btn" data-tab="records">紀錄</button>
   </div>
 
   <div class="data-notice">
@@ -566,152 +639,105 @@
     <p>⚠ 箱數為機台實際作業箱數，已扣除「刷一貼一」作業箱數，與後台系統統計基準可能不同。</p>
   </div>
 
-  <div class="viewer-panel" id="viewer-panel">
-    <div class="viewer-head">
-      <span class="vtitle" id="viewer-title"></span>
-      <button class="viewer-close" id="viewer-close">關閉</button>
-    </div>
-    <div class="date-tabs" id="viewer-date-tabs"></div>
-    <div class="dash-controls" style="margin-bottom:10px;">
-      <button class="date-tab" id="viewer-range-toggle">📅 自訂日期區間</button>
-      <div class="dash-control-group" id="viewer-range-picker" style="display:none;">
-        <select id="viewer-range-start-month"></select>
-        <select id="viewer-range-start-day"></select>
-        <span class="dash-tilde">～</span>
-        <select id="viewer-range-end-month"></select>
-        <select id="viewer-range-end-day"></select>
-        <button class="date-tab" id="viewer-range-clear">清除區間</button>
-      </div>
-    </div>
-    <div class="date-tabs" id="viewer-machine-tabs"></div>
-    <div class="date-tabs" id="viewer-remark-filter"></div>
-    <div class="viewer-stats" id="viewer-stats"></div>
-    <div class="viewer-table-wrap" id="viewer-body"></div>
+  <div class="tab-content" id="tab-board">
+    <div class="grid" id="grid"></div>
+    <div class="section-title">卡住的訂單</div>
+    <div class="pending-board" id="pending-board"></div>
   </div>
 
-  <div class="grid" id="grid"></div>
-  <datalist id="customer-suggestions"></datalist>
-  <datalist id="remark-suggestions"></datalist>
-
-  <div class="section-title">機台異常紀錄</div>
-  <div class="log-panel">
-    <div class="log-form" id="abnormal-form">
-      <div class="field">
-        <label>發生日期</label>
-        <div class="time-row">
-          <select data-part="month" id="ab-month"></select>
-          <select data-part="day" id="ab-day"></select>
+  <div class="tab-content" id="tab-abnormal" style="display:none;">
+    <div class="section-title">機台異常紀錄</div>
+    <div class="log-panel">
+      <div class="log-form" id="abnormal-form">
+        <div class="field">
+          <label>發生日期</label>
+          <div class="time-row">
+            <select data-part="month" id="ab-month"></select>
+            <select data-part="day" id="ab-day"></select>
+          </div>
         </div>
-      </div>
-      <div class="field">
-        <label>機台</label>
-        <select id="ab-machine"></select>
-      </div>
-      <div class="field">
-        <label>異常類型</label>
-        <select id="ab-type">
-          <option value="">請選擇</option>
-          <option value="單捲標貼歪">單捲標貼歪</option>
-          <option value="料盤載台推擠">料盤載台推擠</option>
-          <option value="料盤毀損">料盤毀損</option>
-        </select>
-      </div>
-      <div class="field">
-        <label>異常次數</label>
-        <select id="ab-count"></select>
-      </div>
-      <div class="field">
-        <label>料盤產地</label>
-        <input type="text" id="ab-origin" placeholder="輸入料盤產地">
-      </div>
-      <div class="field" id="ab-reason-wrap" style="display:none;">
-        <label>原因</label>
-        <select id="ab-reason">
-          <option value="">請選擇</option>
-          <option value="落料歪斜">落料歪斜</option>
-          <option value="箱內就破">箱內就破</option>
-          <option value="載台推擠">載台推擠</option>
-          <option value="其他">其他（自行輸入）</option>
-        </select>
-      </div>
-      <div class="field" id="ab-reason-other-wrap" style="display:none;">
-        <label>其他原因</label>
-        <input type="text" id="ab-reason-other" placeholder="輸入原因">
-      </div>
-      <button class="log-submit" id="ab-submit">新增紀錄</button>
-    </div>
-    <div class="log-hint" id="ab-hint"></div>
-  </div>
-
-  <div class="section-title">機台掃碼異常紀錄</div>
-  <div class="log-panel">
-    <div class="log-form" id="scan-form">
-      <div class="field">
-        <label>發生日期</label>
-        <div class="time-row">
-          <select data-part="month" id="sc-month"></select>
-          <select data-part="day" id="sc-day"></select>
+        <div class="field">
+          <label>機台</label>
+          <select id="ab-machine"></select>
         </div>
+        <div class="field">
+          <label>異常類型</label>
+          <select id="ab-type">
+            <option value="">請選擇</option>
+            <option value="單捲標貼歪">單捲標貼歪</option>
+            <option value="料盤載台推擠">料盤載台推擠</option>
+            <option value="料盤毀損">料盤毀損</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>異常次數</label>
+          <select id="ab-count"></select>
+        </div>
+        <div class="field">
+          <label>料盤產地</label>
+          <input type="text" id="ab-origin" placeholder="輸入料盤產地">
+        </div>
+        <div class="field" id="ab-reason-wrap" style="display:none;">
+          <label>原因</label>
+          <select id="ab-reason">
+            <option value="">請選擇</option>
+            <option value="落料歪斜">落料歪斜</option>
+            <option value="箱內就破">箱內就破</option>
+            <option value="載台推擠">載台推擠</option>
+            <option value="其他">其他（自行輸入）</option>
+          </select>
+        </div>
+        <div class="field" id="ab-reason-other-wrap" style="display:none;">
+          <label>其他原因</label>
+          <input type="text" id="ab-reason-other" placeholder="輸入原因">
+        </div>
+        <button class="log-submit" id="ab-submit">新增紀錄</button>
       </div>
-      <div class="field">
-        <label>機台</label>
-        <select id="sc-machine"></select>
-      </div>
-      <div class="field">
-        <label>異常次數</label>
-        <select id="sc-count"></select>
-      </div>
-      <div class="field">
-        <label>Scan位置</label>
-        <select id="sc-pos">
-          <option value="">請選擇</option>
-          <option value="1">1</option>
-          <option value="2">2</option>
-        </select>
-      </div>
-      <div class="field">
-        <label>LOT</label>
-        <input type="text" id="sc-lot" placeholder="輸入LOT">
-      </div>
-      <div class="field">
-        <label>產地</label>
-        <input type="text" id="sc-origin" placeholder="輸入產地">
-      </div>
-      <button class="log-submit" id="sc-submit">新增紀錄</button>
+      <div class="log-hint" id="ab-hint"></div>
     </div>
-    <div class="log-hint" id="sc-hint"></div>
+
+    <div class="section-title">機台掃碼異常紀錄</div>
+    <div class="log-panel">
+      <div class="log-form" id="scan-form">
+        <div class="field">
+          <label>發生日期</label>
+          <div class="time-row">
+            <select data-part="month" id="sc-month"></select>
+            <select data-part="day" id="sc-day"></select>
+          </div>
+        </div>
+        <div class="field">
+          <label>機台</label>
+          <select id="sc-machine"></select>
+        </div>
+        <div class="field">
+          <label>異常次數</label>
+          <select id="sc-count"></select>
+        </div>
+        <div class="field">
+          <label>Scan位置</label>
+          <select id="sc-pos">
+            <option value="">請選擇</option>
+            <option value="1">1</option>
+            <option value="2">2</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>LOT</label>
+          <input type="text" id="sc-lot" placeholder="輸入LOT">
+        </div>
+        <div class="field">
+          <label>產地</label>
+          <input type="text" id="sc-origin" placeholder="輸入產地">
+        </div>
+        <button class="log-submit" id="sc-submit">新增紀錄</button>
+      </div>
+      <div class="log-hint" id="sc-hint"></div>
+    </div>
   </div>
 
-  <div class="save-hint" id="save-hint">載入中...</div>
-</div>
-
-<div class="modal-overlay" id="version-overlay">
-  <div class="version-modal">
-    <div class="version-modal-head">
-      <span class="vtitle">版本紀錄</span>
-      <button class="modal-close-x" id="version-close-x">✕</button>
-    </div>
-    <div class="version-modal-body" id="version-modal-body"></div>
-  </div>
-</div>
-
-<div class="modal-overlay" id="pending-overlay">
-  <div class="version-modal">
-    <div class="version-modal-head">
-      <span class="vtitle">未完成訂單</span>
-      <button class="modal-close-x" id="pending-close-x">✕</button>
-    </div>
-    <div class="version-modal-body" id="pending-modal-body"></div>
-  </div>
-</div>
-
-<div class="modal-overlay" id="dashboard-overlay">
-  <div class="version-modal wide">
-    <div class="version-modal-head">
-      <span class="vtitle">統計儀表板</span>
-      <button class="modal-close-x" id="dashboard-close-x">✕</button>
-    </div>
-    <div class="version-modal-body" id="dashboard-modal-body">
+  <div class="tab-content" id="tab-stats" style="display:none;">
+    <div class="version-modal-body" id="dashboard-modal-body" style="max-height:none; padding:0;">
 
       <div class="dash-controls">
         <div class="dash-control-group">
@@ -765,6 +791,44 @@
       </div>
 
     </div>
+  </div>
+
+  <div class="tab-content" id="tab-records" style="display:none;">
+    <div class="section-title" id="viewer-title" style="margin-bottom:8px;"></div>
+    <div class="date-tabs" id="records-switch"></div>
+    <div class="viewer-panel open" id="viewer-panel" style="border:none; padding:0;">
+      <div class="date-tabs" id="viewer-date-tabs"></div>
+      <div class="dash-controls" style="margin-bottom:10px;">
+        <button class="date-tab" id="viewer-range-toggle">📅 自訂日期區間</button>
+        <div class="dash-control-group" id="viewer-range-picker" style="display:none;">
+          <select id="viewer-range-start-month"></select>
+          <select id="viewer-range-start-day"></select>
+          <span class="dash-tilde">～</span>
+          <select id="viewer-range-end-month"></select>
+          <select id="viewer-range-end-day"></select>
+          <button class="date-tab" id="viewer-range-clear">清除區間</button>
+        </div>
+      </div>
+      <div class="date-tabs" id="viewer-machine-tabs"></div>
+      <div class="date-tabs" id="viewer-remark-filter"></div>
+      <div class="viewer-stats" id="viewer-stats"></div>
+      <div class="viewer-table-wrap" id="viewer-body"></div>
+    </div>
+  </div>
+
+  <datalist id="customer-suggestions"></datalist>
+  <datalist id="remark-suggestions"></datalist>
+
+  <div class="save-hint" id="save-hint">載入中...</div>
+</div>
+
+<div class="modal-overlay" id="version-overlay">
+  <div class="version-modal">
+    <div class="version-modal-head">
+      <span class="vtitle">版本紀錄</span>
+      <button class="modal-close-x" id="version-close-x">✕</button>
+    </div>
+    <div class="version-modal-body" id="version-modal-body"></div>
   </div>
 </div>
 
@@ -1224,6 +1288,78 @@ function render(){
 
     grid.appendChild(card);
   });
+  renderPendingJobs();
+  renderOverview();
+}
+
+// 每台機台一天的目標箱數（固定值，跟實際有沒有缺料、有沒有開工無關，是拿來對照實際跟計畫的落差）。
+const DAILY_TARGET_PER_MACHINE = 120;
+
+function computeOverviewStats(){
+  const now = new Date();
+  const pad = n => String(n).padStart(2,'0');
+  const todayMD = `${pad(now.getMonth()+1)}-${pad(now.getDate())}`;
+
+  // 今日箱數：加總今天每一筆機台產能記錄的「當日箱數」。
+  // 同一張訂單當天可能分好幾次記錄，每筆的當日箱數本來就是那次的增量，加總起來才是今天實際做的總數。
+  let todayBoxes = 0;
+  completedLog.forEach(r => {
+    if(recordDateStr(VIEW_CONFIG.log, r) === todayMD){
+      todayBoxes += parseFloat(r.dayBoxes) || 0;
+    }
+  });
+
+  const target = DAILY_TARGET_PER_MACHINE * MACHINES.length;
+  const achieveRate = target > 0 ? (todayBoxes / target * 100) : 0;
+
+  // 進行中訂單・還差：看目前卡片上顯示「進行中」的機台有幾台，還差多少箱做完。
+  let runningCount = 0;
+  let remainBoxes = 0;
+  MACHINES.forEach(m => {
+    const st = computeStatus(m.key);
+    if(st.cls === 'run'){
+      runningCount++;
+      const d = state[m.key];
+      const total = parseFloat(d.totalBoxes) || 0;
+      const cur = parseFloat(d.currentBox) || 0;
+      remainBoxes += Math.max(0, total - cur);
+    }
+  });
+
+  // 今日異常：機台異常＋掃碼異常，發生日期是今天的次數加總；每百箱異常率算法跟統計儀表板一致。
+  let todayAbnormalCount = 0;
+  abnormalLog.forEach(r => {
+    if(recordDateStr(VIEW_CONFIG.abnormal, r) === todayMD){
+      todayAbnormalCount += parseFloat(r['異常次數']) || 0;
+    }
+  });
+  scanLog.forEach(r => {
+    if(recordDateStr(VIEW_CONFIG.scan, r) === todayMD){
+      todayAbnormalCount += parseFloat(r['異常次數']) || 0;
+    }
+  });
+  const abnormalRate = todayBoxes > 0 ? (todayAbnormalCount / todayBoxes * 100) : 0;
+
+  return { todayBoxes, target, achieveRate, runningCount, remainBoxes, todayAbnormalCount, abnormalRate };
+}
+
+function renderOverview(){
+  const s = computeOverviewStats();
+  document.getElementById('ov-boxes').textContent = s.todayBoxes;
+  document.getElementById('ov-target').textContent = s.target;
+  document.getElementById('ov-rate').textContent = s.achieveRate.toFixed(1) + '%';
+  document.getElementById('ov-rate-fill').style.width = Math.min(100, s.achieveRate) + '%';
+  document.getElementById('ov-running').textContent = s.runningCount;
+  document.getElementById('ov-remain').textContent = `還差 ${s.remainBoxes} 箱`;
+  document.getElementById('ov-abn-count').textContent = s.todayAbnormalCount;
+  document.getElementById('ov-abn-rate').textContent = `（每百箱 ${s.abnormalRate.toFixed(2)}）`;
+  const badge = document.getElementById('tab-abn-badge');
+  if(s.todayAbnormalCount > 0){
+    badge.textContent = s.todayAbnormalCount;
+    badge.style.display = '';
+  } else {
+    badge.style.display = 'none';
+  }
 }
 
 function escapeHtml(v){
@@ -1516,10 +1652,11 @@ function findIncompleteJobs(){
 }
 
 function renderPendingJobs(){
-  const body = document.getElementById('pending-modal-body');
+  const body = document.getElementById('pending-board');
+  if(!body) return;
   const jobs = findIncompleteJobs();
   if(!jobs.length){
-    body.innerHTML = '<div class="viewer-empty">目前沒有未完成的訂單。</div>';
+    body.innerHTML = '<div class="viewer-empty">目前沒有卡住的訂單。</div>';
     return;
   }
   body.innerHTML = jobs.map(r => {
@@ -1557,24 +1694,11 @@ async function resumeJob(jobId, targetMachine){
     startTime:'', actualEnd:'', remark:'', jobId:jobId
   };
   await saveState(machine);
-  closePendingModal();
   await loadState();
   render();
 }
 
-function openPendingModal(){
-  renderPendingJobs();
-  document.getElementById('pending-overlay').classList.add('open');
-}
-function closePendingModal(){
-  document.getElementById('pending-overlay').classList.remove('open');
-}
-document.getElementById('pending-btn').addEventListener('click', openPendingModal);
-document.getElementById('pending-close-x').addEventListener('click', closePendingModal);
-document.getElementById('pending-overlay').addEventListener('click', (e) => {
-  if(e.target.id === 'pending-overlay') closePendingModal();
-});
-document.getElementById('pending-modal-body').addEventListener('click', (e) => {
+document.getElementById('pending-board').addEventListener('click', (e) => {
   const btn = e.target.closest('[data-resume-job]');
   if(!btn) return;
   resumeJob(btn.dataset.resumeJob);
@@ -1843,8 +1967,18 @@ function renderViewer(view, highlightLast, keepDateFilter){
     }).join('');
     body.innerHTML = `<table class="viewer-table"><thead>${headHtml}</thead><tbody>${bodyHtml}</tbody></table>`;
   }
-  document.getElementById('viewer-panel').classList.add('open');
-  document.getElementById('records-menu').classList.remove('open');
+  renderRecordsSwitch();
+}
+
+function renderRecordsSwitch(){
+  const wrap = document.getElementById('records-switch');
+  if(!wrap) return;
+  const items = [
+    {view:'log', label:'機台產能記錄'},
+    {view:'abnormal', label:'機台異常記錄'},
+    {view:'scan', label:'機台掃碼異常記錄'}
+  ];
+  wrap.innerHTML = items.map(it => `<button class="date-tab${currentLogView===it.view?' active':''}" data-view="${it.view}">${it.label}</button>`).join('');
 }
 
 function renderEditRow(view, idx){
@@ -1969,27 +2103,15 @@ document.getElementById('viewer-range-clear').addEventListener('click', () => {
   renderViewer(currentLogView, false, true);
 });
 
-function closeViewer(){
-  currentLogView = null;
-  document.getElementById('viewer-panel').classList.remove('open');
-}
-
-document.getElementById('records-btn').addEventListener('click', (e) => {
-  e.stopPropagation();
-  document.getElementById('records-menu').classList.toggle('open');
-});
-document.querySelectorAll('#records-menu [data-view]').forEach(btn => {
-  btn.addEventListener('click', () => renderViewer(btn.dataset.view));
-});
-document.getElementById('viewer-close').addEventListener('click', closeViewer);
-document.addEventListener('click', (e) => {
-  if(!e.target.closest('.menu-wrap')){
-    document.getElementById('records-menu').classList.remove('open');
-  }
+document.getElementById('records-switch').addEventListener('click', (e) => {
+  const btn = e.target.closest('[data-view]');
+  if(!btn) return;
+  renderViewer(btn.dataset.view);
 });
 
 // ---------- 版本紀錄 ----------
 const VERSION_LOG = [
+  {v:'v12.0', d:'畫面大改版第一階段：新增頂部總覽列（今日箱數/目標480箱、達成率、進行中訂單・還差、今日異常每百箱次數），統一用分頁籤取代原本的「查看紀錄」下拉選單、「統計儀表板」彈窗、「未完成訂單」彈窗——四個分頁籤是「看板」（卡片＋卡住的訂單，取代原本的未完成訂單按鈕）、「異常」（新增異常/掃碼異常紀錄表單）、「統計」（原統計儀表板內容）、「紀錄」（原查看紀錄內容，內部一樣可切換機台產能/機台異常/機台掃碼異常三種記錄）。卡片本身的欄位、按鈕、邏輯都沒有變動，純粹是外層版面整理'},
   {v:'v11.9', d:'開始/結束時間改版：日期只需要選一次（預設就是今天，不用每次手動選月/日），開始時間、結束時間各自只留時間選單；新增「結束時間跨到隔天」勾選框，平常不會看到，只有真的遇到跨夜班時才勾選、才會多跳出一個獨立的結束日期選單，不影響補登舊資料或跨日訂單的彈性'},
   {v:'v11.8', d:'查看紀錄編輯區的「儲存」按鈕，點下去後會變成「儲存中…」並暫時鎖住，純粹是讓使用者知道現在正在處理，避免網路較慢時誤以為沒反應（這裡儲存的是覆蓋同一列，不會有重複資料的風險，所以沒有加卡片那種鎖定機制）'},
   {v:'v11.7', d:'避免「記錄今日進度」「確定完成並加入紀錄」重複點擊造成重複資料：點下去後按鈕會立刻變成「儲存中…」並鎖住，這段期間內再點會被忽略，等這次存檔完成（不管成功或失敗）才會恢復，不會再因為畫面沒有立即反應而誤以為沒送出、重複點擊'},
@@ -2087,11 +2209,30 @@ document.getElementById('version-overlay').addEventListener('click', (e) => {
   if(e.target.id === 'version-overlay') closeVersionModal();
 });
 document.addEventListener('keydown', (e) => {
-  if(e.key === 'Escape'){ closeVersionModal(); closePendingModal(); }
+  if(e.key === 'Escape'){ closeVersionModal(); }
 });
 
 document.getElementById('export-btn').addEventListener('click', exportCsv);
 document.getElementById('settings-btn').addEventListener('click', setupApiUrl);
+
+// ---------- 分頁籤切換（看板／異常／統計／紀錄） ----------
+function showTab(name){
+  const tabs = {board:'tab-board', abnormal:'tab-abnormal', stats:'tab-stats', records:'tab-records'};
+  Object.keys(tabs).forEach(key => {
+    const el = document.getElementById(tabs[key]);
+    if(el) el.style.display = (key === name) ? '' : 'none';
+  });
+  document.querySelectorAll('#tab-bar .tab-btn').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.tab === name);
+  });
+  if(name === 'stats'){ openDashboard(); }
+  if(name === 'records' && !currentLogView){ renderViewer('log'); }
+}
+document.getElementById('tab-bar').addEventListener('click', (e) => {
+  const btn = e.target.closest('[data-tab]');
+  if(!btn) return;
+  showTab(btn.dataset.tab);
+});
 
 // ---------- 機台異常 / 機台掃碼異常 quick-log forms ----------
 function fillMachineSelect(sel){
@@ -2577,16 +2718,14 @@ function renderDashMachineTabs(){
   wrap.innerHTML = allBtn + btns;
 }
 
+let dashboardInitialized = false;
 function openDashboard(){
-  document.getElementById('dashboard-overlay').classList.add('open');
+  if(dashboardInitialized) return;
+  dashboardInitialized = true;
   setDashPreset('week');
   renderDashMachineTabs();
 }
-function closeDashboard(){ document.getElementById('dashboard-overlay').classList.remove('open'); }
 
-document.getElementById('dashboard-btn').addEventListener('click', openDashboard);
-document.getElementById('dashboard-close-x').addEventListener('click', closeDashboard);
-document.getElementById('dashboard-overlay').addEventListener('click', (e) => { if(e.target.id==='dashboard-overlay') closeDashboard(); });
 document.querySelectorAll('.dash-presets [data-preset]').forEach(btn => {
   btn.addEventListener('click', () => setDashPreset(btn.dataset.preset));
 });
