@@ -686,7 +686,7 @@
 
 <div class="wrap">
   <div class="topbar">
-    <h1>產線即時監看板 <button class="version-badge" id="version-badge">v12.4</button></h1>
+    <h1>產線即時監看板 <button class="version-badge" id="version-badge">v13.0</button></h1>
     <div class="topbar-right">
       <button class="export-btn" id="settings-btn">設定 API 網址</button>
       <div class="export-date-picker">
@@ -869,16 +869,16 @@
         </div>
       </div>
       <div class="date-tabs" id="dash-machine-tabs"></div>
-      <p class="dash-note">稼動率基準：可作業時數依當天該機台實際記錄到的最早開始~最晚結束動態計算，並扣除窗口內涵蓋到的固定休息時段（10:30-10:45、12:00-13:00、15:00-15:15，加班另扣18:00-18:15）；完全沒有時間紀錄的日子（如標記無作業）則以標準7.5小時當備用分母。異常率為「機台異常記錄＋掃碼異常記錄」的次數換算每百箱異常次數，不是良率。</p>
+      <p class="dash-note" id="dash-uptime-note"></p>
 
       <div class="dash-section">
-        <h3>稼動率</h3>
+        <h3>稼動率（時間／性能）</h3>
         <div class="dash-chart-wrap"><canvas id="dash-chart-uptime"></canvas></div>
         <div class="dash-table-wrap" id="dash-table-uptime"></div>
       </div>
 
       <div class="dash-section">
-        <h3>稼動率趨勢（依日期）</h3>
+        <h3>時間稼動率趨勢（依日期）</h3>
         <div class="dash-chart-wrap"><canvas id="dash-chart-uptime-trend"></canvas></div>
         <p class="dash-note" id="dash-uptime-trend-note" style="display:none;"></p>
       </div>
@@ -2286,6 +2286,7 @@ document.getElementById('records-switch').addEventListener('click', (e) => {
 
 // ---------- 版本紀錄 ----------
 const VERSION_LOG = [
+  {v:'v13.0', d:'修正稼動率重複計算的 bug，並拆成「時間稼動率」與「性能稼動率」：(1) 修正：原本每一天的實際工作時間是把「每一筆記錄自己的開始~結束」直接加總，如果同一天記錄好幾次、開始時間又填回同一個起點，同一段時間會被算兩次以上，稼動率因此常常衝到接近100%。改成先把當天所有記錄的時間區間「合併」（重疊或相接的部分只算一次）才計算，正確反映真正的閒置時間。(2) 拆分：時間稼動率＝機台有沒有在動（合併後的實際運轉分鐘÷可作業分鐘）；性能稼動率＝動的時候快不快（當天實際箱數÷理論產能，理論產能用「每台機台每天目標120箱÷標準工時7.5小時」反推為每小時16箱，目前只有單一產品類型才適用這個固定基準）。統計儀表板的稼動率圖表、表格，以及 Excel/Word 匯出都同步顯示兩種稼動率'},
   {v:'v12.4', d:'卡片明細展開：把「結束時間跨到隔天」勾選、備註、清空本機台資料、標記今日無作業這四項收進可展開的「明細」區塊，平常收合、需要時點開才會看到，卡片變得精簡許多。收合狀態下如果有填備註，會在「明細」旁邊顯示「📌 有備註」的小提示，不用點開也能發現有備註內容。客戶名稱、總箱數/目前箱數、日期、開始/結束時間、記錄今日進度/確定完成按鈕維持原本位置，天天要用的欄位都不受影響'},
   {v:'v12.3', d:'修正機台異常「待補明細」的判斷規則，改成依異常類型分別規定：單捲標貼歪不需要產地也不需要原因；料盤載台推擠需要產地；料盤毀損需要產地跟原因都填。之前是不分類型統一要求產地，會誤把不需要產地的單捲標貼歪也列進待補清單'},
   {v:'v12.2', d:'異常分頁改版：新增「快速記錄」按鈕（機台異常依機台+類型、掃碼異常依機台，各一顆 +1 按鈕），點一下就存好機台/類型/次數/今天日期，不用先填產地/原因/LOT。新增「待補明細」清單，只要有紀錄缺少關鍵欄位（機台異常缺產地、選料盤毀損時還缺原因；掃碼異常缺 Scan位置/LOT/產地）就會列在這裡提醒，異常分頁籤上也會顯示待補筆數的紅色數字，點「補明細」直接跳到紀錄分頁開啟該筆的編輯欄位。原本完整的表單維持不變，有空時還是可以直接一次填完整；不會更動試算表欄位結構，純粹用「有沒有填」判斷要不要提醒'},
@@ -2800,7 +2801,9 @@ function computeDayAvailableMinutes(windowStartMin, windowEndMin){
   return Math.max(0, total);
 }
 
-// 把紀錄依「機台→日期」彙整成 {minStart, maxEnd, worked}，是稼動率統計跟趨勢圖共用的基礎資料。
+// 把紀錄依「機台→日期」彙整成 {intervals, minStart, maxEnd, boxes}，是稼動率統計跟趨勢圖共用的基礎資料。
+// intervals 是當天每一筆記錄自己的 [開始,結束] 時間區間陣列，稍後會合併重疊的部分，
+// 避免同一天記錄很多次、且開始時間又填回同一個起點時，同一段時間被重複計算。
 function buildDailyMachineStats(logs){
   const result = {};
   MACHINES.forEach(m => { result[m.key] = {}; });
@@ -2808,7 +2811,7 @@ function buildDailyMachineStats(logs){
     if(!result[r.machine]) return;
     const d = recordDateStr(VIEW_CONFIG.log, r);
     if(!d) return;
-    if(!result[r.machine][d]) result[r.machine][d] = {minStart:null, maxEnd:null, worked:0};
+    if(!result[r.machine][d]) result[r.machine][d] = {minStart:null, maxEnd:null, intervals:[], boxes:0};
     const day = result[r.machine][d];
     const sp = parseComposite(r.startTime);
     const ep = parseComposite(r.actualEnd);
@@ -2816,10 +2819,36 @@ function buildDailyMachineStats(logs){
     const eMin = timeToMinutes(ep.time);
     if(sMin !== null) day.minStart = day.minStart===null ? sMin : Math.min(day.minStart, sMin);
     if(eMin !== null) day.maxEnd = day.maxEnd===null ? eMin : Math.max(day.maxEnd, eMin);
-    if(sMin !== null && eMin !== null && eMin > sMin) day.worked += (eMin - sMin);
+    if(sMin !== null && eMin !== null && eMin > sMin) day.intervals.push([sMin, eMin]);
+    day.boxes += parseFloat(r.dayBoxes) || 0;
   });
   return result;
 }
+
+// 把當天所有時間區間合併起來，重疊或相接的部分只算一次，回傳「實際運轉分鐘數」。
+// 這一步是稼動率修正的關鍵：如果同一天記錄好幾次、開始時間又重複填回同一個起點，
+// 每筆自己的長度加總會把同一段時間算兩次以上，合併區間才能正確反映真正涵蓋了多少時間。
+function mergeIntervalMinutes(intervals){
+  if(!intervals.length) return 0;
+  const sorted = intervals.slice().sort((a,b) => a[0]-b[0]);
+  let total = 0;
+  let [curStart, curEnd] = sorted[0];
+  for(let i=1; i<sorted.length; i++){
+    const [s,e] = sorted[i];
+    if(s <= curEnd){
+      curEnd = Math.max(curEnd, e);
+    } else {
+      total += (curEnd - curStart);
+      curStart = s; curEnd = e;
+    }
+  }
+  total += (curEnd - curStart);
+  return total;
+}
+
+// 性能稼動率的理論產能基準：目前只有單一產品類型，用「每台機台一天目標120箱 ÷ 標準工時7.5小時」反推，
+// 得到「理論上一小時應該做幾箱」，之後如果有多種產品、不同標準產能，這裡會需要改成依產品查表。
+const RATE_PER_HOUR = DAILY_TARGET_PER_MACHINE / AVAILABLE_HOURS_PER_DAY;
 
 // 這一天的可作業分鐘數：有實際窗口就動態算，沒有窗口（例如無作業/停機只填日期沒填時間）就用標準7.5小時當備用分母，
 // 確保停機日還是會正確拖累稼動率，不會因為沒有時間資料就被整個忽略。
@@ -2830,29 +2859,45 @@ function dayAvailableMinutes(day){
   return DEFAULT_AVAILABLE_MINUTES;
 }
 
-function dayPct(day){
+// 時間稼動率：機台有沒有在動。分子改用合併後的實際運轉分鐘數，不再是每筆記錄長度直接加總。
+function dayTimePct(day){
   const avail = dayAvailableMinutes(day);
   if(avail <= 0) return 0;
-  return Math.min(100, Math.round((day.worked/avail)*100));
+  const worked = mergeIntervalMinutes(day.intervals);
+  return Math.min(100, Math.round((worked/avail)*100));
 }
 
-// 稼動率 = 範圍內每一天「實際工作分鐘」加總 ÷ 每一天「動態算出的可作業分鐘」加總
+// 性能稼動率：動的時候快不快。當天實際箱數 ÷（理論每小時產能 × 實際運轉時數）。
+// 沒有運轉時間就沒辦法算效率，回傳 null 表示這天不列入性能稼動率的計算。
+function dayPerfPct(day){
+  const worked = mergeIntervalMinutes(day.intervals);
+  if(worked <= 0) return null;
+  const theoretical = (worked/60) * RATE_PER_HOUR;
+  if(theoretical <= 0) return null;
+  return Math.round((day.boxes/theoretical)*100);
+}
+
+// 時間稼動率 = 範圍內每一天「合併後的實際運轉分鐘」加總 ÷ 每一天「動態算出的可作業分鐘」加總
+// 性能稼動率 = 範圍內實際箱數加總 ÷（實際運轉時數加總 × 理論每小時產能）
 function computeUptimeStats(logs){
   const byMachine = buildDailyMachineStats(logs);
   return MACHINES.map(m => {
     const days = byMachine[m.key];
     const dateKeys = Object.keys(days);
-    let totalWorked = 0, totalAvailable = 0;
+    let totalWorked = 0, totalAvailable = 0, totalBoxes = 0;
     dateKeys.forEach(d => {
-      totalWorked += days[d].worked;
+      totalWorked += mergeIntervalMinutes(days[d].intervals);
       totalAvailable += dayAvailableMinutes(days[d]);
+      totalBoxes += days[d].boxes;
     });
     const pct = totalAvailable > 0 ? Math.min(100, Math.round((totalWorked/totalAvailable)*100)) : 0;
-    return {machine:m.key, workedHours:+(totalWorked/60).toFixed(1), activeDays:dateKeys.length, availableHours:+(totalAvailable/60).toFixed(1), pct};
+    const theoretical = (totalWorked/60) * RATE_PER_HOUR;
+    const perfPct = theoretical > 0 ? Math.round((totalBoxes/theoretical)*100) : 0;
+    return {machine:m.key, workedHours:+(totalWorked/60).toFixed(1), activeDays:dateKeys.length, availableHours:+(totalAvailable/60).toFixed(1), totalBoxes, pct, perfPct};
   });
 }
 
-// 依機台+依日期算出每天的稼動率百分比，用來畫稼動率趨勢折線圖（一台機台一條線）
+// 依機台+依日期算出每天的時間稼動率百分比，用來畫稼動率趨勢折線圖（一台機台一條線）
 function computeDailyUptimeTrend(logs){
   const byMachine = buildDailyMachineStats(logs);
   const allDates = new Set();
@@ -2863,7 +2908,7 @@ function computeDailyUptimeTrend(logs){
     data: dates.map(d => {
       const day = byMachine[m.key][d];
       if(!day) return null;
-      return dayPct(day);
+      return dayTimePct(day);
     }),
     borderColor: MACHINE_COLORS[m.key],
     backgroundColor: MACHINE_COLORS[m.key],
@@ -2975,16 +3020,21 @@ function renderDashboard(){
   const uptimeTrend = computeDailyUptimeTrend(logs);
   const colors = uptimeStats.map(s => MACHINE_COLORS[s.machine]);
 
+  document.getElementById('dash-uptime-note').innerHTML = `稼動率拆成兩種：<b>時間稼動率</b>＝機台有沒有在動（合併當天所有時間區間後的實際運轉分鐘 ÷ 可作業分鐘，重疊時段只算一次）；<b>性能稼動率</b>＝動的時候快不快（當天實際箱數 ÷ 理論產能，理論產能＝實際運轉時數 × 每小時${RATE_PER_HOUR}箱，這個每小時箱數是用「單一機台每天目標${DAILY_TARGET_PER_MACHINE}箱 ÷ 標準工時${AVAILABLE_HOURS_PER_DAY}小時」反推，只適用目前單一產品類型的情況）。可作業時數依當天該機台實際記錄到的最早開始~最晚結束動態計算，並扣除窗口內涵蓋到的固定休息時段（10:30-10:45、12:00-13:00、15:00-15:15，加班另扣18:00-18:15）；完全沒有時間紀錄的日子（如標記無作業）則以標準${AVAILABLE_HOURS_PER_DAY}小時當備用分母。異常率為「機台異常記錄＋掃碼異常記錄」的次數換算每百箱異常次數，不是良率。`;
+
   if(chartUptime) chartUptime.destroy();
   chartUptime = new Chart(document.getElementById('dash-chart-uptime'), {
     type:'bar',
-    data:{ labels: uptimeStats.map(s=>s.machine), datasets:[{ label:'稼動率(%)', data: uptimeStats.map(s=>s.pct), backgroundColor: colors, borderRadius:4 }] },
-    options:{ responsive:true, maintainAspectRatio:false, plugins:{legend:{display:false}},
-      scales:{ y:{ beginAtZero:true, max:100, ticks:{color:CHART_TEXT_COLOR}, grid:{color:CHART_GRID_COLOR} }, x:{ ticks:{color:CHART_TEXT_COLOR}, grid:{display:false} } } }
+    data:{ labels: uptimeStats.map(s=>s.machine), datasets:[
+      { label:'時間稼動率(%)', data: uptimeStats.map(s=>s.pct), backgroundColor: colors, borderRadius:4 },
+      { label:'性能稼動率(%)', data: uptimeStats.map(s=>s.perfPct), backgroundColor: colors.map(c=>c+'80'), borderRadius:4 }
+    ] },
+    options:{ responsive:true, maintainAspectRatio:false, plugins:{legend:{display:true, position:'top', labels:{color:CHART_TEXT_COLOR, boxWidth:12, font:{size:10}}}},
+      scales:{ y:{ beginAtZero:true, ticks:{color:CHART_TEXT_COLOR}, grid:{color:CHART_GRID_COLOR} }, x:{ ticks:{color:CHART_TEXT_COLOR}, grid:{display:false} } } }
   });
 
-  document.getElementById('dash-table-uptime').innerHTML = `<table><tr><th>機台</th><th>稼動率</th><th>實際工時</th><th>可作業工時</th><th>有紀錄天數</th></tr>` +
-    uptimeStats.map(s => `<tr><td>${s.machine}</td><td>${s.pct}%</td><td>${s.workedHours} 小時</td><td>${s.availableHours} 小時</td><td>${s.activeDays} 天</td></tr>`).join('') + `</table>`;
+  document.getElementById('dash-table-uptime').innerHTML = `<table><tr><th>機台</th><th>時間稼動率</th><th>性能稼動率</th><th>實際運轉工時</th><th>可作業工時</th><th>實際箱數</th><th>有紀錄天數</th></tr>` +
+    uptimeStats.map(s => `<tr><td>${s.machine}</td><td>${s.pct}%</td><td>${s.perfPct}%</td><td>${s.workedHours} 小時</td><td>${s.availableHours} 小時</td><td>${s.totalBoxes}</td><td>${s.activeDays} 天</td></tr>`).join('') + `</table>`;
 
   if(chartUptimeTrend) chartUptimeTrend.destroy();
   chartUptimeTrend = new Chart(document.getElementById('dash-chart-uptime-trend'), {
@@ -3110,8 +3160,11 @@ function buildDashReportHtml(){
 
   const imgUptime = renderChartForExport({
     type:'bar',
-    data:{ labels: uptimeStats.map(s=>s.machine), datasets:[{ label:'稼動率(%)', data: uptimeStats.map(s=>s.pct), backgroundColor: colors, borderRadius:4 }] },
-    options:{ plugins:{legend:{display:false}}, scales:{ y:{ beginAtZero:true, max:100 } } }
+    data:{ labels: uptimeStats.map(s=>s.machine), datasets:[
+      { label:'時間稼動率(%)', data: uptimeStats.map(s=>s.pct), backgroundColor: colors, borderRadius:4 },
+      { label:'性能稼動率(%)', data: uptimeStats.map(s=>s.perfPct), backgroundColor: colors.map(c=>c+'80'), borderRadius:4 }
+    ] },
+    options:{ plugins:{legend:{display:true, position:'top'}}, scales:{ y:{ beginAtZero:true } } }
   }, W, H);
 
   const imgUptimeTrend = renderChartForExport({
@@ -3132,7 +3185,7 @@ function buildDashReportHtml(){
     options:{ plugins:{legend:{display:false}}, scales:{ y:{ beginAtZero:true } } }
   }, W, H);
 
-  const uptimeRows = uptimeStats.map(s => `<tr><td>${s.machine}</td><td>${s.pct}%</td><td>${s.workedHours}</td><td>${s.availableHours}</td><td>${s.activeDays}</td></tr>`).join('');
+  const uptimeRows = uptimeStats.map(s => `<tr><td>${s.machine}</td><td>${s.pct}%</td><td>${s.perfPct}%</td><td>${s.workedHours}</td><td>${s.availableHours}</td><td>${s.totalBoxes}</td><td>${s.activeDays}</td></tr>`).join('');
   const cardRows = abnStats.perMachine.map(p => `<tr><td>${p.machine}</td><td>${p.total}</td><td>${p.byType['單捲標貼歪']}</td><td>${p.byType['料盤載台推擠']}</td><td>${p.byType['料盤毀損']}</td><td>${p.scanCount}</td></tr>`).join('');
   const rankRows = abnStats.ranked.map((p,i) => `<tr><td>${i+1}</td><td>${p.machine}</td><td>${p.byType['單捲標貼歪']}</td><td>${p.byType['料盤載台推擠']}</td><td>${p.byType['料盤毀損']}</td><td>${p.scanCount}</td><td>${p.total}</td><td>${p.level}</td></tr>`).join('');
   const insightHtml = buildAbnormalInsight(abnStats);
@@ -3179,7 +3232,7 @@ function buildDashReportHtml(){
 
     ${block('稼動率', `
       <img src="${imgUptime}" width="${W}" height="${H}">
-      <table class="data-table"><tr><th>機台</th><th>稼動率</th><th>實際工時(小時)</th><th>可作業工時(小時)</th><th>有紀錄天數</th></tr>${uptimeRows}</table>
+      <table class="data-table"><tr><th>機台</th><th>時間稼動率</th><th>性能稼動率</th><th>實際運轉工時(小時)</th><th>可作業工時(小時)</th><th>實際箱數</th><th>有紀錄天數</th></tr>${uptimeRows}</table>
     `)}
 
     ${block('稼動率趨勢', `
@@ -3217,9 +3270,9 @@ function exportDashboardExcel(){
   const wb = XLSX.utils.book_new();
 
   const wsUptime = buildStyledSheet(title, subtitle,
-    ['機台', '稼動率', '實際工時', '可作業工時', '有紀錄天數'],
-    uptimeStats.map(s => [s.machine, s.pct, s.workedHours, s.availableHours, s.activeDays]),
-    { pctCols:[1] }
+    ['機台', '時間稼動率', '性能稼動率', '實際運轉工時', '可作業工時', '實際箱數', '有紀錄天數'],
+    uptimeStats.map(s => [s.machine, s.pct, s.perfPct, s.workedHours, s.availableHours, s.totalBoxes, s.activeDays]),
+    { pctCols:[1,2] }
   );
   XLSX.utils.book_append_sheet(wb, wsUptime, '稼動率');
 
