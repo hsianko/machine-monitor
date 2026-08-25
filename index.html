@@ -686,7 +686,7 @@
 
 <div class="wrap">
   <div class="topbar">
-    <h1>產線即時監看板 <button class="version-badge" id="version-badge">v13.0</button></h1>
+    <h1>產線即時監看板 <button class="version-badge" id="version-badge">v13.1</button></h1>
     <div class="topbar-right">
       <button class="export-btn" id="settings-btn">設定 API 網址</button>
       <div class="export-date-picker">
@@ -2286,6 +2286,7 @@ document.getElementById('records-switch').addEventListener('click', (e) => {
 
 // ---------- 版本紀錄 ----------
 const VERSION_LOG = [
+  {v:'v13.1', d:'稼動率的「可作業時間窗口」改用各機台班別的固定上下班時間當基準（大寶/三寶 09:00-18:00，二寶/四寶 08:30-17:30），不再只依賴「當天有紀錄到的最早開始~最晚結束」。實際開始得更早或加班到更晚，窗口會往外延伸；但不會因為當天晚開始或提早收工而讓窗口縮小，這樣才能正確抓到「一開始就沒動」或「提早收工」這種空檔，不會因為沒有紀錄涵蓋到就被系統忽略而算成稼動率100%'},
   {v:'v13.0', d:'修正稼動率重複計算的 bug，並拆成「時間稼動率」與「性能稼動率」：(1) 修正：原本每一天的實際工作時間是把「每一筆記錄自己的開始~結束」直接加總，如果同一天記錄好幾次、開始時間又填回同一個起點，同一段時間會被算兩次以上，稼動率因此常常衝到接近100%。改成先把當天所有記錄的時間區間「合併」（重疊或相接的部分只算一次）才計算，正確反映真正的閒置時間。(2) 拆分：時間稼動率＝機台有沒有在動（合併後的實際運轉分鐘÷可作業分鐘）；性能稼動率＝動的時候快不快（當天實際箱數÷理論產能，理論產能用「每台機台每天目標120箱÷標準工時7.5小時」反推為每小時16箱，目前只有單一產品類型才適用這個固定基準）。統計儀表板的稼動率圖表、表格，以及 Excel/Word 匯出都同步顯示兩種稼動率'},
   {v:'v12.4', d:'卡片明細展開：把「結束時間跨到隔天」勾選、備註、清空本機台資料、標記今日無作業這四項收進可展開的「明細」區塊，平常收合、需要時點開才會看到，卡片變得精簡許多。收合狀態下如果有填備註，會在「明細」旁邊顯示「📌 有備註」的小提示，不用點開也能發現有備註內容。客戶名稱、總箱數/目前箱數、日期、開始/結束時間、記錄今日進度/確定完成按鈕維持原本位置，天天要用的欄位都不受影響'},
   {v:'v12.3', d:'修正機台異常「待補明細」的判斷規則，改成依異常類型分別規定：單捲標貼歪不需要產地也不需要原因；料盤載台推擠需要產地；料盤毀損需要產地跟原因都填。之前是不分類型統一要求產地，會誤把不需要產地的單捲標貼歪也列進待補清單'},
@@ -2801,6 +2802,17 @@ function computeDayAvailableMinutes(windowStartMin, windowEndMin){
   return Math.max(0, total);
 }
 
+// 各機台的班別固定上下班時間（依操作人員班別而定），當作「今天可作業窗口」的基準框架。
+// 不管當天有沒有留下紀錄，都會用這個時間當底線；實際開始得更早、或結束得更晚（加班），
+// 窗口會往外撐大，但不會因為紀錄晚開始/早結束而讓窗口縮小──這樣才能正確抓到「一開始就沒動」
+// 或「提早收工」這種空檔，不會因為沒有紀錄涵蓋到就被系統忽略。
+const MACHINE_SHIFT = {
+  '大寶': {start:'09:00', end:'18:00'},
+  '三寶': {start:'09:00', end:'18:00'},
+  '二寶': {start:'08:30', end:'17:30'},
+  '四寶': {start:'08:30', end:'17:30'}
+};
+
 // 把紀錄依「機台→日期」彙整成 {intervals, minStart, maxEnd, boxes}，是稼動率統計跟趨勢圖共用的基礎資料。
 // intervals 是當天每一筆記錄自己的 [開始,結束] 時間區間陣列，稍後會合併重疊的部分，
 // 避免同一天記錄很多次、且開始時間又填回同一個起點時，同一段時間被重複計算。
@@ -2811,7 +2823,14 @@ function buildDailyMachineStats(logs){
     if(!result[r.machine]) return;
     const d = recordDateStr(VIEW_CONFIG.log, r);
     if(!d) return;
-    if(!result[r.machine][d]) result[r.machine][d] = {minStart:null, maxEnd:null, intervals:[], boxes:0};
+    if(!result[r.machine][d]){
+      const shift = MACHINE_SHIFT[r.machine];
+      result[r.machine][d] = {
+        minStart: shift ? timeToMinutes(shift.start) : null,
+        maxEnd: shift ? timeToMinutes(shift.end) : null,
+        intervals:[], boxes:0
+      };
+    }
     const day = result[r.machine][d];
     const sp = parseComposite(r.startTime);
     const ep = parseComposite(r.actualEnd);
@@ -3020,7 +3039,7 @@ function renderDashboard(){
   const uptimeTrend = computeDailyUptimeTrend(logs);
   const colors = uptimeStats.map(s => MACHINE_COLORS[s.machine]);
 
-  document.getElementById('dash-uptime-note').innerHTML = `稼動率拆成兩種：<b>時間稼動率</b>＝機台有沒有在動（合併當天所有時間區間後的實際運轉分鐘 ÷ 可作業分鐘，重疊時段只算一次）；<b>性能稼動率</b>＝動的時候快不快（當天實際箱數 ÷ 理論產能，理論產能＝實際運轉時數 × 每小時${RATE_PER_HOUR}箱，這個每小時箱數是用「單一機台每天目標${DAILY_TARGET_PER_MACHINE}箱 ÷ 標準工時${AVAILABLE_HOURS_PER_DAY}小時」反推，只適用目前單一產品類型的情況）。可作業時數依當天該機台實際記錄到的最早開始~最晚結束動態計算，並扣除窗口內涵蓋到的固定休息時段（10:30-10:45、12:00-13:00、15:00-15:15，加班另扣18:00-18:15）；完全沒有時間紀錄的日子（如標記無作業）則以標準${AVAILABLE_HOURS_PER_DAY}小時當備用分母。異常率為「機台異常記錄＋掃碼異常記錄」的次數換算每百箱異常次數，不是良率。`;
+  document.getElementById('dash-uptime-note').innerHTML = `稼動率拆成兩種：<b>時間稼動率</b>＝機台有沒有在動（合併當天所有時間區間後的實際運轉分鐘 ÷ 可作業分鐘，重疊時段只算一次）；<b>性能稼動率</b>＝動的時候快不快（當天實際箱數 ÷ 理論產能，理論產能＝實際運轉時數 × 每小時${RATE_PER_HOUR}箱，這個每小時箱數是用「單一機台每天目標${DAILY_TARGET_PER_MACHINE}箱 ÷ 標準工時${AVAILABLE_HOURS_PER_DAY}小時」反推，只適用目前單一產品類型的情況）。可作業時數以各機台班別的固定上下班時間當基準（大寶/三寶 09:00-18:00，二寶/四寶 08:30-17:30），實際開始得更早或加班到更晚會往外延伸窗口，但不會因為當天晚開始/早收工而縮小窗口，這樣才能正確抓到「一開始就沒動」或「提早收工」這種空檔；窗口內涵蓋到的固定休息時段（10:30-10:45、12:00-13:00、15:00-15:15，加班另扣18:00-18:15）會再從可作業時數扣除。異常率為「機台異常記錄＋掃碼異常記錄」的次數換算每百箱異常次數，不是良率。`;
 
   if(chartUptime) chartUptime.destroy();
   chartUptime = new Chart(document.getElementById('dash-chart-uptime'), {
