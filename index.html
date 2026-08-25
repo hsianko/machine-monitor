@@ -272,6 +272,23 @@
     border-radius:var(--radius);
     padding:6px 14px;
   }
+  .running-board{margin-bottom:16px;}
+  .running-head{display:flex; align-items:center; justify-content:space-between; margin-bottom:8px;}
+  .running-toggle{
+    background:none;
+    border:none;
+    color:var(--text-muted);
+    font-size:11px;
+    cursor:pointer;
+    text-decoration:underline;
+  }
+  .running-toggle:hover{color:var(--text-secondary);}
+  .running-list{
+    background:var(--bg-panel);
+    border:1px solid var(--border);
+    border-radius:var(--radius);
+    padding:6px 14px;
+  }
   .topbar-right{display:flex; align-items:center; gap:10px; flex-wrap:wrap;}
   .topbar .clock{font-size:14px; color:var(--text-secondary); letter-spacing:0.5px;}
   .export-btn{
@@ -595,7 +612,7 @@
 
 <div class="wrap">
   <div class="topbar">
-    <h1>產線即時監看板 <button class="version-badge" id="version-badge">v12.0</button></h1>
+    <h1>產線即時監看板 <button class="version-badge" id="version-badge">v12.1</button></h1>
     <div class="topbar-right">
       <button class="export-btn" id="settings-btn">設定 API 網址</button>
       <div class="export-date-picker">
@@ -627,6 +644,14 @@
     </div>
   </div>
 
+  <div class="running-board" id="running-board">
+    <div class="running-head">
+      <span class="section-title" style="margin:0;">進行中訂單</span>
+      <button class="running-toggle" id="running-toggle">收合</button>
+    </div>
+    <div class="running-list" id="running-list"></div>
+  </div>
+
   <div class="tab-bar" id="tab-bar">
     <button class="tab-btn active" data-tab="board">看板・4台</button>
     <button class="tab-btn" data-tab="abnormal">異常<span class="tab-badge" id="tab-abn-badge" style="display:none;"></span></button>
@@ -641,8 +666,10 @@
 
   <div class="tab-content" id="tab-board">
     <div class="grid" id="grid"></div>
-    <div class="section-title">卡住的訂單</div>
-    <div class="pending-board" id="pending-board"></div>
+    <div id="pending-section" style="display:none;">
+      <div class="section-title">卡住的訂單</div>
+      <div class="pending-board" id="pending-board"></div>
+    </div>
   </div>
 
   <div class="tab-content" id="tab-abnormal" style="display:none;">
@@ -1289,11 +1316,27 @@ function render(){
     grid.appendChild(card);
   });
   renderPendingJobs();
+  renderRunningList();
   renderOverview();
 }
 
 // 每台機台一天的目標箱數（固定值，跟實際有沒有缺料、有沒有開工無關，是拿來對照實際跟計畫的落差）。
 const DAILY_TARGET_PER_MACHINE = 120;
+
+// 目前 4 張卡片裡，狀態顯示「進行中」的訂單，依機台順序（大寶→二寶→三寶→四寶）排列。
+function getRunningOrders(){
+  const list = [];
+  MACHINES.forEach(m => {
+    const st = computeStatus(m.key);
+    if(st.cls === 'run'){
+      const d = state[m.key];
+      const total = parseFloat(d.totalBoxes) || 0;
+      const cur = parseFloat(d.currentBox) || 0;
+      list.push({ machine:m.key, customer:d.customer, total, cur, remain:Math.max(0, total-cur) });
+    }
+  });
+  return list;
+}
 
 function computeOverviewStats(){
   const now = new Date();
@@ -1313,18 +1356,9 @@ function computeOverviewStats(){
   const achieveRate = target > 0 ? (todayBoxes / target * 100) : 0;
 
   // 進行中訂單・還差：看目前卡片上顯示「進行中」的機台有幾台，還差多少箱做完。
-  let runningCount = 0;
-  let remainBoxes = 0;
-  MACHINES.forEach(m => {
-    const st = computeStatus(m.key);
-    if(st.cls === 'run'){
-      runningCount++;
-      const d = state[m.key];
-      const total = parseFloat(d.totalBoxes) || 0;
-      const cur = parseFloat(d.currentBox) || 0;
-      remainBoxes += Math.max(0, total - cur);
-    }
-  });
+  const runningOrders = getRunningOrders();
+  const runningCount = runningOrders.length;
+  const remainBoxes = runningOrders.reduce((sum, o) => sum + o.remain, 0);
 
   // 今日異常：機台異常＋掃碼異常，發生日期是今天的次數加總；每百箱異常率算法跟統計儀表板一致。
   let todayAbnormalCount = 0;
@@ -1342,6 +1376,35 @@ function computeOverviewStats(){
 
   return { todayBoxes, target, achieveRate, runningCount, remainBoxes, todayAbnormalCount, abnormalRate };
 }
+
+// 收合狀態只存在當次瀏覽期間，重新整理頁面（例如隔天早上重開）就會恢復預設攤開。
+let runningListCollapsed = false;
+
+function renderRunningList(){
+  const list = getRunningOrders();
+  const wrap = document.getElementById('running-list');
+  const board = document.getElementById('running-board');
+  const toggle = document.getElementById('running-toggle');
+  if(!wrap || !board) return;
+
+  if(!list.length){
+    wrap.innerHTML = '<div class="viewer-empty">目前沒有進行中的訂單。</div>';
+  } else {
+    wrap.innerHTML = list.map(o => `
+      <div class="pending-row">
+        <div class="pending-info">
+          <div><span class="pmachine ${escapeHtml(o.machine)}">${escapeHtml(o.machine)}</span>${escapeHtml(o.customer)}</div>
+          <div class="pmeta">${o.cur} / ${o.total} 箱・還差 ${o.remain} 箱</div>
+        </div>
+      </div>`).join('');
+  }
+  wrap.style.display = runningListCollapsed ? 'none' : '';
+  toggle.textContent = runningListCollapsed ? '展開' : '收合';
+}
+document.getElementById('running-toggle').addEventListener('click', () => {
+  runningListCollapsed = !runningListCollapsed;
+  renderRunningList();
+});
 
 function renderOverview(){
   const s = computeOverviewStats();
@@ -1653,12 +1716,16 @@ function findIncompleteJobs(){
 
 function renderPendingJobs(){
   const body = document.getElementById('pending-board');
-  if(!body) return;
+  const section = document.getElementById('pending-section');
+  if(!body || !section) return;
   const jobs = findIncompleteJobs();
   if(!jobs.length){
-    body.innerHTML = '<div class="viewer-empty">目前沒有卡住的訂單。</div>';
+    // 平常不太會遇到「卡住的訂單」，沒有資料時整塊收起來，不佔看板版面。
+    section.style.display = 'none';
+    body.innerHTML = '';
     return;
   }
+  section.style.display = '';
   body.innerHTML = jobs.map(r => {
     const totalText = r.totalBoxes ? `／總箱數 ${r.totalBoxes}` : '（總箱數尚未確定）';
     return `
@@ -2111,6 +2178,7 @@ document.getElementById('records-switch').addEventListener('click', (e) => {
 
 // ---------- 版本紀錄 ----------
 const VERSION_LOG = [
+  {v:'v12.1', d:'新增「進行中訂單」清單：放在總覽列下面，只要有卡片顯示進行中就直接攤開顯示（機台、客戶、還差幾箱），照大寶→二寶→三寶→四寶的機台順序排列，一打開監看板就能快速掃過所有還沒做完的訂單，不用捲卡片；右上角可以手動收合，但重新整理頁面會恢復預設攤開。「卡住的訂單」改成沒有資料時整塊收起來（連標題都不顯示），不會平白佔用看板版面'},
   {v:'v12.0', d:'畫面大改版第一階段：新增頂部總覽列（今日箱數/目標480箱、達成率、進行中訂單・還差、今日異常每百箱次數），統一用分頁籤取代原本的「查看紀錄」下拉選單、「統計儀表板」彈窗、「未完成訂單」彈窗——四個分頁籤是「看板」（卡片＋卡住的訂單，取代原本的未完成訂單按鈕）、「異常」（新增異常/掃碼異常紀錄表單）、「統計」（原統計儀表板內容）、「紀錄」（原查看紀錄內容，內部一樣可切換機台產能/機台異常/機台掃碼異常三種記錄）。卡片本身的欄位、按鈕、邏輯都沒有變動，純粹是外層版面整理'},
   {v:'v11.9', d:'開始/結束時間改版：日期只需要選一次（預設就是今天，不用每次手動選月/日），開始時間、結束時間各自只留時間選單；新增「結束時間跨到隔天」勾選框，平常不會看到，只有真的遇到跨夜班時才勾選、才會多跳出一個獨立的結束日期選單，不影響補登舊資料或跨日訂單的彈性'},
   {v:'v11.8', d:'查看紀錄編輯區的「儲存」按鈕，點下去後會變成「儲存中…」並暫時鎖住，純粹是讓使用者知道現在正在處理，避免網路較慢時誤以為沒反應（這裡儲存的是覆蓋同一列，不會有重複資料的風險，所以沒有加卡片那種鎖定機制）'},
