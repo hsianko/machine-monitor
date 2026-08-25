@@ -289,6 +289,51 @@
     border-radius:var(--radius);
     padding:6px 14px;
   }
+  .quick-abn-hint{color:var(--text-muted); font-size:11.5px; margin:-4px 0 10px;}
+  .quick-abn-grid, .quick-scan-grid{
+    display:flex;
+    flex-direction:column;
+    gap:8px;
+    margin-bottom:18px;
+  }
+  .quick-abn-row{
+    display:flex;
+    align-items:center;
+    gap:8px;
+    flex-wrap:wrap;
+    background:var(--bg-panel);
+    border:1px solid var(--border);
+    border-radius:var(--radius);
+    padding:10px 12px;
+  }
+  .quick-abn-row .qmachine{font-weight:700; min-width:36px;}
+  .quick-abn-row .qmachine.大寶{color:var(--m-daibao);}
+  .quick-abn-row .qmachine.二寶{color:var(--m-erbao);}
+  .quick-abn-row .qmachine.三寶{color:var(--m-sanbao);}
+  .quick-abn-row .qmachine.四寶{color:var(--m-sibao);}
+  .quick-btn{
+    background:var(--bg-field);
+    border:1px solid var(--border-strong);
+    color:var(--text-primary);
+    font-family:var(--font-mono);
+    font-size:12px;
+    padding:8px 14px;
+    border-radius:6px;
+    cursor:pointer;
+  }
+  .quick-btn:hover{border-color:var(--status-run); color:var(--status-run);}
+  .quick-btn:active{transform:scale(0.97);}
+  .quick-btn.just-added{border-color:var(--status-run); color:var(--status-run);}
+  .pending-detail-row{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:14px;
+    padding:10px 4px;
+    border-bottom:1px solid var(--border);
+    font-size:13px;
+  }
+  .pending-detail-row:last-child{border-bottom:none;}
   .topbar-right{display:flex; align-items:center; gap:10px; flex-wrap:wrap;}
   .topbar .clock{font-size:14px; color:var(--text-secondary); letter-spacing:0.5px;}
   .export-btn{
@@ -612,7 +657,7 @@
 
 <div class="wrap">
   <div class="topbar">
-    <h1>產線即時監看板 <button class="version-badge" id="version-badge">v12.1</button></h1>
+    <h1>產線即時監看板 <button class="version-badge" id="version-badge">v12.3</button></h1>
     <div class="topbar-right">
       <button class="export-btn" id="settings-btn">設定 API 網址</button>
       <div class="export-date-picker">
@@ -673,6 +718,18 @@
   </div>
 
   <div class="tab-content" id="tab-abnormal" style="display:none;">
+    <div class="section-title">快速記錄（機台異常）</div>
+    <p class="quick-abn-hint">先快速記下發生次數，機台、類型、次數會自動存好，產地/原因等細節可以之後再補。</p>
+    <div class="quick-abn-grid" id="quick-abn-grid"></div>
+
+    <div class="section-title">快速記錄（機台掃碼異常）</div>
+    <div class="quick-scan-grid" id="quick-scan-grid"></div>
+
+    <div id="pending-detail-section" style="display:none;">
+      <div class="section-title">待補明細<span class="tab-badge" id="pending-detail-badge" style="margin-left:6px;"></span></div>
+      <div class="pending-board" id="pending-detail-board"></div>
+    </div>
+
     <div class="section-title">機台異常紀錄</div>
     <div class="log-panel">
       <div class="log-form" id="abnormal-form">
@@ -1318,6 +1375,7 @@ function render(){
   renderPendingJobs();
   renderRunningList();
   renderOverview();
+  renderPendingDetails();
 }
 
 // 每台機台一天的目標箱數（固定值，跟實際有沒有缺料、有沒有開工無關，是拿來對照實際跟計畫的落差）。
@@ -1416,13 +1474,6 @@ function renderOverview(){
   document.getElementById('ov-remain').textContent = `還差 ${s.remainBoxes} 箱`;
   document.getElementById('ov-abn-count').textContent = s.todayAbnormalCount;
   document.getElementById('ov-abn-rate').textContent = `（每百箱 ${s.abnormalRate.toFixed(2)}）`;
-  const badge = document.getElementById('tab-abn-badge');
-  if(s.todayAbnormalCount > 0){
-    badge.textContent = s.todayAbnormalCount;
-    badge.style.display = '';
-  } else {
-    badge.style.display = 'none';
-  }
 }
 
 function escapeHtml(v){
@@ -2178,6 +2229,8 @@ document.getElementById('records-switch').addEventListener('click', (e) => {
 
 // ---------- 版本紀錄 ----------
 const VERSION_LOG = [
+  {v:'v12.3', d:'修正機台異常「待補明細」的判斷規則，改成依異常類型分別規定：單捲標貼歪不需要產地也不需要原因；料盤載台推擠需要產地；料盤毀損需要產地跟原因都填。之前是不分類型統一要求產地，會誤把不需要產地的單捲標貼歪也列進待補清單'},
+  {v:'v12.2', d:'異常分頁改版：新增「快速記錄」按鈕（機台異常依機台+類型、掃碼異常依機台，各一顆 +1 按鈕），點一下就存好機台/類型/次數/今天日期，不用先填產地/原因/LOT。新增「待補明細」清單，只要有紀錄缺少關鍵欄位（機台異常缺產地、選料盤毀損時還缺原因；掃碼異常缺 Scan位置/LOT/產地）就會列在這裡提醒，異常分頁籤上也會顯示待補筆數的紅色數字，點「補明細」直接跳到紀錄分頁開啟該筆的編輯欄位。原本完整的表單維持不變，有空時還是可以直接一次填完整；不會更動試算表欄位結構，純粹用「有沒有填」判斷要不要提醒'},
   {v:'v12.1', d:'新增「進行中訂單」清單：放在總覽列下面，只要有卡片顯示進行中就直接攤開顯示（機台、客戶、還差幾箱），照大寶→二寶→三寶→四寶的機台順序排列，一打開監看板就能快速掃過所有還沒做完的訂單，不用捲卡片；右上角可以手動收合，但重新整理頁面會恢復預設攤開。「卡住的訂單」改成沒有資料時整塊收起來（連標題都不顯示），不會平白佔用看板版面'},
   {v:'v12.0', d:'畫面大改版第一階段：新增頂部總覽列（今日箱數/目標480箱、達成率、進行中訂單・還差、今日異常每百箱次數），統一用分頁籤取代原本的「查看紀錄」下拉選單、「統計儀表板」彈窗、「未完成訂單」彈窗——四個分頁籤是「看板」（卡片＋卡住的訂單，取代原本的未完成訂單按鈕）、「異常」（新增異常/掃碼異常紀錄表單）、「統計」（原統計儀表板內容）、「紀錄」（原查看紀錄內容，內部一樣可切換機台產能/機台異常/機台掃碼異常三種記錄）。卡片本身的欄位、按鈕、邏輯都沒有變動，純粹是外層版面整理'},
   {v:'v11.9', d:'開始/結束時間改版：日期只需要選一次（預設就是今天，不用每次手動選月/日），開始時間、結束時間各自只留時間選單；新增「結束時間跨到隔天」勾選框，平常不會看到，只有真的遇到跨夜班時才勾選、才會多跳出一個獨立的結束日期選單，不影響補登舊資料或跨日訂單的彈性'},
@@ -2424,6 +2477,163 @@ document.getElementById('sc-submit').addEventListener('click', async () => {
     hint.textContent = '新增失敗：' + err;
   }
 });
+
+// ---------- 快速記錄（異常先記次數，細節之後補） ----------
+function todayMD(){
+  const now = new Date();
+  return { month:String(now.getMonth()+1), day:String(now.getDate()) };
+}
+
+function renderQuickAbnormalGrid(){
+  const wrap = document.getElementById('quick-abn-grid');
+  if(!wrap) return;
+  wrap.innerHTML = MACHINES.map(m => `
+    <div class="quick-abn-row">
+      <span class="qmachine ${m.key}">${m.key}</span>
+      ${AB_TYPE_OPTS.map(t => `<button class="quick-btn" data-quick-abn="${m.key}" data-quick-type="${escapeHtml(t)}">${escapeHtml(t)} +1</button>`).join('')}
+    </div>`).join('');
+}
+
+function renderQuickScanGrid(){
+  const wrap = document.getElementById('quick-scan-grid');
+  if(!wrap) return;
+  wrap.innerHTML = MACHINES.map(m => `
+    <div class="quick-abn-row">
+      <span class="qmachine ${m.key}">${m.key}</span>
+      <button class="quick-btn" data-quick-scan="${m.key}">掃碼異常 +1</button>
+    </div>`).join('');
+}
+
+async function quickAddAbnormal(machine, type, btn){
+  if(!API_URL){ alert('尚未設定 API 網址，請先點右上角「設定 API 網址」。'); return; }
+  const {month, day} = todayMD();
+  const record = { '發生日期': `${month}/${day}`, '機台': machine, '異常類型': type, '異常次數': '1', '料盤產地': '', '原因': '' };
+  const original = btn.textContent;
+  btn.disabled = true;
+  try{
+    await apiPost({action:'appendAbnormal', data: record});
+    await loadState();
+    btn.classList.add('just-added');
+    btn.textContent = '已記錄 ✓';
+    renderPendingDetails();
+    setTimeout(() => { btn.classList.remove('just-added'); btn.textContent = original; btn.disabled = false; }, 1200);
+  }catch(err){
+    alert('快速記錄失敗：' + err);
+    btn.textContent = original;
+    btn.disabled = false;
+  }
+}
+
+async function quickAddScan(machine, btn){
+  if(!API_URL){ alert('尚未設定 API 網址，請先點右上角「設定 API 網址」。'); return; }
+  const {month, day} = todayMD();
+  const record = { '發生日期': `${month}/${day}`, '機台': machine, '異常次數': '1', 'Scan位置': '', 'LOT': '', '產地': '' };
+  const original = btn.textContent;
+  btn.disabled = true;
+  try{
+    await apiPost({action:'appendScan', data: record});
+    await loadState();
+    btn.classList.add('just-added');
+    btn.textContent = '已記錄 ✓';
+    renderPendingDetails();
+    setTimeout(() => { btn.classList.remove('just-added'); btn.textContent = original; btn.disabled = false; }, 1200);
+  }catch(err){
+    alert('快速記錄失敗：' + err);
+    btn.textContent = original;
+    btn.disabled = false;
+  }
+}
+
+document.getElementById('quick-abn-grid').addEventListener('click', (e) => {
+  const btn = e.target.closest('[data-quick-abn]');
+  if(!btn) return;
+  quickAddAbnormal(btn.dataset.quickAbn, btn.dataset.quickType, btn);
+});
+document.getElementById('quick-scan-grid').addEventListener('click', (e) => {
+  const btn = e.target.closest('[data-quick-scan]');
+  if(!btn) return;
+  quickAddScan(btn.dataset.quickScan, btn);
+});
+renderQuickAbnormalGrid();
+renderQuickScanGrid();
+
+// 待補明細：機台異常一定要有「料盤產地」，選「料盤毀損」時還要有「原因」；
+// 掃碼異常一定要有 Scan位置、LOT、產地。缺了任一項，就算「待補」。
+function computePendingDetails(){
+  const items = [];
+  abnormalLog.forEach(r => {
+    const missing = [];
+    const type = r['異常類型'];
+    // 單捲標貼歪不需要產地也不需要原因；料盤載台推擠只需要產地；料盤毀損兩項都需要。
+    const needOrigin = (type === '料盤載台推擠' || type === '料盤毀損');
+    const needReason = (type === '料盤毀損');
+    if(needOrigin && !r['料盤產地']) missing.push('產地');
+    if(needReason && !r['原因']) missing.push('原因');
+    if(missing.length){
+      items.push({ kind:'abnormal', machine:r['機台'], label:type, date:r['發生日期'], missing, row:r });
+    }
+  });
+  scanLog.forEach(r => {
+    const missing = [];
+    if(!r['Scan位置']) missing.push('Scan位置');
+    if(!r['LOT']) missing.push('LOT');
+    if(!r['產地']) missing.push('產地');
+    if(missing.length){
+      items.push({ kind:'scan', machine:r['機台'], label:'掃碼異常', date:r['發生日期'], missing, row:r });
+    }
+  });
+  items.sort((a,b) => String(a.date||'').localeCompare(String(b.date||'')));
+  return items;
+}
+
+function renderPendingDetails(){
+  const section = document.getElementById('pending-detail-section');
+  const board = document.getElementById('pending-detail-board');
+  const badge = document.getElementById('pending-detail-badge');
+  const tabBadge = document.getElementById('tab-abn-badge');
+  if(!section || !board) return;
+  const items = computePendingDetails();
+  if(!items.length){
+    section.style.display = 'none';
+    board.innerHTML = '';
+    if(badge){ badge.style.display = 'none'; }
+    if(tabBadge){ tabBadge.style.display = 'none'; }
+    return;
+  }
+  section.style.display = '';
+  if(badge){ badge.style.display = ''; badge.textContent = items.length; }
+  if(tabBadge){ tabBadge.style.display = ''; tabBadge.textContent = items.length; }
+  board.innerHTML = items.map((it, i) => `
+    <div class="pending-detail-row">
+      <div class="pending-info">
+        <div><span class="pmachine ${escapeHtml(it.machine)}">${escapeHtml(it.machine)}</span>${escapeHtml(it.label)}・${escapeHtml(it.date)}</div>
+        <div class="pmeta">缺：${it.missing.map(escapeHtml).join('、')}</div>
+      </div>
+      <button class="pending-resume-btn" data-fill-detail="${i}">補明細</button>
+    </div>`).join('');
+  board.dataset.items = JSON.stringify(items.map(it => ({kind:it.kind, row:it.row._row})));
+}
+
+document.getElementById('pending-detail-board').addEventListener('click', (e) => {
+  const btn = e.target.closest('[data-fill-detail]');
+  if(!btn) return;
+  const idx = Number(btn.dataset.fillDetail);
+  const items = JSON.parse(document.getElementById('pending-detail-board').dataset.items || '[]');
+  const target = items[idx];
+  if(!target) return;
+  showTab('records');
+  currentDateFilter = null; currentMachineFilter = null; currentRangeFilter = null; remarkFilterOn = false;
+  renderViewer(target.kind);
+  const rowIdx = currentViewRows.findIndex(r => r._row === target.row);
+  if(rowIdx >= 0){
+    renderEditRow(target.kind, rowIdx);
+    setTimeout(() => {
+      const tr = document.querySelector(`#viewer-body tr[data-idx="${rowIdx}"]`);
+      if(tr && tr.scrollIntoView) tr.scrollIntoView({behavior:'smooth', block:'center'});
+    }, 50);
+  }
+});
+
 
 // 追蹤「最近有沒有人在操作表單」，不只看當下那一瞬間的焦點狀態——
 // 在 iPhone 上滑動下拉選單（時間選輪）的過程中，Safari 對焦點的判斷偶爾會有一瞬間的空檔，
