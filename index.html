@@ -497,6 +497,35 @@
   .crossday-label input{cursor:pointer;}
   .time-row select{flex:1; min-width:0; font-size:13px; padding:6px 4px;}
 
+  .details-toggle-row{display:flex; align-items:center; gap:8px; margin-top:10px; padding-top:10px; border-top:1px solid var(--border);}
+  .details-toggle{
+    background:none;
+    border:none;
+    color:var(--text-secondary);
+    font-size:12px;
+    cursor:pointer;
+    display:flex;
+    align-items:center;
+    gap:4px;
+    padding:2px 0;
+  }
+  .details-toggle:hover{color:var(--text-primary);}
+  .details-toggle-arrow{font-size:10px; color:var(--text-muted);}
+  .details-badge{
+    font-size:11px;
+    color:var(--m-daibao);
+    background:rgba(232,163,61,0.12);
+    padding:2px 8px;
+    border-radius:999px;
+  }
+  .card-details{
+    margin-top:10px;
+    padding-top:10px;
+    display:flex;
+    flex-direction:column;
+    gap:10px;
+  }
+
   .card-foot{display:flex; justify-content:space-between; align-items:center; margin-top:12px; flex-wrap:wrap; gap:8px;}
   .clear-btn{
     background:none; border:none; color:var(--text-muted);
@@ -657,7 +686,7 @@
 
 <div class="wrap">
   <div class="topbar">
-    <h1>產線即時監看板 <button class="version-badge" id="version-badge">v12.3</button></h1>
+    <h1>產線即時監看板 <button class="version-badge" id="version-badge">v12.4</button></h1>
     <div class="topbar-right">
       <button class="export-btn" id="settings-btn">設定 API 網址</button>
       <div class="export-date-picker">
@@ -950,6 +979,9 @@ let scanLog = [];
 // 是跨日（例如夜班）還是同一天，最終都是看開始/結束時間本身的日期判斷。
 const crossDayToggle = {};
 
+// 卡片「明細」區塊是不是展開——只存在當次瀏覽期間，重新整理頁面會恢復預設收合。
+const cardDetailsOpen = {};
+
 // 記錄哪些機台目前正在存檔（記錄今日進度／確定完成並加入紀錄）途中。
 // render() 每次都會整個重畫卡片，所以這個鎖要放在外面，重畫時才讀得到目前是不是還在存檔中。
 const savingLock = {};
@@ -1086,6 +1118,8 @@ function render(){
     // 是否為跨日：使用者手動勾選過就照勾選的；沒勾選過的話，如果原本存的資料開始/結束日期本來就不同天，也視為跨日，避免舊資料顯示錯誤。
     const datesDiffer = sp.month && sp.day && ep.month && ep.day && (String(ep.month) !== String(sp.month) || String(ep.day) !== String(sp.day));
     const crossDay = (m.key in crossDayToggle) ? crossDayToggle[m.key] : !!datesDiffer;
+    const detailsOpen = !!cardDetailsOpen[m.key];
+    const hasRemark = !!(d.remark && String(d.remark).trim());
     const isOverflow = d.totalBoxes && d.currentBox && parseFloat(d.currentBox) > parseFloat(d.totalBoxes);
     const pendingTotal = !d.totalBoxes && parseFloat(d.currentBox) > 0;
     // 偵測未完成訂單時，不限制同一台機台——訂單常常會換機台接力做完，所以全部機台都要一起找。
@@ -1168,6 +1202,17 @@ function render(){
             <select data-part="e-time">${timeOptions(ep.time)}</select>
           </div>
         </div>
+      </div>
+      <div class="details-toggle-row">
+        <button class="details-toggle" data-details-toggle="${m.key}">
+          <span class="details-toggle-arrow">${detailsOpen ? '▾' : '▸'}</span>
+          <span>${detailsOpen ? '收起明細' : '明細'}</span>
+        </button>
+        ${!detailsOpen && hasRemark ? '<span class="details-badge">📌 有備註</span>' : ''}
+        ${!detailsOpen && crossDay ? '<span class="details-badge">跨日</span>' : ''}
+      </div>
+      ${detailsOpen ? `
+      <div class="card-details">
         <label class="crossday-label">
           <input type="checkbox" data-role="crossday" ${crossDay ? 'checked' : ''}>
           結束時間跨到隔天
@@ -1181,19 +1226,20 @@ function render(){
           </div>
         </div>
         ` : ''}
-      </div>
-      <div class="field-row">
-        <div class="field full">
-          <label>備註</label>
-          <input type="text" data-k="remark" list="remark-suggestions" placeholder="輸入備註" value="${escapeHtml(d.remark)}">
+        <div class="field-row">
+          <div class="field full">
+            <label>備註</label>
+            <input type="text" data-k="remark" list="remark-suggestions" placeholder="輸入備註" value="${escapeHtml(d.remark)}">
+          </div>
         </div>
-      </div>
-      <div class="card-foot">
         <div style="display:flex; gap:10px; align-items:center;">
           <button class="clear-btn" data-clear="${m.key}">清空本機台資料</button>
           <button class="clear-btn" data-noop="${m.key}">標記今日無作業</button>
         </div>
-        <div style="display:flex; gap:8px;">
+      </div>
+      ` : ''}
+      <div class="card-foot">
+        <div style="display:flex; gap:8px; margin-left:auto;">
           <button class="done-btn" data-daily="${m.key}" ${savingLock[m.key] ? 'disabled' : ''}>${savingLock[m.key] ? '儲存中…' : '記錄今日進度'}</button>
           <button class="done-btn" data-done="${m.key}" ${savingLock[m.key] ? 'disabled' : ''}>${savingLock[m.key] ? '儲存中…' : '確定完成並加入紀錄'}</button>
         </div>
@@ -1232,7 +1278,8 @@ function render(){
     card.querySelectorAll('[data-part="s-month"], [data-part="s-day"], [data-part="s-time"], [data-part="e-time"], [data-part="e-month"], [data-part="e-day"]').forEach(sel => {
       sel.addEventListener('change', syncTimesFromCard);
     });
-    card.querySelector('[data-role="crossday"]').addEventListener('change', (e) => {
+    const crossdayCheckbox = card.querySelector('[data-role="crossday"]');
+    if(crossdayCheckbox) crossdayCheckbox.addEventListener('change', (e) => {
       crossDayToggle[m.key] = e.target.checked;
       if(!e.target.checked){
         // 取消勾選時，結束日期直接收回跟開始日期一致，不留下之前跨日選的殘留值。
@@ -1247,7 +1294,16 @@ function render(){
       render();
     });
 
-    card.querySelector('[data-clear]').addEventListener('click', () => {
+    const detailsToggleBtn = card.querySelector('[data-details-toggle]');
+    if(detailsToggleBtn){
+      detailsToggleBtn.addEventListener('click', () => {
+        cardDetailsOpen[m.key] = !cardDetailsOpen[m.key];
+        render();
+      });
+    }
+
+    const clearBtn = card.querySelector('[data-clear]');
+    if(clearBtn) clearBtn.addEventListener('click', () => {
       if(confirm(`確定要清空 ${m.key} 的資料嗎？`)){
         state[m.key] = { customer:'', totalBoxes:'', currentBox:'', startTime:'', actualEnd:'', remark:'', jobId:'' };
         delete crossDayToggle[m.key];
@@ -1256,7 +1312,8 @@ function render(){
       }
     });
 
-    card.querySelector('[data-noop]').addEventListener('click', async () => {
+    const noopBtn = card.querySelector('[data-noop]');
+    if(noopBtn) noopBtn.addEventListener('click', async () => {
       if(!API_URL){ alert('尚未設定 API 網址，請先點右上角「設定 API 網址」。'); return; }
       const reason = prompt(`確定要標記「${m.key}」今天無作業嗎？可以簡單寫一下原因（不填也可以，例如：無訂單、設備保養）：`, '');
       if(reason === null) return; // 按取消就不送出
@@ -2229,6 +2286,7 @@ document.getElementById('records-switch').addEventListener('click', (e) => {
 
 // ---------- 版本紀錄 ----------
 const VERSION_LOG = [
+  {v:'v12.4', d:'卡片明細展開：把「結束時間跨到隔天」勾選、備註、清空本機台資料、標記今日無作業這四項收進可展開的「明細」區塊，平常收合、需要時點開才會看到，卡片變得精簡許多。收合狀態下如果有填備註，會在「明細」旁邊顯示「📌 有備註」的小提示，不用點開也能發現有備註內容。客戶名稱、總箱數/目前箱數、日期、開始/結束時間、記錄今日進度/確定完成按鈕維持原本位置，天天要用的欄位都不受影響'},
   {v:'v12.3', d:'修正機台異常「待補明細」的判斷規則，改成依異常類型分別規定：單捲標貼歪不需要產地也不需要原因；料盤載台推擠需要產地；料盤毀損需要產地跟原因都填。之前是不分類型統一要求產地，會誤把不需要產地的單捲標貼歪也列進待補清單'},
   {v:'v12.2', d:'異常分頁改版：新增「快速記錄」按鈕（機台異常依機台+類型、掃碼異常依機台，各一顆 +1 按鈕），點一下就存好機台/類型/次數/今天日期，不用先填產地/原因/LOT。新增「待補明細」清單，只要有紀錄缺少關鍵欄位（機台異常缺產地、選料盤毀損時還缺原因；掃碼異常缺 Scan位置/LOT/產地）就會列在這裡提醒，異常分頁籤上也會顯示待補筆數的紅色數字，點「補明細」直接跳到紀錄分頁開啟該筆的編輯欄位。原本完整的表單維持不變，有空時還是可以直接一次填完整；不會更動試算表欄位結構，純粹用「有沒有填」判斷要不要提醒'},
   {v:'v12.1', d:'新增「進行中訂單」清單：放在總覽列下面，只要有卡片顯示進行中就直接攤開顯示（機台、客戶、還差幾箱），照大寶→二寶→三寶→四寶的機台順序排列，一打開監看板就能快速掃過所有還沒做完的訂單，不用捲卡片；右上角可以手動收合，但重新整理頁面會恢復預設攤開。「卡住的訂單」改成沒有資料時整塊收起來（連標題都不顯示），不會平白佔用看板版面'},
