@@ -686,7 +686,7 @@
 
 <div class="wrap">
   <div class="topbar">
-    <h1>產線即時監看板 <button class="version-badge" id="version-badge">v13.1</button></h1>
+    <h1>產線即時監看板 <button class="version-badge" id="version-badge">v13.3</button></h1>
     <div class="topbar-right">
       <button class="export-btn" id="settings-btn">設定 API 網址</button>
       <div class="export-date-picker">
@@ -2286,6 +2286,8 @@ document.getElementById('records-switch').addEventListener('click', (e) => {
 
 // ---------- 版本紀錄 ----------
 const VERSION_LOG = [
+  {v:'v13.3', d:'稼動率表格新增「平均每箱」欄位（實際運轉分鐘 ÷ 實際箱數），統計儀表板、Word、Excel 匯出都同步顯示，沒有箱數資料的機台顯示「—」不列入計算'},
+  {v:'v13.2', d:'時間稼動率的「實際運轉分鐘」也改成假設機台在固定休息時段（10:30-10:45、12:00-13:00、15:00-15:15，加班另扣18:00-18:15）跟著停，不管紀錄上有沒有特別拆成休息前/休息後兩筆，都會直接從運轉時間裡扣掉，才會跟分母（可作業時間，本來就有扣休息）用同一套基準比較。這也連帶修正了先前「機台整段連續運轉、沒有另外拆記錄時，容易被封頂算成100%、看不出提早收工幾十分鐘」的狀況'},
   {v:'v13.1', d:'稼動率的「可作業時間窗口」改用各機台班別的固定上下班時間當基準（大寶/三寶 09:00-18:00，二寶/四寶 08:30-17:30），不再只依賴「當天有紀錄到的最早開始~最晚結束」。實際開始得更早或加班到更晚，窗口會往外延伸；但不會因為當天晚開始或提早收工而讓窗口縮小，這樣才能正確抓到「一開始就沒動」或「提早收工」這種空檔，不會因為沒有紀錄涵蓋到就被系統忽略而算成稼動率100%'},
   {v:'v13.0', d:'修正稼動率重複計算的 bug，並拆成「時間稼動率」與「性能稼動率」：(1) 修正：原本每一天的實際工作時間是把「每一筆記錄自己的開始~結束」直接加總，如果同一天記錄好幾次、開始時間又填回同一個起點，同一段時間會被算兩次以上，稼動率因此常常衝到接近100%。改成先把當天所有記錄的時間區間「合併」（重疊或相接的部分只算一次）才計算，正確反映真正的閒置時間。(2) 拆分：時間稼動率＝機台有沒有在動（合併後的實際運轉分鐘÷可作業分鐘）；性能稼動率＝動的時候快不快（當天實際箱數÷理論產能，理論產能用「每台機台每天目標120箱÷標準工時7.5小時」反推為每小時16箱，目前只有單一產品類型才適用這個固定基準）。統計儀表板的稼動率圖表、表格，以及 Excel/Word 匯出都同步顯示兩種稼動率'},
   {v:'v12.4', d:'卡片明細展開：把「結束時間跨到隔天」勾選、備註、清空本機台資料、標記今日無作業這四項收進可展開的「明細」區塊，平常收合、需要時點開才會看到，卡片變得精簡許多。收合狀態下如果有填備註，會在「明細」旁邊顯示「📌 有備註」的小提示，不用點開也能發現有備註內容。客戶名稱、總箱數/目前箱數、日期、開始/結束時間、記錄今日進度/確定完成按鈕維持原本位置，天天要用的欄位都不受影響'},
@@ -2844,24 +2846,42 @@ function buildDailyMachineStats(logs){
   return result;
 }
 
-// 把當天所有時間區間合併起來，重疊或相接的部分只算一次，回傳「實際運轉分鐘數」。
+// 把當天所有時間區間合併起來，重疊或相接的部分只算一次；
 // 這一步是稼動率修正的關鍵：如果同一天記錄好幾次、開始時間又重複填回同一個起點，
 // 每筆自己的長度加總會把同一段時間算兩次以上，合併區間才能正確反映真正涵蓋了多少時間。
-function mergeIntervalMinutes(intervals){
-  if(!intervals.length) return 0;
+function mergeIntervals(intervals){
+  if(!intervals.length) return [];
   const sorted = intervals.slice().sort((a,b) => a[0]-b[0]);
-  let total = 0;
+  const merged = [];
   let [curStart, curEnd] = sorted[0];
   for(let i=1; i<sorted.length; i++){
     const [s,e] = sorted[i];
     if(s <= curEnd){
       curEnd = Math.max(curEnd, e);
     } else {
-      total += (curEnd - curStart);
+      merged.push([curStart, curEnd]);
       curStart = s; curEnd = e;
     }
   }
-  total += (curEnd - curStart);
+  merged.push([curStart, curEnd]);
+  return merged;
+}
+
+// 合併時間區間後，回傳「實際運轉分鐘數」——同時假設機台在固定休息時段（午休、下午茶等）也跟著停，
+// 把合併區間內涵蓋到的休息時段也一併扣掉，這樣才會跟分母（可作業時間，本來就有扣休息）用同一套基準比較，
+// 不會因為紀錄沒有特別拆成「休息前/休息後」兩筆，就把整段休息時間也誤算成「機台在動」。
+function mergeIntervalMinutes(intervals){
+  const merged = mergeIntervals(intervals);
+  let total = 0;
+  merged.forEach(([s,e]) => {
+    let segMinutes = e - s;
+    FIXED_BREAKS_MIN.forEach(([bs, be]) => {
+      const os = Math.max(s, bs);
+      const oe = Math.min(e, be);
+      if(oe > os) segMinutes -= (oe - os);
+    });
+    total += Math.max(0, segMinutes);
+  });
   return total;
 }
 
@@ -2912,7 +2932,9 @@ function computeUptimeStats(logs){
     const pct = totalAvailable > 0 ? Math.min(100, Math.round((totalWorked/totalAvailable)*100)) : 0;
     const theoretical = (totalWorked/60) * RATE_PER_HOUR;
     const perfPct = theoretical > 0 ? Math.round((totalBoxes/theoretical)*100) : 0;
-    return {machine:m.key, workedHours:+(totalWorked/60).toFixed(1), activeDays:dateKeys.length, availableHours:+(totalAvailable/60).toFixed(1), totalBoxes, pct, perfPct};
+    // 平均每箱分鐘：實際運轉分鐘 ÷ 實際箱數，是性能稼動率換個角度看的結果，沒有箱數時給 null（不列入比較）。
+    const avgMinPerBox = totalBoxes > 0 ? +(totalWorked/totalBoxes).toFixed(1) : null;
+    return {machine:m.key, workedHours:+(totalWorked/60).toFixed(1), activeDays:dateKeys.length, availableHours:+(totalAvailable/60).toFixed(1), totalBoxes, pct, perfPct, avgMinPerBox};
   });
 }
 
@@ -3039,7 +3061,7 @@ function renderDashboard(){
   const uptimeTrend = computeDailyUptimeTrend(logs);
   const colors = uptimeStats.map(s => MACHINE_COLORS[s.machine]);
 
-  document.getElementById('dash-uptime-note').innerHTML = `稼動率拆成兩種：<b>時間稼動率</b>＝機台有沒有在動（合併當天所有時間區間後的實際運轉分鐘 ÷ 可作業分鐘，重疊時段只算一次）；<b>性能稼動率</b>＝動的時候快不快（當天實際箱數 ÷ 理論產能，理論產能＝實際運轉時數 × 每小時${RATE_PER_HOUR}箱，這個每小時箱數是用「單一機台每天目標${DAILY_TARGET_PER_MACHINE}箱 ÷ 標準工時${AVAILABLE_HOURS_PER_DAY}小時」反推，只適用目前單一產品類型的情況）。可作業時數以各機台班別的固定上下班時間當基準（大寶/三寶 09:00-18:00，二寶/四寶 08:30-17:30），實際開始得更早或加班到更晚會往外延伸窗口，但不會因為當天晚開始/早收工而縮小窗口，這樣才能正確抓到「一開始就沒動」或「提早收工」這種空檔；窗口內涵蓋到的固定休息時段（10:30-10:45、12:00-13:00、15:00-15:15，加班另扣18:00-18:15）會再從可作業時數扣除。異常率為「機台異常記錄＋掃碼異常記錄」的次數換算每百箱異常次數，不是良率。`;
+  document.getElementById('dash-uptime-note').innerHTML = `稼動率拆成兩種：<b>時間稼動率</b>＝機台有沒有在動（合併當天所有時間區間、並假設固定休息時段機台也跟著停後的實際運轉分鐘 ÷ 可作業分鐘）；<b>性能稼動率</b>＝動的時候快不快（當天實際箱數 ÷ 理論產能，理論產能＝實際運轉時數 × 每小時${RATE_PER_HOUR}箱，這個每小時箱數是用「單一機台每天目標${DAILY_TARGET_PER_MACHINE}箱 ÷ 標準工時${AVAILABLE_HOURS_PER_DAY}小時」反推，只適用目前單一產品類型的情況）。可作業時數以各機台班別的固定上下班時間當基準（大寶/三寶 09:00-18:00，二寶/四寶 08:30-17:30），實際開始得更早或加班到更晚會往外延伸窗口，但不會因為當天晚開始/早收工而縮小窗口，這樣才能正確抓到「一開始就沒動」或「提早收工」這種空檔；窗口內涵蓋到的固定休息時段（10:30-10:45、12:00-13:00、15:00-15:15，加班另扣18:00-18:15）不管紀錄上有沒有特別拆開，都會直接假設機台也跟著停，從實際運轉分鐘跟可作業分鐘裡一併扣除。異常率為「機台異常記錄＋掃碼異常記錄」的次數換算每百箱異常次數，不是良率。`;
 
   if(chartUptime) chartUptime.destroy();
   chartUptime = new Chart(document.getElementById('dash-chart-uptime'), {
@@ -3052,8 +3074,8 @@ function renderDashboard(){
       scales:{ y:{ beginAtZero:true, ticks:{color:CHART_TEXT_COLOR}, grid:{color:CHART_GRID_COLOR} }, x:{ ticks:{color:CHART_TEXT_COLOR}, grid:{display:false} } } }
   });
 
-  document.getElementById('dash-table-uptime').innerHTML = `<table><tr><th>機台</th><th>時間稼動率</th><th>性能稼動率</th><th>實際運轉工時</th><th>可作業工時</th><th>實際箱數</th><th>有紀錄天數</th></tr>` +
-    uptimeStats.map(s => `<tr><td>${s.machine}</td><td>${s.pct}%</td><td>${s.perfPct}%</td><td>${s.workedHours} 小時</td><td>${s.availableHours} 小時</td><td>${s.totalBoxes}</td><td>${s.activeDays} 天</td></tr>`).join('') + `</table>`;
+  document.getElementById('dash-table-uptime').innerHTML = `<table><tr><th>機台</th><th>時間稼動率</th><th>性能稼動率</th><th>平均每箱</th><th>實際運轉工時</th><th>可作業工時</th><th>實際箱數</th><th>有紀錄天數</th></tr>` +
+    uptimeStats.map(s => `<tr><td>${s.machine}</td><td>${s.pct}%</td><td>${s.perfPct}%</td><td>${s.avgMinPerBox!==null ? s.avgMinPerBox+' 分鐘' : '—'}</td><td>${s.workedHours} 小時</td><td>${s.availableHours} 小時</td><td>${s.totalBoxes}</td><td>${s.activeDays} 天</td></tr>`).join('') + `</table>`;
 
   if(chartUptimeTrend) chartUptimeTrend.destroy();
   chartUptimeTrend = new Chart(document.getElementById('dash-chart-uptime-trend'), {
@@ -3204,7 +3226,7 @@ function buildDashReportHtml(){
     options:{ plugins:{legend:{display:false}}, scales:{ y:{ beginAtZero:true } } }
   }, W, H);
 
-  const uptimeRows = uptimeStats.map(s => `<tr><td>${s.machine}</td><td>${s.pct}%</td><td>${s.perfPct}%</td><td>${s.workedHours}</td><td>${s.availableHours}</td><td>${s.totalBoxes}</td><td>${s.activeDays}</td></tr>`).join('');
+  const uptimeRows = uptimeStats.map(s => `<tr><td>${s.machine}</td><td>${s.pct}%</td><td>${s.perfPct}%</td><td>${s.avgMinPerBox!==null ? s.avgMinPerBox : '—'}</td><td>${s.workedHours}</td><td>${s.availableHours}</td><td>${s.totalBoxes}</td><td>${s.activeDays}</td></tr>`).join('');
   const cardRows = abnStats.perMachine.map(p => `<tr><td>${p.machine}</td><td>${p.total}</td><td>${p.byType['單捲標貼歪']}</td><td>${p.byType['料盤載台推擠']}</td><td>${p.byType['料盤毀損']}</td><td>${p.scanCount}</td></tr>`).join('');
   const rankRows = abnStats.ranked.map((p,i) => `<tr><td>${i+1}</td><td>${p.machine}</td><td>${p.byType['單捲標貼歪']}</td><td>${p.byType['料盤載台推擠']}</td><td>${p.byType['料盤毀損']}</td><td>${p.scanCount}</td><td>${p.total}</td><td>${p.level}</td></tr>`).join('');
   const insightHtml = buildAbnormalInsight(abnStats);
@@ -3251,7 +3273,7 @@ function buildDashReportHtml(){
 
     ${block('稼動率', `
       <img src="${imgUptime}" width="${W}" height="${H}">
-      <table class="data-table"><tr><th>機台</th><th>時間稼動率</th><th>性能稼動率</th><th>實際運轉工時(小時)</th><th>可作業工時(小時)</th><th>實際箱數</th><th>有紀錄天數</th></tr>${uptimeRows}</table>
+      <table class="data-table"><tr><th>機台</th><th>時間稼動率</th><th>性能稼動率</th><th>平均每箱(分鐘)</th><th>實際運轉工時(小時)</th><th>可作業工時(小時)</th><th>實際箱數</th><th>有紀錄天數</th></tr>${uptimeRows}</table>
     `)}
 
     ${block('稼動率趨勢', `
@@ -3289,8 +3311,8 @@ function exportDashboardExcel(){
   const wb = XLSX.utils.book_new();
 
   const wsUptime = buildStyledSheet(title, subtitle,
-    ['機台', '時間稼動率', '性能稼動率', '實際運轉工時', '可作業工時', '實際箱數', '有紀錄天數'],
-    uptimeStats.map(s => [s.machine, s.pct, s.perfPct, s.workedHours, s.availableHours, s.totalBoxes, s.activeDays]),
+    ['機台', '時間稼動率', '性能稼動率', '平均每箱(分鐘)', '實際運轉工時', '可作業工時', '實際箱數', '有紀錄天數'],
+    uptimeStats.map(s => [s.machine, s.pct, s.perfPct, s.avgMinPerBox!==null ? s.avgMinPerBox : '', s.workedHours, s.availableHours, s.totalBoxes, s.activeDays]),
     { pctCols:[1,2] }
   );
   XLSX.utils.book_append_sheet(wb, wsUptime, '稼動率');
