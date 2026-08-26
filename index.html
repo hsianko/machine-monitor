@@ -688,7 +688,7 @@
 
 <div class="wrap">
   <div class="topbar">
-    <h1>產線即時監看板 <button class="version-badge" id="version-badge">v13.7</button></h1>
+    <h1>產線即時監看板 <button class="version-badge" id="version-badge">v14.0</button></h1>
     <div class="topbar-right">
       <button class="export-btn" id="settings-btn">設定 API 網址</button>
       <div class="export-date-picker">
@@ -770,6 +770,7 @@
         <div class="field">
           <label>發生日期</label>
           <div class="time-row">
+            <select data-part="year" id="ab-year"></select>
             <select data-part="month" id="ab-month"></select>
             <select data-part="day" id="ab-day"></select>
           </div>
@@ -820,6 +821,7 @@
         <div class="field">
           <label>發生日期</label>
           <div class="time-row">
+            <select data-part="year" id="sc-year"></select>
             <select data-part="month" id="sc-month"></select>
             <select data-part="day" id="sc-day"></select>
           </div>
@@ -860,9 +862,11 @@
       <div class="dash-controls">
         <div class="dash-control-group">
           <span class="dash-control-label">日期範圍</span>
+          <select id="dash-start-year"></select>
           <select id="dash-start-month"></select>
           <select id="dash-start-day"></select>
           <span class="dash-tilde">～</span>
+          <select id="dash-end-year"></select>
           <select id="dash-end-month"></select>
           <select id="dash-end-day"></select>
         </div>
@@ -919,9 +923,11 @@
       <div class="dash-controls" style="margin-bottom:10px;">
         <button class="date-tab" id="viewer-range-toggle">📅 自訂日期區間</button>
         <div class="dash-control-group" id="viewer-range-picker" style="display:none;">
+          <select id="viewer-range-start-year"></select>
           <select id="viewer-range-start-month"></select>
           <select id="viewer-range-start-day"></select>
           <span class="dash-tilde">～</span>
+          <select id="viewer-range-end-year"></select>
           <select id="viewer-range-end-month"></select>
           <select id="viewer-range-end-day"></select>
           <button class="date-tab" id="viewer-range-clear">清除區間</button>
@@ -1073,6 +1079,21 @@ function timeOptions(selected){
   return out;
 }
 
+// 系統從 2026 年開始使用；舊資料如果沒有年份（例如之前存的「8/26」這種格式)，
+// 一律當作是這一年的資料。年份下拉選單也是從這一年開始列到明年，不用列出更早的年份。
+const SYSTEM_START_YEAR = 2026;
+
+function yearOptionsHtml(selected){
+  const curYear = new Date().getFullYear();
+  const maxYear = Math.max(curYear + 1, SYSTEM_START_YEAR + 1);
+  let out = '<option value="">年</option>';
+  const sel = String(selected||'');
+  for(let y = SYSTEM_START_YEAR; y <= maxYear; y++){
+    out += `<option value="${y}"${String(y)===sel?' selected':''}>${y}年</option>`;
+  }
+  return out;
+}
+
 function monthOptionsHtml(selected){
   let out = '<option value="">月</option>';
   const sel = String(selected||'');
@@ -1091,16 +1112,38 @@ function dayOptionsHtml(selected){
   return out;
 }
 
-function buildComposite(month, day, time){
-  if(!month && !day && !time) return '';
-  return `${month||''}/${day||''} ${time||''}`;
+// 開始/結束時間這種帶時間的欄位：新格式是「YYYY/M/D HH:MM」。
+function buildComposite(year, month, day, time){
+  if(!year && !month && !day && !time) return '';
+  return `${year||''}/${month||''}/${day||''} ${time||''}`;
 }
 
 function parseComposite(str){
-  if(!str) return {month:'', day:'', time:''};
-  const m = String(str).match(/^([^\/]*)\/([^\s]*)\s*(.*)$/);
-  if(!m) return {month:'', day:'', time:''};
-  return {month:m[1]||'', day:m[2]||'', time:m[3]||''};
+  if(!str) return {year:'', month:'', day:'', time:''};
+  const s = String(str).trim();
+  // 新格式：YYYY/M/D HH:MM
+  let m = s.match(/^(\d{4})\/([^\/]*)\/([^\s]*)\s*(.*)$/);
+  if(m) return {year:m[1]||'', month:m[2]||'', day:m[3]||'', time:m[4]||''};
+  // 舊格式（沒有年份）：M/D HH:MM，一律當作系統啟用那一年的資料。
+  m = s.match(/^([^\/]*)\/([^\s]*)\s*(.*)$/);
+  if(m) return {year:String(SYSTEM_START_YEAR), month:m[1]||'', day:m[2]||'', time:m[3]||''};
+  return {year:'', month:'', day:'', time:''};
+}
+
+// 發生日期這種只有日期、沒有時間的欄位：新格式是「YYYY/M/D」。
+function buildDateOnly(year, month, day){
+  if(!year && !month && !day) return '';
+  return `${year||''}/${month||''}/${day||''}`;
+}
+
+function parseDateOnly(str){
+  if(!str) return {year:'', month:'', day:''};
+  const s = String(str).trim();
+  let m = s.match(/^(\d{4})\/([^\/]+)\/([^\/\s]+)$/);
+  if(m) return {year:m[1], month:m[2], day:m[3]};
+  m = s.match(/^([^\/]+)\/([^\/\s]+)$/);
+  if(m) return {year:String(SYSTEM_START_YEAR), month:m[1], day:m[2]};
+  return {year:'', month:'', day:''};
 }
 
 function nowComposite(){
@@ -1110,12 +1153,13 @@ function nowComposite(){
   mins = Math.round(mins / TIME_STEP) * TIME_STEP;
   const hh = String(Math.floor(mins/60)).padStart(2,'0');
   const mm = String(mins%60).padStart(2,'0');
-  return buildComposite(now.getMonth()+1, now.getDate(), `${hh}:${mm}`);
+  return buildComposite(now.getFullYear(), now.getMonth()+1, now.getDate(), `${hh}:${mm}`);
 }
 
 function render(){
   const grid = document.getElementById('grid');
   grid.innerHTML = '';
+  const todayY = new Date().getFullYear();
   const todayM = new Date().getMonth()+1;
   const todayD = new Date().getDate();
   MACHINES.forEach(m => {
@@ -1124,11 +1168,12 @@ function render(){
     const pct = computePct(m.key);
     const sp = parseComposite(d.startTime);
     const ep = parseComposite(d.actualEnd);
-    // 日期欄位：如果還沒選過，畫面上直接預設顯示今天，不用每次都手動選月/日。
+    // 日期欄位：如果還沒選過，畫面上直接預設顯示今天，不用每次都手動選年/月/日。
+    const sYearDefault = sp.year || todayY;
     const sMonthDefault = sp.month || todayM;
     const sDayDefault = sp.day || todayD;
     // 是否為跨日：使用者手動勾選過就照勾選的；沒勾選過的話，如果原本存的資料開始/結束日期本來就不同天，也視為跨日，避免舊資料顯示錯誤。
-    const datesDiffer = sp.month && sp.day && ep.month && ep.day && (String(ep.month) !== String(sp.month) || String(ep.day) !== String(sp.day));
+    const datesDiffer = sp.month && sp.day && ep.month && ep.day && (String(ep.year||sYearDefault) !== String(sp.year||sYearDefault) || String(ep.month) !== String(sp.month) || String(ep.day) !== String(sp.day));
     const crossDay = (m.key in crossDayToggle) ? crossDayToggle[m.key] : !!datesDiffer;
     const detailsOpen = !!cardDetailsOpen[m.key];
     const hasRemark = !!(d.remark && String(d.remark).trim());
@@ -1200,6 +1245,7 @@ function render(){
         <div class="field time-group" data-role="shared-date">
           <label>日期</label>
           <div class="time-row">
+            <select data-part="s-year">${yearOptionsHtml(sYearDefault)}</select>
             <select data-part="s-month">${monthOptionsHtml(sMonthDefault)}</select>
             <select data-part="s-day">${dayOptionsHtml(sDayDefault)}</select>
           </div>
@@ -1233,6 +1279,7 @@ function render(){
         <div class="field time-group" data-role="end-date">
           <label>結束日期</label>
           <div class="time-row">
+            <select data-part="e-year">${yearOptionsHtml(ep.year || sYearDefault)}</select>
             <select data-part="e-month">${monthOptionsHtml(ep.month || sMonthDefault)}</select>
             <select data-part="e-day">${dayOptionsHtml(ep.day || sDayDefault)}</select>
           </div>
@@ -1274,20 +1321,23 @@ function render(){
     // 日期只需要選一次（預設就是今天），開始/結束時間各自只留時間選單；
     // 不管是改日期、改開始時間、還是改結束時間，都用同一套邏輯重新組合成完整的日期時間存進去。
     function syncTimesFromCard(){
+      const sYear = card.querySelector('[data-part="s-year"]').value;
       const sMonth = card.querySelector('[data-part="s-month"]').value;
       const sDay = card.querySelector('[data-part="s-day"]').value;
       const sTime = card.querySelector('[data-part="s-time"]').value;
       const eTime = card.querySelector('[data-part="e-time"]').value;
+      const eYearSel = card.querySelector('[data-part="e-year"]');
       const eMonthSel = card.querySelector('[data-part="e-month"]');
       const eDaySel = card.querySelector('[data-part="e-day"]');
+      const eYear = eYearSel ? eYearSel.value : sYear;
       const eMonth = eMonthSel ? eMonthSel.value : sMonth;
       const eDay = eDaySel ? eDaySel.value : sDay;
-      state[m.key].startTime = buildComposite(sMonth, sDay, sTime);
-      state[m.key].actualEnd = buildComposite(eMonth, eDay, eTime);
+      state[m.key].startTime = buildComposite(sYear, sMonth, sDay, sTime);
+      state[m.key].actualEnd = buildComposite(eYear, eMonth, eDay, eTime);
       saveState(m.key);
       render();
     }
-    card.querySelectorAll('[data-part="s-month"], [data-part="s-day"], [data-part="s-time"], [data-part="e-time"], [data-part="e-month"], [data-part="e-day"]').forEach(sel => {
+    card.querySelectorAll('[data-part="s-year"], [data-part="s-month"], [data-part="s-day"], [data-part="s-time"], [data-part="e-time"], [data-part="e-year"], [data-part="e-month"], [data-part="e-day"]').forEach(sel => {
       sel.addEventListener('change', syncTimesFromCard);
     });
     const crossdayCheckbox = card.querySelector('[data-role="crossday"]');
@@ -1295,12 +1345,13 @@ function render(){
       crossDayToggle[m.key] = e.target.checked;
       if(!e.target.checked){
         // 取消勾選時，結束日期直接收回跟開始日期一致，不留下之前跨日選的殘留值。
+        const sYear = card.querySelector('[data-part="s-year"]').value;
         const sMonth = card.querySelector('[data-part="s-month"]').value;
         const sDay = card.querySelector('[data-part="s-day"]').value;
         const sTime = card.querySelector('[data-part="s-time"]').value;
         const eTime = card.querySelector('[data-part="e-time"]').value;
-        state[m.key].startTime = buildComposite(sMonth, sDay, sTime);
-        state[m.key].actualEnd = buildComposite(sMonth, sDay, eTime);
+        state[m.key].startTime = buildComposite(sYear, sMonth, sDay, sTime);
+        state[m.key].actualEnd = buildComposite(sYear, sMonth, sDay, eTime);
         saveState(m.key);
       }
       render();
@@ -1468,13 +1519,13 @@ function getRunningOrders(){
 function computeOverviewStats(){
   const now = new Date();
   const pad = n => String(n).padStart(2,'0');
-  const todayMD = `${pad(now.getMonth()+1)}-${pad(now.getDate())}`;
+  const todayYMD = `${now.getFullYear()}-${pad(now.getMonth()+1)}-${pad(now.getDate())}`;
 
   // 今日箱數：加總今天每一筆機台產能記錄的「當日箱數」。
   // 同一張訂單當天可能分好幾次記錄，每筆的當日箱數本來就是那次的增量，加總起來才是今天實際做的總數。
   let todayBoxes = 0;
   completedLog.forEach(r => {
-    if(recordDateStr(VIEW_CONFIG.log, r) === todayMD){
+    if(recordDateStr(VIEW_CONFIG.log, r) === todayYMD){
       todayBoxes += parseFloat(r.dayBoxes) || 0;
     }
   });
@@ -1490,12 +1541,12 @@ function computeOverviewStats(){
   // 今日異常：機台異常＋掃碼異常，發生日期是今天的次數加總；每百箱異常率算法跟統計儀表板一致。
   let todayAbnormalCount = 0;
   abnormalLog.forEach(r => {
-    if(recordDateStr(VIEW_CONFIG.abnormal, r) === todayMD){
+    if(recordDateStr(VIEW_CONFIG.abnormal, r) === todayYMD){
       todayAbnormalCount += parseFloat(r['異常次數']) || 0;
     }
   });
   scanLog.forEach(r => {
-    if(recordDateStr(VIEW_CONFIG.scan, r) === todayMD){
+    if(recordDateStr(VIEW_CONFIG.scan, r) === todayYMD){
       todayAbnormalCount += parseFloat(r['異常次數']) || 0;
     }
   });
@@ -1961,17 +2012,25 @@ function hasMeaningfulRemark(cfg, r){
   return !!v && !isBoxMathRemark(v);
 }
 
-// 把「M/D」或「M/D HH:MM」轉成可以直接比大小的數字，用來排序查看紀錄的列表，
-// 不管試算表裡實際的列順序如何都能正確排出時間先後。
+// 把「YYYY/M/D」「M/D」或「...HH:MM」轉成可以直接比大小的數字，用來排序查看紀錄的列表，
+// 不管試算表裡實際的列順序如何都能正確排出時間先後（含年份，跨年也能正確排序）。
 function sortKeyForRow(cfg, r){
   const raw = r[cfg.groupDateKey || cfg.dateKey];
   if(!raw) return -1;
-  const m = String(raw).trim().match(/^(\d{1,2})\/(\d{1,2})(?:\s+(\d{1,2}):(\d{2}))?/);
-  if(!m) return -1;
-  const month = parseInt(m[1],10), day = parseInt(m[2],10);
-  const hour = m[3] ? parseInt(m[3],10) : 0;
-  const min = m[4] ? parseInt(m[4],10) : 0;
-  return month*1000000 + day*10000 + hour*100 + min;
+  const s = String(raw).trim();
+  const full = s.match(/^(\d{4})\/(\d{1,2})\/(\d{1,2})(?:\s+(\d{1,2}):(\d{2}))?/);
+  if(full){
+    const y=parseInt(full[1],10), mo=parseInt(full[2],10), d=parseInt(full[3],10);
+    const h=full[4]?parseInt(full[4],10):0, mi=full[5]?parseInt(full[5],10):0;
+    return y*100000000 + mo*1000000 + d*10000 + h*100 + mi;
+  }
+  const legacy = s.match(/^(\d{1,2})\/(\d{1,2})(?:\s+(\d{1,2}):(\d{2}))?/);
+  if(legacy){
+    const mo=parseInt(legacy[1],10), d=parseInt(legacy[2],10);
+    const h=legacy[3]?parseInt(legacy[3],10):0, mi=legacy[4]?parseInt(legacy[4],10):0;
+    return SYSTEM_START_YEAR*100000000 + mo*1000000 + d*10000 + h*100 + mi;
+  }
+  return -1;
 }
 
 // 加入一筆新紀錄後，把「機台產能記錄」直接篩選到「今天」，
@@ -1979,27 +2038,32 @@ function sortKeyForRow(cfg, r){
 function focusTodayInLog(){
   const now = new Date();
   const pad = n => String(n).padStart(2,'0');
-  currentDateFilter = `${pad(now.getMonth()+1)}-${pad(now.getDate())}`;
+  currentDateFilter = `${now.getFullYear()}-${pad(now.getMonth()+1)}-${pad(now.getDate())}`;
   remarkFilterOn = false;
   currentMachineFilter = null;
 }
 
+// 回傳 "YYYY-MM-DD" 格式，含年份，這樣不同年份的同一個月日不會被混在一起，
+// 日期區間比較、排序也都能直接用文字大小比較（YYYY-MM-DD 格式本身就是可以照順序排列的）。
 function recordDateStr(cfg, r){
   const v = r[cfg.groupDateKey || cfg.dateKey];
   if(!v) return null;
   const s = String(v).trim();
-  // 我們自己存的「M/D」或「M/D 時:分」格式（開始時間、發生日期、日期 這幾欄都是這種格式）
-  const md = s.match(/^(\d{1,2})\/(\d{1,2})/);
-  if(md) return `${md[1].padStart(2,'0')}-${md[2].padStart(2,'0')}`;
-  // 防呆：如果不小心抓到的是紀錄時間那種帶年份的格式，也一樣能分類
-  const iso = s.match(/^\d{4}-(\d{2})-(\d{2})/);
-  if(iso) return `${iso[1]}-${iso[2]}`;
+  // 新格式：YYYY/M/D
+  let m = s.match(/^(\d{4})\/(\d{1,2})\/(\d{1,2})/);
+  if(m) return `${m[1]}-${m[2].padStart(2,'0')}-${m[3].padStart(2,'0')}`;
+  // 舊格式（沒有年份）：M/D，一律當作系統啟用那一年的資料
+  m = s.match(/^(\d{1,2})\/(\d{1,2})/);
+  if(m) return `${SYSTEM_START_YEAR}-${m[1].padStart(2,'0')}-${m[2].padStart(2,'0')}`;
+  // 防呆：如果不小心抓到的是紀錄時間那種 ISO 格式，也一樣能分類
+  const iso = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if(iso) return `${iso[1]}-${iso[2]}-${iso[3]}`;
   return null;
 }
 
 // 防呆：如果 Google 試算表把我們存的時間字串自動誤判成日期格式，
 // 讀回來會變成一長串 ISO 格式（例如 2026-08-04T01:00:00.000Z），這裡把它清乾淨、
-// 還原成我們原本要的「M/D HH:MM」或「M/D」樣式，沒有問題的字串則原樣顯示。
+// 還原成我們原本要的「YYYY/M/D HH:MM」或「YYYY/M/D」樣式，沒有問題的字串則原樣顯示。
 function cleanDisplayTime(v){
   if(v === undefined || v === null || v === '') return '';
   const s = String(v);
@@ -2007,9 +2071,9 @@ function cleanDisplayTime(v){
   if(iso){
     const hh = iso[4], mm = iso[5];
     if(hh === '00' && mm === '00'){
-      return `${parseInt(iso[2],10)}/${parseInt(iso[3],10)}`;
+      return `${iso[1]}/${parseInt(iso[2],10)}/${parseInt(iso[3],10)}`;
     }
-    return `${parseInt(iso[2],10)}/${parseInt(iso[3],10)} ${hh}:${mm}`;
+    return `${iso[1]}/${parseInt(iso[2],10)}/${parseInt(iso[3],10)} ${hh}:${mm}`;
   }
   const trailing = s.match(/^(.*\d{2}:\d{2}):\d{2}(\.\d+)?Z?$/);
   if(trailing) return trailing[1];
@@ -2025,18 +2089,18 @@ function fieldControlHtml(cfg, key, value){
   if(ft && ft.type === 'datetime'){
     const p = parseComposite(value);
     return `<div class="edit-datetime" data-edit-key="${key}">
+      <select data-edit-part="year">${yearOptionsHtml(p.year)}</select>
       <select data-edit-part="month">${monthOptionsHtml(p.month)}</select>
       <select data-edit-part="day">${dayOptionsHtml(p.day)}</select>
       <select data-edit-part="time">${timeOptions(p.time)}</select>
     </div>`;
   }
   if(ft && ft.type === 'date'){
-    const parts = String(value||'').split('/');
-    const month = parts[0] || '';
-    const day = parts[1] || '';
+    const p = parseDateOnly(value);
     return `<div class="edit-datetime" data-edit-key="${key}">
-      <select data-edit-part="month">${monthOptionsHtml(month)}</select>
-      <select data-edit-part="day">${dayOptionsHtml(day)}</select>
+      <select data-edit-part="year">${yearOptionsHtml(p.year)}</select>
+      <select data-edit-part="month">${monthOptionsHtml(p.month)}</select>
+      <select data-edit-part="day">${dayOptionsHtml(p.day)}</select>
     </div>`;
   }
   const val = escapeHtml(cleanDisplayTime(value));
@@ -2078,7 +2142,7 @@ function renderViewer(view, highlightLast, keepDateFilter){
   if(recentDates.length){
     const allBtn = `<button class="date-tab${(currentDateFilter===null && !currentRangeFilter)?' active':''}" data-date="">全部</button>`;
     const dateBtns = recentDates.map(d => {
-      const label = d.replace('-', '/'); // 'MM-DD' -> 'MM/DD'
+      const label = d.split('-').join('/'); // 'YYYY-MM-DD' -> 'YYYY/MM/DD'，含年份避免跨年混淆
       return `<button class="date-tab${currentDateFilter===d?' active':''}" data-date="${d}">${label}</button>`;
     }).join('');
     tabsWrap.innerHTML = allBtn + dateBtns;
@@ -2194,8 +2258,8 @@ async function handleSaveEdit(view, idx){
       const get = p => { const found = el.querySelector(`[data-edit-part="${p}"]`); return found ? found.value : ''; };
       const ft = cfg.fieldTypes[key];
       newValues[key] = (ft && ft.type === 'date')
-        ? (get('month') && get('day') ? `${get('month')}/${get('day')}` : '')
-        : buildComposite(get('month'), get('day'), get('time'));
+        ? (get('year') && get('month') && get('day') ? buildDateOnly(get('year'), get('month'), get('day')) : '')
+        : buildComposite(get('year'), get('month'), get('day'), get('time'));
     } else {
       newValues[key] = el.value;
     }
@@ -2265,19 +2329,24 @@ document.getElementById('viewer-range-toggle').addEventListener('click', () => {
   picker.style.display = picker.style.display === 'none' ? 'flex' : 'none';
 });
 function initViewerRangePicker(){
+  const curYear = new Date().getFullYear();
+  document.getElementById('viewer-range-start-year').innerHTML = yearOptionsHtml(curYear);
   document.getElementById('viewer-range-start-month').innerHTML = monthOptionsHtml('');
   document.getElementById('viewer-range-start-day').innerHTML = dayOptionsHtml('');
+  document.getElementById('viewer-range-end-year').innerHTML = yearOptionsHtml(curYear);
   document.getElementById('viewer-range-end-month').innerHTML = monthOptionsHtml('');
   document.getElementById('viewer-range-end-day').innerHTML = dayOptionsHtml('');
-  ['viewer-range-start-month','viewer-range-start-day','viewer-range-end-month','viewer-range-end-day'].forEach(id => {
+  ['viewer-range-start-year','viewer-range-start-month','viewer-range-start-day','viewer-range-end-year','viewer-range-end-month','viewer-range-end-day'].forEach(id => {
     document.getElementById(id).addEventListener('change', () => {
+      const sy = document.getElementById('viewer-range-start-year').value;
       const sm = document.getElementById('viewer-range-start-month').value;
       const sd = document.getElementById('viewer-range-start-day').value;
+      const ey = document.getElementById('viewer-range-end-year').value;
       const em = document.getElementById('viewer-range-end-month').value;
       const ed = document.getElementById('viewer-range-end-day').value;
-      if(sm && sd && em && ed){
+      if(sy && sm && sd && ey && em && ed){
         const pad = n => String(n).padStart(2,'0');
-        currentRangeFilter = {start:`${pad(sm)}-${pad(sd)}`, end:`${pad(em)}-${pad(ed)}`};
+        currentRangeFilter = {start:`${sy}-${pad(sm)}-${pad(sd)}`, end:`${ey}-${pad(em)}-${pad(ed)}`};
         currentDateFilter = null;
         renderViewer(currentLogView, false, true);
       }
@@ -2287,7 +2356,7 @@ function initViewerRangePicker(){
 initViewerRangePicker();
 document.getElementById('viewer-range-clear').addEventListener('click', () => {
   currentRangeFilter = null;
-  ['viewer-range-start-month','viewer-range-start-day','viewer-range-end-month','viewer-range-end-day'].forEach(id => {
+  ['viewer-range-start-year','viewer-range-start-month','viewer-range-start-day','viewer-range-end-year','viewer-range-end-month','viewer-range-end-day'].forEach(id => {
     document.getElementById(id).value = '';
   });
   renderViewer(currentLogView, false, true);
@@ -2301,6 +2370,7 @@ document.getElementById('records-switch').addEventListener('click', (e) => {
 
 // ---------- 版本紀錄 ----------
 const VERSION_LOG = [
+  {v:'v14.0', d:'全面加上年份，解決跨年份無法正確瀏覽/比對資料的問題：卡片日期、機台異常/掃碼異常的發生日期、查看紀錄與統計儀表板的自訂日期區間，都新增「年」的選單，存檔格式從「M/D」改成「YYYY/M/D」。背後的排序、分類、日期區間比對邏輯也一併修正，跨年份的資料現在能正確排序（1月不會再排在前一年12月前面）、正確分開統計（不同年份的同一個月日不會被混在一起）、「近7天/近30天」跨年那幾天也不會再抓不到資料。舊資料（存的是沒有年份的「M/D」格式）會自動視為2026年的資料，不用手動轉換，向下相容'},
   {v:'v13.7', d:'時鐘旁邊加上完整日期＋星期（例如 2026/08/26（三）），之前畫面上沒有任何地方能唯讀確認今天的完整日期跟年份，卡片上的日期欄位只有月/日、而且是可編輯的輸入欄位，不適合當作一眼確認今天日期的地方'},
   {v:'v13.6', d:'稼動率說明文字加上一句但書：「僅依人工記錄的起訖時間計算，無法偵測中途幾分鐘的小停機，數值可能略高於實際狀況」，避免時間稼動率的數字被誤以為已經很精確，忽略了中途小停頓沒被記錄到的限制'},
   {v:'v13.5', d:'修正異常統計等級誤判：全部機台異常次數都是0時，「0 ≥ 平均值×1.3」這句話因為平均值也是0而恰好成立，導致每一台都被判定成「偏高」。改成平均值是0時直接讓所有機台顯示「正常」，不再套用跟平均比較的規則，跟「觀察重點」顯示的「目前篩選範圍內沒有異常紀錄」一致，不會互相矛盾'},
@@ -2442,8 +2512,10 @@ function fillMachineSelect(sel){
 }
 fillMachineSelect(document.getElementById('ab-machine'));
 fillMachineSelect(document.getElementById('sc-machine'));
+document.getElementById('ab-year').innerHTML = yearOptionsHtml(new Date().getFullYear());
 document.getElementById('ab-month').innerHTML = monthOptionsHtml('');
 document.getElementById('ab-day').innerHTML = dayOptionsHtml('');
+document.getElementById('sc-year').innerHTML = yearOptionsHtml(new Date().getFullYear());
 document.getElementById('sc-month').innerHTML = monthOptionsHtml('');
 document.getElementById('sc-day').innerHTML = dayOptionsHtml('');
 (function fillExportDatePicker(){
@@ -2477,6 +2549,7 @@ document.getElementById('ab-reason').addEventListener('change', (e) => {
 });
 
 document.getElementById('ab-submit').addEventListener('click', async () => {
+  const year = document.getElementById('ab-year').value;
   const month = document.getElementById('ab-month').value;
   const day = document.getElementById('ab-day').value;
   const machine = document.getElementById('ab-machine').value;
@@ -2487,14 +2560,14 @@ document.getElementById('ab-submit').addEventListener('click', async () => {
   const reasonOther = document.getElementById('ab-reason-other').value.trim();
   const reason = type === '料盤毀損' ? (reasonSel === '其他' ? reasonOther : reasonSel) : '';
   const hint = document.getElementById('ab-hint');
-  if(!month || !day || !machine || !type){
+  if(!year || !month || !day || !machine || !type){
     hint.textContent = '請把發生日期、機台、異常類型都選完再送出。';
     return;
   }
   if(!API_URL){ hint.textContent = '尚未設定 API 網址，請先點右上角「設定 API 網址」。'; return; }
   try{
     const record = {
-      '發生日期': `${month}/${day}`,
+      '發生日期': buildDateOnly(year, month, day),
       '機台': machine,
       '異常類型': type,
       '異常次數': count,
@@ -2503,7 +2576,8 @@ document.getElementById('ab-submit').addEventListener('click', async () => {
     };
     await apiPost({action:'appendAbnormal', data: record});
     await loadState();
-    hint.textContent = '已新增：' + `${month}/${day} ${machine} ${type}` + ' · ' + fmtClock();
+    hint.textContent = '已新增：' + `${year}/${month}/${day} ${machine} ${type}` + ' · ' + fmtClock();
+    document.getElementById('ab-year').value = String(new Date().getFullYear());
     document.getElementById('ab-month').value = '';
     document.getElementById('ab-day').value = '';
     document.getElementById('ab-machine').value = '';
@@ -2521,6 +2595,7 @@ document.getElementById('ab-submit').addEventListener('click', async () => {
 });
 
 document.getElementById('sc-submit').addEventListener('click', async () => {
+  const year = document.getElementById('sc-year').value;
   const month = document.getElementById('sc-month').value;
   const day = document.getElementById('sc-day').value;
   const machine = document.getElementById('sc-machine').value;
@@ -2529,14 +2604,14 @@ document.getElementById('sc-submit').addEventListener('click', async () => {
   const lot = document.getElementById('sc-lot').value.trim();
   const origin = document.getElementById('sc-origin').value.trim();
   const hint = document.getElementById('sc-hint');
-  if(!month || !day || !machine || !count || !pos){
+  if(!year || !month || !day || !machine || !count || !pos){
     hint.textContent = '請把發生日期、機台、異常次數、Scan位置都選完再送出。';
     return;
   }
   if(!API_URL){ hint.textContent = '尚未設定 API 網址，請先點右上角「設定 API 網址」。'; return; }
   try{
     const record = {
-      '發生日期': `${month}/${day}`,
+      '發生日期': buildDateOnly(year, month, day),
       '機台': machine,
       '異常次數': count,
       'Scan位置': pos,
@@ -2546,6 +2621,7 @@ document.getElementById('sc-submit').addEventListener('click', async () => {
     await apiPost({action:'appendScan', data: record});
     await loadState();
     hint.textContent = '已新增 · ' + fmtClock();
+    document.getElementById('sc-year').value = String(new Date().getFullYear());
     document.getElementById('sc-month').value = '';
     document.getElementById('sc-day').value = '';
     document.getElementById('sc-machine').value = '';
@@ -2562,7 +2638,7 @@ document.getElementById('sc-submit').addEventListener('click', async () => {
 // ---------- 快速記錄（異常先記次數，細節之後補） ----------
 function todayMD(){
   const now = new Date();
-  return { month:String(now.getMonth()+1), day:String(now.getDate()) };
+  return { year:String(now.getFullYear()), month:String(now.getMonth()+1), day:String(now.getDate()) };
 }
 
 function renderQuickAbnormalGrid(){
@@ -2587,8 +2663,8 @@ function renderQuickScanGrid(){
 
 async function quickAddAbnormal(machine, type, btn){
   if(!API_URL){ alert('尚未設定 API 網址，請先點右上角「設定 API 網址」。'); return; }
-  const {month, day} = todayMD();
-  const record = { '發生日期': `${month}/${day}`, '機台': machine, '異常類型': type, '異常次數': '1', '料盤產地': '', '原因': '' };
+  const {year, month, day} = todayMD();
+  const record = { '發生日期': buildDateOnly(year, month, day), '機台': machine, '異常類型': type, '異常次數': '1', '料盤產地': '', '原因': '' };
   const original = btn.textContent;
   btn.disabled = true;
   try{
@@ -2607,8 +2683,8 @@ async function quickAddAbnormal(machine, type, btn){
 
 async function quickAddScan(machine, btn){
   if(!API_URL){ alert('尚未設定 API 網址，請先點右上角「設定 API 網址」。'); return; }
-  const {month, day} = todayMD();
-  const record = { '發生日期': `${month}/${day}`, '機台': machine, '異常次數': '1', 'Scan位置': '', 'LOT': '', '產地': '' };
+  const {year, month, day} = todayMD();
+  const record = { '發生日期': buildDateOnly(year, month, day), '機台': machine, '異常次數': '1', 'Scan位置': '', 'LOT': '', '產地': '' };
   const original = btn.textContent;
   btn.disabled = true;
   try{
@@ -2735,39 +2811,43 @@ let dashRange = {start:null, end:null, label:'近7天'};
 let dashMachineFilter = null;
 let chartUptime=null, chartUptimeTrend=null, chartAbnType=null, chartTrend=null;
 
-function mmddToday(offsetDays){
+function ymdToday(offsetDays){
   const now = new Date();
   now.setDate(now.getDate() + (offsetDays||0));
   const pad = n => String(n).padStart(2,'0');
-  return `${pad(now.getMonth()+1)}-${pad(now.getDate())}`;
+  return `${now.getFullYear()}-${pad(now.getMonth()+1)}-${pad(now.getDate())}`;
 }
 
 function setDashPreset(preset){
-  if(preset === 'today'){ dashRange = {start:mmddToday(0), end:mmddToday(0), label:'今天'}; }
-  else if(preset === 'week'){ dashRange = {start:mmddToday(-6), end:mmddToday(0), label:'近7天'}; }
-  else if(preset === 'month'){ dashRange = {start:mmddToday(-29), end:mmddToday(0), label:'近30天'}; }
+  if(preset === 'today'){ dashRange = {start:ymdToday(0), end:ymdToday(0), label:'今天'}; }
+  else if(preset === 'week'){ dashRange = {start:ymdToday(-6), end:ymdToday(0), label:'近7天'}; }
+  else if(preset === 'month'){ dashRange = {start:ymdToday(-29), end:ymdToday(0), label:'近30天'}; }
   else { dashRange = {start:null, end:null, label:'全部'}; }
   syncDashDateSelects();
   renderDashboard();
 }
 
 function syncDashDateSelects(){
-  const sp = dashRange.start ? dashRange.start.split('-') : ['',''];
-  const ep = dashRange.end ? dashRange.end.split('-') : ['',''];
-  document.getElementById('dash-start-month').value = sp[0] ? String(parseInt(sp[0],10)) : '';
-  document.getElementById('dash-start-day').value = sp[1] ? String(parseInt(sp[1],10)) : '';
-  document.getElementById('dash-end-month').value = ep[0] ? String(parseInt(ep[0],10)) : '';
-  document.getElementById('dash-end-day').value = ep[1] ? String(parseInt(ep[1],10)) : '';
+  const sp = dashRange.start ? dashRange.start.split('-') : ['','',''];
+  const ep = dashRange.end ? dashRange.end.split('-') : ['','',''];
+  document.getElementById('dash-start-year').value = sp[0] || '';
+  document.getElementById('dash-start-month').value = sp[1] ? String(parseInt(sp[1],10)) : '';
+  document.getElementById('dash-start-day').value = sp[2] ? String(parseInt(sp[2],10)) : '';
+  document.getElementById('dash-end-year').value = ep[0] || '';
+  document.getElementById('dash-end-month').value = ep[1] ? String(parseInt(ep[1],10)) : '';
+  document.getElementById('dash-end-day').value = ep[2] ? String(parseInt(ep[2],10)) : '';
 }
 
 function readDashDateSelects(){
+  const sy = document.getElementById('dash-start-year').value;
   const sm = document.getElementById('dash-start-month').value;
   const sd = document.getElementById('dash-start-day').value;
+  const ey = document.getElementById('dash-end-year').value;
   const em = document.getElementById('dash-end-month').value;
   const ed = document.getElementById('dash-end-day').value;
   const pad = n => String(n).padStart(2,'0');
-  if(sm && sd && em && ed){
-    dashRange = {start:`${pad(sm)}-${pad(sd)}`, end:`${pad(em)}-${pad(ed)}`, label:'自訂區間'};
+  if(sy && sm && sd && ey && em && ed){
+    dashRange = {start:`${sy}-${pad(sm)}-${pad(sd)}`, end:`${ey}-${pad(em)}-${pad(ed)}`, label:'自訂區間'};
   } else {
     dashRange = {start:null, end:null, label:'全部'};
   }
@@ -2775,17 +2855,19 @@ function readDashDateSelects(){
 }
 
 function initDashDatePickers(){
+  const curYear = new Date().getFullYear();
+  ['dash-start-year','dash-end-year'].forEach(id => { document.getElementById(id).innerHTML = yearOptionsHtml(curYear); });
   ['dash-start-month','dash-end-month'].forEach(id => { document.getElementById(id).innerHTML = monthOptionsHtml(''); });
   ['dash-start-day','dash-end-day'].forEach(id => { document.getElementById(id).innerHTML = dayOptionsHtml(''); });
-  ['dash-start-month','dash-start-day','dash-end-month','dash-end-day'].forEach(id => {
+  ['dash-start-year','dash-start-month','dash-start-day','dash-end-year','dash-end-month','dash-end-day'].forEach(id => {
     document.getElementById(id).addEventListener('change', readDashDateSelects);
   });
 }
 
-function dashDateInRange(mmdd){
-  if(!mmdd) return false;
+function dashDateInRange(ymd){
+  if(!ymd) return false;
   if(!dashRange.start || !dashRange.end) return true;
-  return mmdd >= dashRange.start && mmdd <= dashRange.end;
+  return ymd >= dashRange.start && ymd <= dashRange.end;
 }
 
 function getDashRecords(){
