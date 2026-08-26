@@ -686,7 +686,7 @@
 
 <div class="wrap">
   <div class="topbar">
-    <h1>產線即時監看板 <button class="version-badge" id="version-badge">v13.5</button></h1>
+    <h1>產線即時監看板 <button class="version-badge" id="version-badge">v13.6</button></h1>
     <div class="topbar-right">
       <button class="export-btn" id="settings-btn">設定 API 網址</button>
       <div class="export-date-picker">
@@ -2286,6 +2286,7 @@ document.getElementById('records-switch').addEventListener('click', (e) => {
 
 // ---------- 版本紀錄 ----------
 const VERSION_LOG = [
+  {v:'v13.6', d:'稼動率說明文字加上一句但書：「僅依人工記錄的起訖時間計算，無法偵測中途幾分鐘的小停機，數值可能略高於實際狀況」，避免時間稼動率的數字被誤以為已經很精確，忽略了中途小停頓沒被記錄到的限制'},
   {v:'v13.5', d:'修正異常統計等級誤判：全部機台異常次數都是0時，「0 ≥ 平均值×1.3」這句話因為平均值也是0而恰好成立，導致每一台都被判定成「偏高」。改成平均值是0時直接讓所有機台顯示「正常」，不再套用跟平均比較的規則，跟「觀察重點」顯示的「目前篩選範圍內沒有異常紀錄」一致，不會互相矛盾'},
   {v:'v13.4', d:'性能稼動率的理論產能基準改用大寶操作員 8/19~8/20 兩天的實際表現當固定基準（實際運轉14.8小時、249箱，換算約每小時16.8箱），取代原本用「120箱÷7.5小時」反推的做法，讓其他機台可以跟熟練操作員的實際效率比較。另外把稼動率上方的說明文字大幅精簡（從約350字縮到150字），只保留兩種稼動率的定義、基準依據、班別窗口規則、異常率不是良率這幾個重點'},
   {v:'v13.3', d:'稼動率表格新增「平均每箱」欄位（實際運轉分鐘 ÷ 實際箱數），統計儀表板、Word、Excel 匯出都同步顯示，沒有箱數資料的機台顯示「—」不列入計算'},
@@ -3070,7 +3071,7 @@ function renderDashboard(){
   const uptimeTrend = computeDailyUptimeTrend(logs);
   const colors = uptimeStats.map(s => MACHINE_COLORS[s.machine]);
 
-  document.getElementById('dash-uptime-note').innerHTML = `<b>時間稼動率</b>＝機台有沒有在動；<b>性能稼動率</b>＝動的時候快不快（基準：大寶熟練操作員實際效率約 ${RATE_PER_HOUR.toFixed(1)} 箱/小時，兩者都已扣除固定休息時段）。可作業時間依各機台班別（大寶/三寶 09:00-18:00，二寶/四寶 08:30-17:30）動態抓窗口，加班會自動延伸。異常率為每百箱異常次數，不是良率。`;
+  document.getElementById('dash-uptime-note').innerHTML = `<b>時間稼動率</b>＝機台有沒有在動；<b>性能稼動率</b>＝動的時候快不快（基準：大寶操作員實際效率約 ${RATE_PER_HOUR.toFixed(1)} 箱/小時，兩者都已扣除固定休息時段）。可作業時間依各機台班別（大寶/三寶 09:00-18:00，二寶/四寶 08:30-17:30）動態抓窗口，加班會自動延伸。《僅依人工記錄的起訖時間計算，無法偵測中途幾分鐘的小停機，數值可能略高於實際狀況。》異常率為每百箱異常次數，不是良率。`;
 
   if(chartUptime) chartUptime.destroy();
   chartUptime = new Chart(document.getElementById('dash-chart-uptime'), {
