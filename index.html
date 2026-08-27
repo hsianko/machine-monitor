@@ -198,6 +198,12 @@
     font-size:13px;
   }
   .pending-row:last-child{border-bottom:none;}
+  .pending-row.eta-warn{background:rgba(213,101,74,0.08); margin:0 -4px; padding-left:8px; padding-right:8px; border-radius:6px;}
+  .eta-box{flex-shrink:0; text-align:right; white-space:nowrap;}
+  .eta-label{font-size:10.5px; color:var(--text-muted);}
+  .pending-row.eta-warn .eta-label{color:var(--m-sanbao);}
+  .eta-value{font-size:13.5px; font-weight:700; color:var(--text-secondary);}
+  .pending-row.eta-warn .eta-value{color:var(--m-sanbao);}
   .pending-info .pmachine{font-weight:700; margin-right:8px;}
   .pending-info .pmachine.大寶{color:var(--m-daibao);}
   .pending-info .pmachine.二寶{color:var(--m-erbao);}
@@ -691,7 +697,7 @@
 
 <div class="wrap">
   <div class="topbar">
-    <h1>產線即時監看板 <button class="version-badge" id="version-badge">v14.3</button></h1>
+    <h1>產線即時監看板 <button class="version-badge" id="version-badge">v14.4</button></h1>
     <div class="topbar-right">
       <button class="export-btn" id="settings-btn">設定 API 網址</button>
       <div class="export-date-picker">
@@ -1513,6 +1519,18 @@ function render(){
 const DAILY_TARGET_PER_MACHINE = 120;
 
 // 目前 4 張卡片裡，狀態顯示「進行中」的訂單，依機台順序（大寶→二寶→三寶→四寶）排列。
+// 剩餘時間低於這個門檻（分鐘），畫面上會特別標色提醒該準備下一張訂單了。
+const ETA_WARN_MINUTES = 30;
+
+// 這台機台自己歷史上平均每箱要花幾分鐘（不受統計儀表板篩選的日期範圍影響，看的是全部歷史紀錄）。
+// 還沒有任何歷史紀錄可以參考時，退回全站統一的基準速度（大寶的實際效率）。
+function getMachineMinPerBox(machine){
+  const stats = computeUptimeStats(completedLog);
+  const s = stats.find(x => x.machine === machine);
+  if(s && s.avgMinPerBox !== null && s.avgMinPerBox > 0) return s.avgMinPerBox;
+  return 60 / RATE_PER_HOUR;
+}
+
 function getRunningOrders(){
   const list = [];
   MACHINES.forEach(m => {
@@ -1521,7 +1539,10 @@ function getRunningOrders(){
       const d = state[m.key];
       const total = parseFloat(d.totalBoxes) || 0;
       const cur = parseFloat(d.currentBox) || 0;
-      list.push({ machine:m.key, customer:d.customer, total, cur, remain:Math.max(0, total-cur) });
+      const remain = Math.max(0, total-cur);
+      const minPerBox = getMachineMinPerBox(m.key);
+      const etaMinutes = remain > 0 ? Math.round(remain * minPerBox) : 0;
+      list.push({ machine:m.key, customer:d.customer, total, cur, remain, etaMinutes });
     }
   });
   return list;
@@ -1579,13 +1600,21 @@ function renderRunningList(){
   if(!list.length){
     wrap.innerHTML = '<div class="viewer-empty">目前沒有進行中的訂單。</div>';
   } else {
-    wrap.innerHTML = list.map(o => `
-      <div class="pending-row">
+    wrap.innerHTML = list.map(o => {
+      const isWarn = o.etaMinutes > 0 && o.etaMinutes < ETA_WARN_MINUTES;
+      const etaLabel = o.etaMinutes > 0 ? `約 ${o.etaMinutes} 分鐘` : '即將完成';
+      return `
+      <div class="pending-row${isWarn ? ' eta-warn' : ''}">
         <div class="pending-info">
           <div><span class="pmachine ${escapeHtml(o.machine)}">${escapeHtml(o.machine)}</span>${escapeHtml(o.customer)}</div>
           <div class="pmeta">${o.cur} / ${o.total} 箱・還差 ${o.remain} 箱</div>
         </div>
-      </div>`).join('');
+        <div class="eta-box">
+          <div class="eta-label">${isWarn ? '快做完了・預估還要' : '預估還要'}</div>
+          <div class="eta-value">${etaLabel}</div>
+        </div>
+      </div>`;
+    }).join('');
   }
   wrap.style.display = runningListCollapsed ? 'none' : '';
   toggle.textContent = runningListCollapsed ? '展開' : '收合';
@@ -2398,6 +2427,7 @@ document.getElementById('records-switch').addEventListener('click', (e) => {
 
 // ---------- 版本紀錄 ----------
 const VERSION_LOG = [
+  {v:'v14.4', d:'「進行中訂單」清單新增「預估還要 X 分鐘」欄位，用還差箱數換算成時間，讓妳一眼看出接下來大概多久會空機、該準備下一張訂單了。速度優先用該機台自己過去的實際表現去換算（不是統一套用大寶的基準），還沒有歷史紀錄的機台則暫時使用全站基準速度。剩餘時間低於30分鐘時，整行會標成提醒色並顯示「快做完了・預估還要」，方便掃過清單時第一眼就注意到'},
   {v:'v14.3', d:'異常分頁畫面精簡：把「快速記錄（機台掃碼異常）」的四列按鈕，合併進「快速記錄（機台異常）」同一列，每台機台從原本上下兩排（共8列）縮成一排（4列），掃碼異常按鈕跟前面三個異常類型按鈕用一點間距區隔。這只是畫面排版調整，點擊後各自還是分別存進「機台異常」跟「機台掃碼異常」兩個不同的地方，不會互相影響。另外把發生日期的年/月/日三個下拉選單改成等寬（原本年比較寬），畫面更整齊'},
   {v:'v14.2', d:'修正 v14.1 為了解決手機年份擠壓問題，讓發生日期欄位獨占整行，結果在電腦寬螢幕上被拉伸得比例失衡的問題。改成讓發生日期欄位變成其他欄位的兩倍寬（不是獨占整行、也不是維持原本寬度），手機上有足夠空間完整顯示年份，電腦上也會有跟其他欄位協調的正常比例，不會突兀地被拉伸撐滿整排'},
   {v:'v14.1', d:'修正 v14.0 加上年份後衍生的四個問題：(1) 手機操作異常/掃碼異常表單時，發生日期的年份選單被擠壓顯示不完整，改成讓日期欄位獨占整行、年份選單也加寬；(2) 統計儀表板的稼動率/異常趨勢圖表日期標籤誤顯示成「2026/08-21」，修正成「2026/08/21」；(3)(4) 查看紀錄的日期顯示統一改用「今年只顯示月/日、跨年才顯示完整年份」的規則，套用在查看紀錄的14天日期分頁按鈕跟紀錄明細列表，這樣舊資料（沒存年份）跟新資料（有存年份）今年顯示起來會完全一致，不會一邊有年份一邊沒有，畫面也不會被一堆完整日期擠得很亂；(5) 另外抓到一個真的存在的 bug：最上方「匯出紀錄」的日期篩選在 v14.0 之後其實已經失效（比對邏輯還在用沒有年份的舊格式），這次一併補上年份選單並修正比對邏輯'},
