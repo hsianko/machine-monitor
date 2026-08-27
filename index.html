@@ -385,6 +385,7 @@
     .field label, .times .field label{font-size:12px;}
     .gauge-track{height:20px;}
     .time-row select{font-size:13px !important;}
+    .log-form .field-daterow{grid-column:1 / -1;}
   }
 
   .card{
@@ -548,7 +549,7 @@
     padding:16px 18px 18px;
   }
   .log-form{display:grid; grid-template-columns:repeat(auto-fit, minmax(110px, 1fr)); gap:8px; align-items:end;}
-  .log-form .field-daterow{grid-column:1 / -1;}
+  .log-form .field-daterow{grid-column:span 2;}
   .log-form .field label{font-size:10px; color:var(--text-muted);}
   .log-form select, .log-form input{
     background:var(--bg-field); border:1px solid var(--border); border-radius:6px;
@@ -690,7 +691,7 @@
 
 <div class="wrap">
   <div class="topbar">
-    <h1>產線即時監看板 <button class="version-badge" id="version-badge">v14.1</button></h1>
+    <h1>產線即時監看板 <button class="version-badge" id="version-badge">v14.2</button></h1>
     <div class="topbar-right">
       <button class="export-btn" id="settings-btn">設定 API 網址</button>
       <div class="export-date-picker">
@@ -2400,6 +2401,7 @@ document.getElementById('records-switch').addEventListener('click', (e) => {
 
 // ---------- 版本紀錄 ----------
 const VERSION_LOG = [
+  {v:'v14.2', d:'修正 v14.1 為了解決手機年份擠壓問題，讓發生日期欄位獨占整行，結果在電腦寬螢幕上被拉伸得比例失衡的問題。改成讓發生日期欄位變成其他欄位的兩倍寬（不是獨占整行、也不是維持原本寬度），手機上有足夠空間完整顯示年份，電腦上也會有跟其他欄位協調的正常比例，不會突兀地被拉伸撐滿整排'},
   {v:'v14.1', d:'修正 v14.0 加上年份後衍生的四個問題：(1) 手機操作異常/掃碼異常表單時，發生日期的年份選單被擠壓顯示不完整，改成讓日期欄位獨占整行、年份選單也加寬；(2) 統計儀表板的稼動率/異常趨勢圖表日期標籤誤顯示成「2026/08-21」，修正成「2026/08/21」；(3)(4) 查看紀錄的日期顯示統一改用「今年只顯示月/日、跨年才顯示完整年份」的規則，套用在查看紀錄的14天日期分頁按鈕跟紀錄明細列表，這樣舊資料（沒存年份）跟新資料（有存年份）今年顯示起來會完全一致，不會一邊有年份一邊沒有，畫面也不會被一堆完整日期擠得很亂；(5) 另外抓到一個真的存在的 bug：最上方「匯出紀錄」的日期篩選在 v14.0 之後其實已經失效（比對邏輯還在用沒有年份的舊格式），這次一併補上年份選單並修正比對邏輯'},
   {v:'v14.0', d:'全面加上年份，解決跨年份無法正確瀏覽/比對資料的問題：卡片日期、機台異常/掃碼異常的發生日期、查看紀錄與統計儀表板的自訂日期區間，都新增「年」的選單，存檔格式從「M/D」改成「YYYY/M/D」。背後的排序、分類、日期區間比對邏輯也一併修正，跨年份的資料現在能正確排序（1月不會再排在前一年12月前面）、正確分開統計（不同年份的同一個月日不會被混在一起）、「近7天/近30天」跨年那幾天也不會再抓不到資料。舊資料（存的是沒有年份的「M/D」格式）會自動視為2026年的資料，不用手動轉換，向下相容'},
   {v:'v13.7', d:'時鐘旁邊加上完整日期＋星期（例如 2026/08/26（三）），之前畫面上沒有任何地方能唯讀確認今天的完整日期跟年份，卡片上的日期欄位只有月/日、而且是可編輯的輸入欄位，不適合當作一眼確認今天日期的地方'},
