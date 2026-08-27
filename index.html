@@ -290,7 +290,7 @@
     padding:6px 14px;
   }
   .quick-abn-hint{color:var(--text-muted); font-size:11.5px; margin:-4px 0 10px;}
-  .quick-abn-grid, .quick-scan-grid{
+  .quick-abn-grid{
     display:flex;
     flex-direction:column;
     gap:8px;
@@ -324,6 +324,7 @@
   .quick-btn:hover{border-color:var(--status-run); color:var(--status-run);}
   .quick-btn:active{transform:scale(0.97);}
   .quick-btn.just-added{border-color:var(--status-run); color:var(--status-run);}
+  .quick-btn-scan{margin-left:10px;}
   .pending-detail-row{
     display:flex;
     align-items:center;
@@ -499,7 +500,6 @@
   .crossday-label{display:flex; align-items:center; gap:6px; font-size:11px; color:var(--text-muted); cursor:pointer; user-select:none;}
   .crossday-label input{cursor:pointer;}
   .time-row select{flex:1; min-width:0; font-size:13px; padding:6px 4px;}
-  .time-row select[data-part$="year"]{flex:1.6;}
 
   .details-toggle-row{display:flex; align-items:center; gap:8px; margin-top:10px; padding-top:10px; border-top:1px solid var(--border);}
   .details-toggle{
@@ -691,7 +691,7 @@
 
 <div class="wrap">
   <div class="topbar">
-    <h1>產線即時監看板 <button class="version-badge" id="version-badge">v14.2</button></h1>
+    <h1>產線即時監看板 <button class="version-badge" id="version-badge">v14.3</button></h1>
     <div class="topbar-right">
       <button class="export-btn" id="settings-btn">設定 API 網址</button>
       <div class="export-date-picker">
@@ -756,12 +756,9 @@
   </div>
 
   <div class="tab-content" id="tab-abnormal" style="display:none;">
-    <div class="section-title">快速記錄（機台異常）</div>
+    <div class="section-title">快速記錄（機台異常／掃碼異常）</div>
     <p class="quick-abn-hint">先快速記下發生次數，機台、類型、次數會自動存好，產地/原因等細節可以之後再補。</p>
     <div class="quick-abn-grid" id="quick-abn-grid"></div>
-
-    <div class="section-title">快速記錄（機台掃碼異常）</div>
-    <div class="quick-scan-grid" id="quick-scan-grid"></div>
 
     <div id="pending-detail-section" style="display:none;">
       <div class="section-title">待補明細<span class="tab-badge" id="pending-detail-badge" style="margin-left:6px;"></span></div>
@@ -2401,6 +2398,7 @@ document.getElementById('records-switch').addEventListener('click', (e) => {
 
 // ---------- 版本紀錄 ----------
 const VERSION_LOG = [
+  {v:'v14.3', d:'異常分頁畫面精簡：把「快速記錄（機台掃碼異常）」的四列按鈕，合併進「快速記錄（機台異常）」同一列，每台機台從原本上下兩排（共8列）縮成一排（4列），掃碼異常按鈕跟前面三個異常類型按鈕用一點間距區隔。這只是畫面排版調整，點擊後各自還是分別存進「機台異常」跟「機台掃碼異常」兩個不同的地方，不會互相影響。另外把發生日期的年/月/日三個下拉選單改成等寬（原本年比較寬），畫面更整齊'},
   {v:'v14.2', d:'修正 v14.1 為了解決手機年份擠壓問題，讓發生日期欄位獨占整行，結果在電腦寬螢幕上被拉伸得比例失衡的問題。改成讓發生日期欄位變成其他欄位的兩倍寬（不是獨占整行、也不是維持原本寬度），手機上有足夠空間完整顯示年份，電腦上也會有跟其他欄位協調的正常比例，不會突兀地被拉伸撐滿整排'},
   {v:'v14.1', d:'修正 v14.0 加上年份後衍生的四個問題：(1) 手機操作異常/掃碼異常表單時，發生日期的年份選單被擠壓顯示不完整，改成讓日期欄位獨占整行、年份選單也加寬；(2) 統計儀表板的稼動率/異常趨勢圖表日期標籤誤顯示成「2026/08-21」，修正成「2026/08/21」；(3)(4) 查看紀錄的日期顯示統一改用「今年只顯示月/日、跨年才顯示完整年份」的規則，套用在查看紀錄的14天日期分頁按鈕跟紀錄明細列表，這樣舊資料（沒存年份）跟新資料（有存年份）今年顯示起來會完全一致，不會一邊有年份一邊沒有，畫面也不會被一堆完整日期擠得很亂；(5) 另外抓到一個真的存在的 bug：最上方「匯出紀錄」的日期篩選在 v14.0 之後其實已經失效（比對邏輯還在用沒有年份的舊格式），這次一併補上年份選單並修正比對邏輯'},
   {v:'v14.0', d:'全面加上年份，解決跨年份無法正確瀏覽/比對資料的問題：卡片日期、機台異常/掃碼異常的發生日期、查看紀錄與統計儀表板的自訂日期區間，都新增「年」的選單，存檔格式從「M/D」改成「YYYY/M/D」。背後的排序、分類、日期區間比對邏輯也一併修正，跨年份的資料現在能正確排序（1月不會再排在前一年12月前面）、正確分開統計（不同年份的同一個月日不會被混在一起）、「近7天/近30天」跨年那幾天也不會再抓不到資料。舊資料（存的是沒有年份的「M/D」格式）會自動視為2026年的資料，不用手動轉換，向下相容'},
@@ -2684,16 +2682,7 @@ function renderQuickAbnormalGrid(){
     <div class="quick-abn-row">
       <span class="qmachine ${m.key}">${m.key}</span>
       ${AB_TYPE_OPTS.map(t => `<button class="quick-btn" data-quick-abn="${m.key}" data-quick-type="${escapeHtml(t)}">${escapeHtml(t)} +1</button>`).join('')}
-    </div>`).join('');
-}
-
-function renderQuickScanGrid(){
-  const wrap = document.getElementById('quick-scan-grid');
-  if(!wrap) return;
-  wrap.innerHTML = MACHINES.map(m => `
-    <div class="quick-abn-row">
-      <span class="qmachine ${m.key}">${m.key}</span>
-      <button class="quick-btn" data-quick-scan="${m.key}">掃碼異常 +1</button>
+      <button class="quick-btn quick-btn-scan" data-quick-scan="${m.key}">掃碼異常 +1</button>
     </div>`).join('');
 }
 
@@ -2738,17 +2727,12 @@ async function quickAddScan(machine, btn){
 }
 
 document.getElementById('quick-abn-grid').addEventListener('click', (e) => {
-  const btn = e.target.closest('[data-quick-abn]');
-  if(!btn) return;
-  quickAddAbnormal(btn.dataset.quickAbn, btn.dataset.quickType, btn);
-});
-document.getElementById('quick-scan-grid').addEventListener('click', (e) => {
-  const btn = e.target.closest('[data-quick-scan]');
-  if(!btn) return;
-  quickAddScan(btn.dataset.quickScan, btn);
+  const abnBtn = e.target.closest('[data-quick-abn]');
+  if(abnBtn){ quickAddAbnormal(abnBtn.dataset.quickAbn, abnBtn.dataset.quickType, abnBtn); return; }
+  const scanBtn = e.target.closest('[data-quick-scan]');
+  if(scanBtn){ quickAddScan(scanBtn.dataset.quickScan, scanBtn); return; }
 });
 renderQuickAbnormalGrid();
-renderQuickScanGrid();
 
 // 待補明細：機台異常一定要有「料盤產地」，選「料盤毀損」時還要有「原因」；
 // 掃碼異常一定要有 Scan位置、LOT、產地。缺了任一項，就算「待補」。
