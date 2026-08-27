@@ -697,7 +697,7 @@
 
 <div class="wrap">
   <div class="topbar">
-    <h1>產線即時監看板 <button class="version-badge" id="version-badge">v14.4</button></h1>
+    <h1>產線即時監看板 <button class="version-badge" id="version-badge">v14.5</button></h1>
     <div class="topbar-right">
       <button class="export-btn" id="settings-btn">設定 API 網址</button>
       <div class="export-date-picker">
@@ -1522,10 +1522,22 @@ const DAILY_TARGET_PER_MACHINE = 120;
 // 剩餘時間低於這個門檻（分鐘），畫面上會特別標色提醒該準備下一張訂單了。
 const ETA_WARN_MINUTES = 30;
 
-// 這台機台自己歷史上平均每箱要花幾分鐘（不受統計儀表板篩選的日期範圍影響，看的是全部歷史紀錄）。
-// 還沒有任何歷史紀錄可以參考時，退回全站統一的基準速度（大寶的實際效率）。
+// 只看「最近14天」的實際表現去算平均每箱幾分鐘，不是從頭到尾全部歷史平均。
+// 這樣如果操作員的速度持續在進步，最近幾天的資料很快就會把比較久以前、比較慢的紀錄擠出計算範圍，
+// 預估時間才能跟上目前的實際水準；用14天當窗口，也不會因為單一天的異常（例如卡料卡很久）就整個抓歪。
+const ETA_RECENT_DAYS = 14;
+
+// 還沒有任何近期歷史紀錄可以參考時，退回全站統一的基準速度（大寶的實際效率）。
 function getMachineMinPerBox(machine){
-  const stats = computeUptimeStats(completedLog);
+  const pad = n => String(n).padStart(2,'0');
+  const cutoff = new Date();
+  cutoff.setDate(cutoff.getDate() - ETA_RECENT_DAYS);
+  const cutoffYMD = `${cutoff.getFullYear()}-${pad(cutoff.getMonth()+1)}-${pad(cutoff.getDate())}`;
+  const recentLogs = completedLog.filter(r => {
+    const d = recordDateStr(VIEW_CONFIG.log, r);
+    return d && d >= cutoffYMD;
+  });
+  const stats = computeUptimeStats(recentLogs);
   const s = stats.find(x => x.machine === machine);
   if(s && s.avgMinPerBox !== null && s.avgMinPerBox > 0) return s.avgMinPerBox;
   return 60 / RATE_PER_HOUR;
@@ -2427,6 +2439,7 @@ document.getElementById('records-switch').addEventListener('click', (e) => {
 
 // ---------- 版本紀錄 ----------
 const VERSION_LOG = [
+  {v:'v14.5', d:'「進行中訂單」的預估剩餘時間，計算每台機台自己的平均速度時，改成只看「最近14天」的實際表現，不再是從頭到尾全部歷史平均。這樣如果操作員的速度持續在進步，最近的資料很快就會把比較久以前、比較慢的紀錄擠出計算範圍，預估時間才能跟上目前的實際水準；用14天當窗口也能避免單一天的異常（例如卡料卡很久）就把數字整個拉歪'},
   {v:'v14.4', d:'「進行中訂單」清單新增「預估還要 X 分鐘」欄位，用還差箱數換算成時間，讓妳一眼看出接下來大概多久會空機、該準備下一張訂單了。速度優先用該機台自己過去的實際表現去換算（不是統一套用大寶的基準），還沒有歷史紀錄的機台則暫時使用全站基準速度。剩餘時間低於30分鐘時，整行會標成提醒色並顯示「快做完了・預估還要」，方便掃過清單時第一眼就注意到'},
   {v:'v14.3', d:'異常分頁畫面精簡：把「快速記錄（機台掃碼異常）」的四列按鈕，合併進「快速記錄（機台異常）」同一列，每台機台從原本上下兩排（共8列）縮成一排（4列），掃碼異常按鈕跟前面三個異常類型按鈕用一點間距區隔。這只是畫面排版調整，點擊後各自還是分別存進「機台異常」跟「機台掃碼異常」兩個不同的地方，不會互相影響。另外把發生日期的年/月/日三個下拉選單改成等寬（原本年比較寬），畫面更整齊'},
   {v:'v14.2', d:'修正 v14.1 為了解決手機年份擠壓問題，讓發生日期欄位獨占整行，結果在電腦寬螢幕上被拉伸得比例失衡的問題。改成讓發生日期欄位變成其他欄位的兩倍寬（不是獨占整行、也不是維持原本寬度），手機上有足夠空間完整顯示年份，電腦上也會有跟其他欄位協調的正常比例，不會突兀地被拉伸撐滿整排'},
