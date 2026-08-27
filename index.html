@@ -498,6 +498,7 @@
   .crossday-label{display:flex; align-items:center; gap:6px; font-size:11px; color:var(--text-muted); cursor:pointer; user-select:none;}
   .crossday-label input{cursor:pointer;}
   .time-row select{flex:1; min-width:0; font-size:13px; padding:6px 4px;}
+  .time-row select[data-part$="year"]{flex:1.6;}
 
   .details-toggle-row{display:flex; align-items:center; gap:8px; margin-top:10px; padding-top:10px; border-top:1px solid var(--border);}
   .details-toggle{
@@ -547,6 +548,7 @@
     padding:16px 18px 18px;
   }
   .log-form{display:grid; grid-template-columns:repeat(auto-fit, minmax(110px, 1fr)); gap:8px; align-items:end;}
+  .log-form .field-daterow{grid-column:1 / -1;}
   .log-form .field label{font-size:10px; color:var(--text-muted);}
   .log-form select, .log-form input{
     background:var(--bg-field); border:1px solid var(--border); border-radius:6px;
@@ -688,11 +690,12 @@
 
 <div class="wrap">
   <div class="topbar">
-    <h1>產線即時監看板 <button class="version-badge" id="version-badge">v14.0</button></h1>
+    <h1>產線即時監看板 <button class="version-badge" id="version-badge">v14.1</button></h1>
     <div class="topbar-right">
       <button class="export-btn" id="settings-btn">設定 API 網址</button>
       <div class="export-date-picker">
-        <select id="export-month"><option value="">全部</option></select>
+        <select id="export-year"></select>
+        <select id="export-month"></select>
         <select id="export-day"></select>
       </div>
       <button class="export-btn" id="export-btn">匯出紀錄 (CSV)</button>
@@ -767,7 +770,7 @@
     <div class="section-title">機台異常紀錄</div>
     <div class="log-panel">
       <div class="log-form" id="abnormal-form">
-        <div class="field">
+        <div class="field field-daterow">
           <label>發生日期</label>
           <div class="time-row">
             <select data-part="year" id="ab-year"></select>
@@ -818,7 +821,7 @@
     <div class="section-title">機台掃碼異常紀錄</div>
     <div class="log-panel">
       <div class="log-form" id="scan-form">
-        <div class="field">
+        <div class="field field-daterow">
           <label>發生日期</label>
           <div class="time-row">
             <select data-part="year" id="sc-year"></select>
@@ -1092,6 +1095,16 @@ function yearOptionsHtml(selected){
     out += `<option value="${y}"${String(y)===sel?' selected':''}>${y}年</option>`;
   }
   return out;
+}
+
+// 日期顯示統一用這個規則：今年的資料就只顯示月/日（畫面乾淨、跟以前習慣一致）；
+// 不是今年的資料才顯示完整年份（避免跨年之後看不出是哪一年）。
+// 這樣舊資料（沒存年份、自動當今年處理）跟新資料（有存年份）現在顯示起來會是一致的，不會一邊有年份一邊沒有。
+function smartDateLabel(year, month, day){
+  const y = parseInt(year, 10);
+  const curYear = new Date().getFullYear();
+  if(!y || y === curYear) return `${month}/${day}`;
+  return `${year}/${month}/${day}`;
 }
 
 function monthOptionsHtml(selected){
@@ -1775,23 +1788,26 @@ function csvEscape(v){
 }
 
 function exportCsv(){
+  const yearV = document.getElementById('export-year').value;
   const monthV = document.getElementById('export-month').value;
   const dayV = document.getElementById('export-day').value;
 
-  // 只選了「月」或只選了「日」其中一個，不會套用日期篩選，容易誤以為篩選有生效，先跟使用者確認一次。
-  if((monthV && !dayV) || (!monthV && dayV)){
-    const proceed = confirm('你只選了「月」或「日」其中一個，這樣不會套用日期篩選，會匯出全部紀錄。\n\n要繼續匯出全部紀錄嗎？\n如果要匯出指定日期，請按「取消」，把月和日都選好後再重新匯出。');
+  // 三個都要選才會套用日期篩選；只選了一部分不會套用，容易誤以為篩選有生效，先跟使用者確認一次。
+  const anySelected = yearV || monthV || dayV;
+  const allSelected = yearV && monthV && dayV;
+  if(anySelected && !allSelected){
+    const proceed = confirm('你只選了年/月/日其中一部分，這樣不會套用日期篩選，會匯出全部紀錄。\n\n要繼續匯出全部紀錄嗎？\n如果要匯出指定日期，請把年、月、日都選好後再重新匯出。');
     if(!proceed) return;
   }
 
-  const filterDate = (monthV && dayV) ? `${monthV.padStart(2,'0')}-${dayV.padStart(2,'0')}` : null;
+  const filterDate = allSelected ? `${yearV}-${monthV.padStart(2,'0')}-${dayV.padStart(2,'0')}` : null;
 
   const fLog = filterDate ? completedLog.filter(r => recordDateStr(VIEW_CONFIG.log, r) === filterDate) : completedLog;
   const fAbnormal = filterDate ? abnormalLog.filter(r => recordDateStr(VIEW_CONFIG.abnormal, r) === filterDate) : abnormalLog;
   const fScan = filterDate ? scanLog.filter(r => recordDateStr(VIEW_CONFIG.scan, r) === filterDate) : scanLog;
 
   if(!fLog.length && !fAbnormal.length && !fScan.length){
-    alert(filterDate ? `${monthV}/${dayV} 沒有任何紀錄可以匯出。` : '目前還沒有任何紀錄可以匯出。');
+    alert(filterDate ? `${yearV}/${monthV}/${dayV} 沒有任何紀錄可以匯出。` : '目前還沒有任何紀錄可以匯出。');
     return;
   }
   let csv = '\uFEFF';
@@ -1833,7 +1849,7 @@ function exportCsv(){
   const a = document.createElement('a');
   const now = new Date();
   const pad = n => String(n).padStart(2,'0');
-  const tag = filterDate ? filterDate.replace('-','') : `${now.getFullYear()}${pad(now.getMonth()+1)}${pad(now.getDate())}`;
+  const tag = filterDate ? filterDate.replace(/-/g,'') : `${now.getFullYear()}${pad(now.getMonth()+1)}${pad(now.getDate())}`;
   a.href = url;
   a.download = `機台紀錄匯出_${tag}.csv`;
   document.body.appendChild(a);
@@ -2064,16 +2080,29 @@ function recordDateStr(cfg, r){
 // 防呆：如果 Google 試算表把我們存的時間字串自動誤判成日期格式，
 // 讀回來會變成一長串 ISO 格式（例如 2026-08-04T01:00:00.000Z），這裡把它清乾淨、
 // 還原成我們原本要的「YYYY/M/D HH:MM」或「YYYY/M/D」樣式，沒有問題的字串則原樣顯示。
+// 顯示用：把各種可能的原始格式，統一轉成「今年只顯示月/日、跨年才顯示完整年份」的樣子，
+// 這樣舊資料（存的時候沒有年份）跟新資料（存的時候有年份）顯示起來會是一致的。
 function cleanDisplayTime(v){
   if(v === undefined || v === null || v === '') return '';
-  const s = String(v);
+  const s = String(v).trim();
+  // 防呆：Google 試算表把我們的字串誤判成日期格式，讀回來變成一長串 ISO
   const iso = s.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/);
   if(iso){
-    const hh = iso[4], mm = iso[5];
-    if(hh === '00' && mm === '00'){
-      return `${iso[1]}/${parseInt(iso[2],10)}/${parseInt(iso[3],10)}`;
-    }
-    return `${iso[1]}/${parseInt(iso[2],10)}/${parseInt(iso[3],10)} ${hh}:${mm}`;
+    const label = smartDateLabel(iso[1], parseInt(iso[2],10), parseInt(iso[3],10));
+    if(iso[4] === '00' && iso[5] === '00') return label;
+    return `${label} ${iso[4]}:${iso[5]}`;
+  }
+  // 新格式：YYYY/M/D 或 YYYY/M/D HH:MM
+  let m = s.match(/^(\d{4})\/(\d{1,2})\/(\d{1,2})(?:\s+(\d{1,2}:\d{2}))?$/);
+  if(m){
+    const label = smartDateLabel(m[1], m[2], m[3]);
+    return m[4] ? `${label} ${m[4]}` : label;
+  }
+  // 舊格式（沒有年份）：M/D 或 M/D HH:MM，一律當作系統啟用那一年來判斷要不要顯示年份
+  m = s.match(/^(\d{1,2})\/(\d{1,2})(?:\s+(\d{1,2}:\d{2}))?$/);
+  if(m){
+    const label = smartDateLabel(SYSTEM_START_YEAR, m[1], m[2]);
+    return m[3] ? `${label} ${m[3]}` : label;
   }
   const trailing = s.match(/^(.*\d{2}:\d{2}):\d{2}(\.\d+)?Z?$/);
   if(trailing) return trailing[1];
@@ -2142,7 +2171,8 @@ function renderViewer(view, highlightLast, keepDateFilter){
   if(recentDates.length){
     const allBtn = `<button class="date-tab${(currentDateFilter===null && !currentRangeFilter)?' active':''}" data-date="">全部</button>`;
     const dateBtns = recentDates.map(d => {
-      const label = d.split('-').join('/'); // 'YYYY-MM-DD' -> 'YYYY/MM/DD'，含年份避免跨年混淆
+      const [y, mo, da] = d.split('-');
+      const label = smartDateLabel(y, parseInt(mo,10), parseInt(da,10)); // 今年只顯示月/日，跨年才顯示年份，避免手機上按鈕擠成一團
       return `<button class="date-tab${currentDateFilter===d?' active':''}" data-date="${d}">${label}</button>`;
     }).join('');
     tabsWrap.innerHTML = allBtn + dateBtns;
@@ -2370,6 +2400,7 @@ document.getElementById('records-switch').addEventListener('click', (e) => {
 
 // ---------- 版本紀錄 ----------
 const VERSION_LOG = [
+  {v:'v14.1', d:'修正 v14.0 加上年份後衍生的四個問題：(1) 手機操作異常/掃碼異常表單時，發生日期的年份選單被擠壓顯示不完整，改成讓日期欄位獨占整行、年份選單也加寬；(2) 統計儀表板的稼動率/異常趨勢圖表日期標籤誤顯示成「2026/08-21」，修正成「2026/08/21」；(3)(4) 查看紀錄的日期顯示統一改用「今年只顯示月/日、跨年才顯示完整年份」的規則，套用在查看紀錄的14天日期分頁按鈕跟紀錄明細列表，這樣舊資料（沒存年份）跟新資料（有存年份）今年顯示起來會完全一致，不會一邊有年份一邊沒有，畫面也不會被一堆完整日期擠得很亂；(5) 另外抓到一個真的存在的 bug：最上方「匯出紀錄」的日期篩選在 v14.0 之後其實已經失效（比對邏輯還在用沒有年份的舊格式），這次一併補上年份選單並修正比對邏輯'},
   {v:'v14.0', d:'全面加上年份，解決跨年份無法正確瀏覽/比對資料的問題：卡片日期、機台異常/掃碼異常的發生日期、查看紀錄與統計儀表板的自訂日期區間，都新增「年」的選單，存檔格式從「M/D」改成「YYYY/M/D」。背後的排序、分類、日期區間比對邏輯也一併修正，跨年份的資料現在能正確排序（1月不會再排在前一年12月前面）、正確分開統計（不同年份的同一個月日不會被混在一起）、「近7天/近30天」跨年那幾天也不會再抓不到資料。舊資料（存的是沒有年份的「M/D」格式）會自動視為2026年的資料，不用手動轉換，向下相容'},
   {v:'v13.7', d:'時鐘旁邊加上完整日期＋星期（例如 2026/08/26（三）），之前畫面上沒有任何地方能唯讀確認今天的完整日期跟年份，卡片上的日期欄位只有月/日、而且是可編輯的輸入欄位，不適合當作一眼確認今天日期的地方'},
   {v:'v13.6', d:'稼動率說明文字加上一句但書：「僅依人工記錄的起訖時間計算，無法偵測中途幾分鐘的小停機，數值可能略高於實際狀況」，避免時間稼動率的數字被誤以為已經很精確，忽略了中途小停頓沒被記錄到的限制'},
@@ -2519,7 +2550,10 @@ document.getElementById('sc-year').innerHTML = yearOptionsHtml(new Date().getFul
 document.getElementById('sc-month').innerHTML = monthOptionsHtml('');
 document.getElementById('sc-day').innerHTML = dayOptionsHtml('');
 (function fillExportDatePicker(){
-  let monthOpts = '<option value="">全部</option>';
+  const curYear = new Date().getFullYear();
+  document.getElementById('export-year').innerHTML = '<option value="">全部</option>' + yearOptionsHtml('').replace('<option value="">年</option>','');
+  document.getElementById('export-year').value = '';
+  let monthOpts = '<option value="">月</option>';
   for(let i=1;i<=12;i++){ monthOpts += `<option value="${i}">${i}月</option>`; }
   document.getElementById('export-month').innerHTML = monthOpts;
   let dayOpts = '<option value="">日</option>';
@@ -3060,7 +3094,7 @@ function computeDailyUptimeTrend(logs){
     tension:0.3,
     spanGaps:false
   }));
-  return {labels: dates.map(d=>d.replace('-','/')), datasets};
+  return {labels: dates.map(d=>d.split('-').join('/')), datasets};
 }
 
 // 找出每台機台在目前圖表的日期範圍裡，「頭尾之間」缺資料的日期（不含頭尾以外，那只是還沒開始/已經沒紀錄）。
@@ -3155,7 +3189,7 @@ function computeTrendStats(abns, scans){
   abns.forEach(r => { const d=recordDateStr(VIEW_CONFIG.abnormal, r); if(!d) return; byDate[d]=(byDate[d]||0)+(parseFloat(r['異常次數'])||1); });
   scans.forEach(r => { const d=recordDateStr(VIEW_CONFIG.scan, r); if(!d) return; byDate[d]=(byDate[d]||0)+(parseFloat(r['異常次數'])||1); });
   const dates = Object.keys(byDate).sort();
-  return {labels: dates.map(d=>d.replace('-','/')), data: dates.map(d=>byDate[d])};
+  return {labels: dates.map(d=>d.split('-').join('/')), data: dates.map(d=>byDate[d])};
 }
 
 const ABN_TYPE_COLORS = {'單捲標貼歪':'#3b82f6','料盤載台推擠':'#ef4444','料盤毀損':'#22c55e','掃碼異常':'#a855f7'};
