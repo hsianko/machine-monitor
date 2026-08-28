@@ -653,9 +653,12 @@
   .viewer-stats .stats-muted{color:var(--text-muted); font-size:10.5px;}
   .viewer-stats b{font-size:15px; color:var(--text-primary);}
   .viewer-stats b.stats-accent{color:#e8a33d;}
+  .viewer-stats .stats-dup-warn{color:var(--m-sanbao); font-weight:700; font-size:12.5px;}
   .remark-filter-btn.active{border-color:#e8a33d; color:#e8a33d;}
   table.viewer-table tr.remark-row{background:rgba(232,163,61,0.10);}
   table.viewer-table .remark-icon{margin-right:5px;}
+  table.viewer-table tr.dup-row{background:rgba(213,101,74,0.16);}
+  table.viewer-table .dup-icon{margin-right:5px; color:var(--m-sanbao); cursor:help;}
   .date-tab:hover{border-color:var(--text-secondary);}
   .viewer-table-wrap{overflow-x:auto;}
   table.viewer-table{width:100%; border-collapse:collapse; font-size:11.5px;}
@@ -697,7 +700,7 @@
 
 <div class="wrap">
   <div class="topbar">
-    <h1>產線即時監看板 <button class="version-badge" id="version-badge">v14.5</button></h1>
+    <h1>產線即時監看板 <button class="version-badge" id="version-badge">v14.6</button></h1>
     <div class="topbar-right">
       <button class="export-btn" id="settings-btn">設定 API 網址</button>
       <div class="export-date-picker">
@@ -2067,6 +2070,26 @@ function hasMeaningfulRemark(cfg, r){
   return !!v && !isBoxMathRemark(v);
 }
 
+// 找出「機台產能記錄」裡疑似重複的紀錄：機台、客戶、總箱數、目前箱數、當日箱數、
+// 開始時間、結束時間通通一模一樣（含精確到分鐘的時間），這種情況幾乎不可能是巧合，
+// 唯一合理的解釋就是同一次存檔被送出了兩次（例如網路不穩、顯示失敗但其實已經存進去，又重新按一次）。
+// 只針對「機台產能記錄」做這個判斷——異常/掃碼異常的快速記錄只有到「日期」的精細度，
+// 兩筆一樣有可能是真的發生兩次，沒辦法只看資料本身就分辨，怕誤判、誤刪真實紀錄，所以不自動標記。
+function computeDuplicateRowKeys(view, rows){
+  const dupSet = new Set();
+  if(view !== 'log') return dupSet;
+  const groups = {};
+  rows.forEach(r => {
+    const key = [r.machine, r.customer, r.totalBoxes, r.currentBox, r.dayBoxes, r.startTime, r.actualEnd].join('|');
+    if(!groups[key]) groups[key] = [];
+    groups[key].push(r);
+  });
+  Object.values(groups).forEach(g => {
+    if(g.length > 1) g.forEach(r => dupSet.add(r._row));
+  });
+  return dupSet;
+}
+
 // 把「YYYY/M/D」「M/D」或「...HH:MM」轉成可以直接比大小的數字，用來排序查看紀錄的列表，
 // 不管試算表裡實際的列順序如何都能正確排出時間先後（含年份，跨年也能正確排序）。
 function sortKeyForRow(cfg, r){
@@ -2263,10 +2286,12 @@ function renderViewer(view, highlightLast, keepDateFilter){
   currentViewRows = filtered.slice().sort((a,b) => sortKeyForRow(cfg,b) - sortKeyForRow(cfg,a));
 
   // 統計列：純畫面顯示用，跟匯出的 CSV 完全無關
+  const dupRowKeys = computeDuplicateRowKeys(view, filtered);
   const statsWrap = document.getElementById('viewer-stats');
   if(cfg.statKey && filtered.length){
     const total = filtered.reduce((sum, r) => sum + (parseFloat(r[cfg.statKey]) || 0), 0);
-    statsWrap.innerHTML = `<span class="stats-muted">僅畫面統計・不會匯出</span><span>筆數 <b>${filtered.length}</b></span><span>${cfg.statLabel} <b class="stats-accent">${total}</b></span>`;
+    const dupWarnHtml = dupRowKeys.size ? `<span class="stats-dup-warn">⚠ 疑似重複 ${dupRowKeys.size} 筆</span>` : '';
+    statsWrap.innerHTML = `<span class="stats-muted">僅畫面統計・不會匯出</span><span>筆數 <b>${filtered.length}</b></span><span>${cfg.statLabel} <b class="stats-accent">${total}</b></span>${dupWarnHtml}`;
     statsWrap.classList.add('show');
   } else {
     statsWrap.innerHTML = '';
@@ -2280,12 +2305,14 @@ function renderViewer(view, highlightLast, keepDateFilter){
     const bodyHtml = currentViewRows.map((r, idx) => {
       const isNew = highlightLast && idx === 0;
       const hasRemark = hasMeaningfulRemark(cfg, r);
+      const isDup = dupRowKeys.has(r._row);
       const cells = cfg.keys.map((k, ci) => {
         const val = escapeHtml(cleanDisplayTime(displayValue(view, r, k)));
-        const icon = (hasRemark && ci === 0) ? '<span class="remark-icon">📌</span>' : '';
-        return `<td>${icon}${val}</td>`;
+        const remarkIcon = (hasRemark && ci === 0) ? '<span class="remark-icon">📌</span>' : '';
+        const dupIcon = (isDup && ci === 0) ? '<span class="dup-icon" title="疑似重複紀錄：機台/客戶/箱數/時間都跟另一筆完全相同">⚠</span>' : '';
+        return `<td>${dupIcon}${remarkIcon}${val}</td>`;
       }).join('');
-      const rowCls = [isNew ? 'new-row' : '', hasRemark ? 'remark-row' : ''].filter(Boolean).join(' ');
+      const rowCls = [isNew ? 'new-row' : '', hasRemark ? 'remark-row' : '', isDup ? 'dup-row' : ''].filter(Boolean).join(' ');
       return `<tr class="${rowCls}" data-idx="${idx}">${cells}<td><button data-act="edit" data-idx="${idx}">編輯</button> <button data-act="del" data-idx="${idx}">刪除</button></td></tr>`;
     }).join('');
     body.innerHTML = `<table class="viewer-table"><thead>${headHtml}</thead><tbody>${bodyHtml}</tbody></table>`;
@@ -2439,6 +2466,7 @@ document.getElementById('records-switch').addEventListener('click', (e) => {
 
 // ---------- 版本紀錄 ----------
 const VERSION_LOG = [
+  {v:'v14.6', d:'查看紀錄的「機台產能記錄」新增疑似重複偵測：如果兩筆紀錄的機台、客戶、總箱數、目前箱數、當日箱數、開始時間、結束時間通通一模一樣（含精確到分鐘的時間），這種情況幾乎不可能是巧合，會用紅底整行標示、機台名稱前面加上⚠圖示，統計列也會顯示「疑似重複 X 筆」的醒目提示，方便發現網路不穩導致同一次存檔重複送出的情況，直接用旁邊的刪除按鈕處理即可。只針對機台產能記錄做這個判斷，機台異常/掃碼異常記錄的快速記錄兩筆一樣時可能是真的發生兩次，沒辦法只看資料本身分辨，不自動標記，避免誤刪真實紀錄'},
   {v:'v14.5', d:'「進行中訂單」的預估剩餘時間，計算每台機台自己的平均速度時，改成只看「最近14天」的實際表現，不再是從頭到尾全部歷史平均。這樣如果操作員的速度持續在進步，最近的資料很快就會把比較久以前、比較慢的紀錄擠出計算範圍，預估時間才能跟上目前的實際水準；用14天當窗口也能避免單一天的異常（例如卡料卡很久）就把數字整個拉歪'},
   {v:'v14.4', d:'「進行中訂單」清單新增「預估還要 X 分鐘」欄位，用還差箱數換算成時間，讓妳一眼看出接下來大概多久會空機、該準備下一張訂單了。速度優先用該機台自己過去的實際表現去換算（不是統一套用大寶的基準），還沒有歷史紀錄的機台則暫時使用全站基準速度。剩餘時間低於30分鐘時，整行會標成提醒色並顯示「快做完了・預估還要」，方便掃過清單時第一眼就注意到'},
   {v:'v14.3', d:'異常分頁畫面精簡：把「快速記錄（機台掃碼異常）」的四列按鈕，合併進「快速記錄（機台異常）」同一列，每台機台從原本上下兩排（共8列）縮成一排（4列），掃碼異常按鈕跟前面三個異常類型按鈕用一點間距區隔。這只是畫面排版調整，點擊後各自還是分別存進「機台異常」跟「機台掃碼異常」兩個不同的地方，不會互相影響。另外把發生日期的年/月/日三個下拉選單改成等寬（原本年比較寬），畫面更整齊'},
