@@ -700,7 +700,7 @@
 
 <div class="wrap">
   <div class="topbar">
-    <h1>產線即時監看板 <button class="version-badge" id="version-badge">v14.6</button></h1>
+    <h1>產線即時監看板 <button class="version-badge" id="version-badge">v15.0</button></h1>
     <div class="topbar-right">
       <button class="export-btn" id="settings-btn">設定 API 網址</button>
       <div class="export-date-picker">
@@ -796,13 +796,14 @@
             <option value="單捲標貼歪">單捲標貼歪</option>
             <option value="料盤載台推擠">料盤載台推擠</option>
             <option value="料盤毀損">料盤毀損</option>
+            <option value="分料盤落料傾斜">分料盤落料傾斜</option>
           </select>
         </div>
         <div class="field">
           <label>異常次數</label>
           <select id="ab-count"></select>
         </div>
-        <div class="field">
+        <div class="field" id="ab-origin-wrap">
           <label>料盤產地</label>
           <input type="text" id="ab-origin" placeholder="輸入料盤產地">
         </div>
@@ -819,6 +820,10 @@
         <div class="field" id="ab-reason-other-wrap" style="display:none;">
           <label>其他原因</label>
           <input type="text" id="ab-reason-other" placeholder="輸入原因">
+        </div>
+        <div class="field" id="ab-partno-wrap" style="display:none;">
+          <label>料號</label>
+          <input type="text" id="ab-partno" placeholder="輸入料號">
         </div>
         <button class="log-submit" id="ab-submit">新增紀錄</button>
       </div>
@@ -1867,7 +1872,7 @@ function exportCsv(){
 
   if(fAbnormal.length){
     csv += '機台異常記錄\r\n';
-    const headers3 = ['發生日期','機台','異常類型','異常次數','料盤產地','原因'];
+    const headers3 = ['發生日期','機台','異常類型','異常次數','料盤產地','原因','料號'];
     csv += headers3.map(csvEscape).join(',') + '\r\n';
     fAbnormal.forEach(r => {
       const row = headers3.map(h => cleanDisplayTime(r[h]));
@@ -2006,7 +2011,7 @@ document.getElementById('pending-board').addEventListener('click', (e) => {
 
 // ---------- 紀錄查看選單（可編輯／刪除） ----------
 const MACHINE_OPTS = MACHINES.map(m => m.key);
-const AB_TYPE_OPTS = ['單捲標貼歪','料盤載台推擠','料盤毀損'];
+const AB_TYPE_OPTS = ['單捲標貼歪','料盤載台推擠','料盤毀損','分料盤落料傾斜'];
 const SCAN_POS_OPTS = ['1','2'];
 const SCAN_COUNT_OPTS = Array.from({length:20}, (_,i)=>String(i+1));
 
@@ -2028,8 +2033,8 @@ const VIEW_CONFIG = {
   abnormal: {
     title:'機台異常記錄',
     sheet:'MachineAbnormal',
-    headers:['發生日期','機台','異常類型','異常次數','料盤產地','原因'],
-    keys:['發生日期','機台','異常類型','異常次數','料盤產地','原因'],
+    headers:['發生日期','機台','異常類型','異常次數','料盤產地','原因','料號'],
+    keys:['發生日期','機台','異常類型','異常次數','料盤產地','原因','料號'],
     fieldTypes:{'機台':{type:'select', options:MACHINE_OPTS}, '異常類型':{type:'select', options:AB_TYPE_OPTS}, '異常次數':{type:'select', options:SCAN_COUNT_OPTS}, '發生日期':{type:'date'}},
     dateKey:'紀錄時間',
     groupDateKey:'發生日期',
@@ -2466,6 +2471,7 @@ document.getElementById('records-switch').addEventListener('click', (e) => {
 
 // ---------- 版本紀錄 ----------
 const VERSION_LOG = [
+  {v:'v15.0', d:'新增機台異常類型「分料盤落料傾斜」，4台機台都支援。跟其他類型不同的是這個類型只需要記錄「料號」，不需要產地或原因——快速記錄按鈕、完整表單（選這個類型時會自動隱藏料盤產地欄位、改顯示料號欄位）、待補明細提醒、統計儀表板的圖表/表格、Excel/Word/CSV 匯出都同步支援這個新類型。試算表「機台異常」分頁需要先手動加上「料號」欄位（已確認妳這邊已經加好），後端 .gs 不用改，因為讀寫欄位本來就是照試算表實際的標題列動態對應'},
   {v:'v14.6', d:'查看紀錄的「機台產能記錄」新增疑似重複偵測：如果兩筆紀錄的機台、客戶、總箱數、目前箱數、當日箱數、開始時間、結束時間通通一模一樣（含精確到分鐘的時間），這種情況幾乎不可能是巧合，會用紅底整行標示、機台名稱前面加上⚠圖示，統計列也會顯示「疑似重複 X 筆」的醒目提示，方便發現網路不穩導致同一次存檔重複送出的情況，直接用旁邊的刪除按鈕處理即可。只針對機台產能記錄做這個判斷，機台異常/掃碼異常記錄的快速記錄兩筆一樣時可能是真的發生兩次，沒辦法只看資料本身分辨，不自動標記，避免誤刪真實紀錄'},
   {v:'v14.5', d:'「進行中訂單」的預估剩餘時間，計算每台機台自己的平均速度時，改成只看「最近14天」的實際表現，不再是從頭到尾全部歷史平均。這樣如果操作員的速度持續在進步，最近的資料很快就會把比較久以前、比較慢的紀錄擠出計算範圍，預估時間才能跟上目前的實際水準；用14天當窗口也能避免單一天的異常（例如卡料卡很久）就把數字整個拉歪'},
   {v:'v14.4', d:'「進行中訂單」清單新增「預估還要 X 分鐘」欄位，用還差箱數換算成時間，讓妳一眼看出接下來大概多久會空機、該準備下一張訂單了。速度優先用該機台自己過去的實際表現去換算（不是統一套用大寶的基準），還沒有歷史紀錄的機台則暫時使用全站基準速度。剩餘時間低於30分鐘時，整行會標成提醒色並顯示「快做完了・預估還要」，方便掃過清單時第一眼就注意到'},
@@ -2639,13 +2645,22 @@ document.getElementById('sc-day').innerHTML = dayOptionsHtml('');
 })();
 
 // 異常類型選「料盤毀損」時才顯示「原因」欄位；選「其他」再顯示自行輸入框。
+// 選「分料盤落料傾斜」時，不需要料盤產地，改顯示「料號」欄位。
 document.getElementById('ab-type').addEventListener('change', (e) => {
   const isDamage = e.target.value === '料盤毀損';
+  const isTilt = e.target.value === '分料盤落料傾斜';
   document.getElementById('ab-reason-wrap').style.display = isDamage ? '' : 'none';
   document.getElementById('ab-reason-other-wrap').style.display = 'none';
+  document.getElementById('ab-origin-wrap').style.display = isTilt ? 'none' : '';
+  document.getElementById('ab-partno-wrap').style.display = isTilt ? '' : 'none';
   if(!isDamage){
     document.getElementById('ab-reason').value = '';
     document.getElementById('ab-reason-other').value = '';
+  }
+  if(isTilt){
+    document.getElementById('ab-origin').value = '';
+  } else {
+    document.getElementById('ab-partno').value = '';
   }
 });
 document.getElementById('ab-reason').addEventListener('change', (e) => {
@@ -2664,6 +2679,7 @@ document.getElementById('ab-submit').addEventListener('click', async () => {
   const reasonSel = document.getElementById('ab-reason').value;
   const reasonOther = document.getElementById('ab-reason-other').value.trim();
   const reason = type === '料盤毀損' ? (reasonSel === '其他' ? reasonOther : reasonSel) : '';
+  const partNo = type === '分料盤落料傾斜' ? document.getElementById('ab-partno').value.trim() : '';
   const hint = document.getElementById('ab-hint');
   if(!year || !month || !day || !machine || !type){
     hint.textContent = '請把發生日期、機台、異常類型都選完再送出。';
@@ -2676,8 +2692,9 @@ document.getElementById('ab-submit').addEventListener('click', async () => {
       '機台': machine,
       '異常類型': type,
       '異常次數': count,
-      '料盤產地': origin,
-      '原因': reason
+      '料盤產地': type === '分料盤落料傾斜' ? '' : origin,
+      '原因': reason,
+      '料號': partNo
     };
     await apiPost({action:'appendAbnormal', data: record});
     await loadState();
@@ -2691,8 +2708,11 @@ document.getElementById('ab-submit').addEventListener('click', async () => {
     document.getElementById('ab-origin').value = '';
     document.getElementById('ab-reason').value = '';
     document.getElementById('ab-reason-other').value = '';
+    document.getElementById('ab-partno').value = '';
     document.getElementById('ab-reason-wrap').style.display = 'none';
     document.getElementById('ab-reason-other-wrap').style.display = 'none';
+    document.getElementById('ab-origin-wrap').style.display = '';
+    document.getElementById('ab-partno-wrap').style.display = 'none';
     renderViewer('abnormal', true);
   }catch(err){
     hint.textContent = '新增失敗：' + err;
@@ -2760,7 +2780,7 @@ function renderQuickAbnormalGrid(){
 async function quickAddAbnormal(machine, type, btn){
   if(!API_URL){ alert('尚未設定 API 網址，請先點右上角「設定 API 網址」。'); return; }
   const {year, month, day} = todayMD();
-  const record = { '發生日期': buildDateOnly(year, month, day), '機台': machine, '異常類型': type, '異常次數': '1', '料盤產地': '', '原因': '' };
+  const record = { '發生日期': buildDateOnly(year, month, day), '機台': machine, '異常類型': type, '異常次數': '1', '料盤產地': '', '原因': '', '料號': '' };
   const original = btn.textContent;
   btn.disabled = true;
   try{
@@ -2812,11 +2832,13 @@ function computePendingDetails(){
   abnormalLog.forEach(r => {
     const missing = [];
     const type = r['異常類型'];
-    // 單捲標貼歪不需要產地也不需要原因；料盤載台推擠只需要產地；料盤毀損兩項都需要。
+    // 單捲標貼歪不需要產地也不需要原因；料盤載台推擠只需要產地；料盤毀損兩項都需要；分料盤落料傾斜只需要料號。
     const needOrigin = (type === '料盤載台推擠' || type === '料盤毀損');
     const needReason = (type === '料盤毀損');
+    const needPartNo = (type === '分料盤落料傾斜');
     if(needOrigin && !r['料盤產地']) missing.push('產地');
     if(needReason && !r['原因']) missing.push('原因');
+    if(needPartNo && !r['料號']) missing.push('料號');
     if(missing.length){
       items.push({ kind:'abnormal', machine:r['機台'], label:type, date:r['發生日期'], missing, row:r });
     }
@@ -3249,8 +3271,8 @@ function computeTrendStats(abns, scans){
   return {labels: dates.map(d=>d.split('-').join('/')), data: dates.map(d=>byDate[d])};
 }
 
-const ABN_TYPE_COLORS = {'單捲標貼歪':'#3b82f6','料盤載台推擠':'#ef4444','料盤毀損':'#22c55e','掃碼異常':'#a855f7'};
-const ABN_ALL_CATEGORIES = ['單捲標貼歪','料盤載台推擠','料盤毀損','掃碼異常'];
+const ABN_TYPE_COLORS = {'單捲標貼歪':'#3b82f6','料盤載台推擠':'#ef4444','料盤毀損':'#22c55e','分料盤落料傾斜':'#f59e0b','掃碼異常':'#a855f7'};
+const ABN_ALL_CATEGORIES = ['單捲標貼歪','料盤載台推擠','料盤毀損','分料盤落料傾斜','掃碼異常'];
 
 function renderDashboard(){
   const {logs, abns, scans} = getDashRecords();
@@ -3304,6 +3326,7 @@ function renderDashboard(){
       <div class="dc-sub"><span>單捲標貼歪</span><span>${p.byType['單捲標貼歪']}</span></div>
       <div class="dc-sub"><span>料盤載台推擠</span><span>${p.byType['料盤載台推擠']}</span></div>
       <div class="dc-sub"><span>料盤毀損</span><span>${p.byType['料盤毀損']}</span></div>
+      <div class="dc-sub"><span>分料盤落料傾斜</span><span>${p.byType['分料盤落料傾斜']}</span></div>
       <div class="dc-sub"><span>掃碼異常</span><span>${p.scanCount}</span></div>
     </div>
   `).join('');
@@ -3322,8 +3345,8 @@ function renderDashboard(){
     }
   });
 
-  document.getElementById('dash-abn-rank').innerHTML = `<table><tr><th>排名</th><th>機台</th><th>單捲標貼歪</th><th>料盤載台推擠</th><th>料盤毀損</th><th>掃碼異常</th><th>合計</th><th>等級</th></tr>` +
-    abnStats.ranked.map((p,i) => `<tr><td>${i+1}</td><td>${p.machine}</td><td>${p.byType['單捲標貼歪']}</td><td>${p.byType['料盤載台推擠']}</td><td>${p.byType['料盤毀損']}</td><td>${p.scanCount}</td><td>${p.total}</td><td><span class="level ${p.levelCls}">${p.level}</span></td></tr>`).join('') +
+  document.getElementById('dash-abn-rank').innerHTML = `<table><tr><th>排名</th><th>機台</th><th>單捲標貼歪</th><th>料盤載台推擠</th><th>料盤毀損</th><th>分料盤落料傾斜</th><th>掃碼異常</th><th>合計</th><th>等級</th></tr>` +
+    abnStats.ranked.map((p,i) => `<tr><td>${i+1}</td><td>${p.machine}</td><td>${p.byType['單捲標貼歪']}</td><td>${p.byType['料盤載台推擠']}</td><td>${p.byType['料盤毀損']}</td><td>${p.byType['分料盤落料傾斜']}</td><td>${p.scanCount}</td><td>${p.total}</td><td><span class="level ${p.levelCls}">${p.level}</span></td></tr>`).join('') +
     `</table>`;
 
   document.getElementById('dash-abn-insight').innerHTML = '⚠ 觀察重點：<br>' + buildAbnormalInsight(abnStats);
@@ -3426,8 +3449,8 @@ function buildDashReportHtml(){
   }, W, H);
 
   const uptimeRows = uptimeStats.map(s => `<tr><td>${s.machine}</td><td>${s.pct}%</td><td>${s.perfPct}%</td><td>${s.avgMinPerBox!==null ? s.avgMinPerBox : '—'}</td><td>${s.workedHours}</td><td>${s.availableHours}</td><td>${s.totalBoxes}</td><td>${s.activeDays}</td></tr>`).join('');
-  const cardRows = abnStats.perMachine.map(p => `<tr><td>${p.machine}</td><td>${p.total}</td><td>${p.byType['單捲標貼歪']}</td><td>${p.byType['料盤載台推擠']}</td><td>${p.byType['料盤毀損']}</td><td>${p.scanCount}</td></tr>`).join('');
-  const rankRows = abnStats.ranked.map((p,i) => `<tr><td>${i+1}</td><td>${p.machine}</td><td>${p.byType['單捲標貼歪']}</td><td>${p.byType['料盤載台推擠']}</td><td>${p.byType['料盤毀損']}</td><td>${p.scanCount}</td><td>${p.total}</td><td>${p.level}</td></tr>`).join('');
+  const cardRows = abnStats.perMachine.map(p => `<tr><td>${p.machine}</td><td>${p.total}</td><td>${p.byType['單捲標貼歪']}</td><td>${p.byType['料盤載台推擠']}</td><td>${p.byType['料盤毀損']}</td><td>${p.byType['分料盤落料傾斜']}</td><td>${p.scanCount}</td></tr>`).join('');
+  const rankRows = abnStats.ranked.map((p,i) => `<tr><td>${i+1}</td><td>${p.machine}</td><td>${p.byType['單捲標貼歪']}</td><td>${p.byType['料盤載台推擠']}</td><td>${p.byType['料盤毀損']}</td><td>${p.byType['分料盤落料傾斜']}</td><td>${p.scanCount}</td><td>${p.total}</td><td>${p.level}</td></tr>`).join('');
   const insightHtml = buildAbnormalInsight(abnStats);
   const uptimeGapEntries = Object.entries(findUptimeGaps(uptimeTrend));
   const gapNoteHtml = uptimeGapEntries.length
@@ -3481,7 +3504,7 @@ function buildDashReportHtml(){
     `, true)}
 
     ${block('異常統計 — 總覽', `
-      <table class="data-table"><tr><th>機台</th><th>累計異常次數</th><th>單捲標貼歪</th><th>料盤載台推擠</th><th>料盤毀損</th><th>掃碼異常</th></tr>${cardRows}</table>
+      <table class="data-table"><tr><th>機台</th><th>累計異常次數</th><th>單捲標貼歪</th><th>料盤載台推擠</th><th>料盤毀損</th><th>分料盤落料傾斜</th><th>掃碼異常</th></tr>${cardRows}</table>
     `, true)}
 
     ${block('機台異常類型分布（依機台）', `
@@ -3489,7 +3512,7 @@ function buildDashReportHtml(){
     `, true)}
 
     ${block('異常次數排行', `
-      <table class="data-table"><tr><th>排名</th><th>機台</th><th>單捲標貼歪</th><th>料盤載台推擠</th><th>料盤毀損</th><th>掃碼異常</th><th>合計</th><th>等級</th></tr>${rankRows}</table>
+      <table class="data-table"><tr><th>排名</th><th>機台</th><th>單捲標貼歪</th><th>料盤載台推擠</th><th>料盤毀損</th><th>分料盤落料傾斜</th><th>掃碼異常</th><th>合計</th><th>等級</th></tr>${rankRows}</table>
       <div class="insight">⚠ 觀察重點：<br>${insightHtml}</div>
     `)}
 
@@ -3517,9 +3540,9 @@ function exportDashboardExcel(){
   XLSX.utils.book_append_sheet(wb, wsUptime, '稼動率');
 
   const wsAbn = buildStyledSheet(title, subtitle,
-    ['排名', '機台', '單捲標貼歪', '料盤載台推擠', '料盤毀損', '掃碼異常', '合計', '等級'],
-    abnStats.ranked.map((p,i) => [i+1, p.machine, p.byType['單捲標貼歪'], p.byType['料盤載台推擠'], p.byType['料盤毀損'], p.scanCount, p.total, p.level]),
-    { levelCol:7 }
+    ['排名', '機台', '單捲標貼歪', '料盤載台推擠', '料盤毀損', '分料盤落料傾斜', '掃碼異常', '合計', '等級'],
+    abnStats.ranked.map((p,i) => [i+1, p.machine, p.byType['單捲標貼歪'], p.byType['料盤載台推擠'], p.byType['料盤毀損'], p.byType['分料盤落料傾斜'], p.scanCount, p.total, p.level]),
+    { levelCol:8 }
   );
   XLSX.utils.book_append_sheet(wb, wsAbn, '異常次數排行');
 
