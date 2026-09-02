@@ -700,7 +700,7 @@
 
 <div class="wrap">
   <div class="topbar">
-    <h1>產線即時監看板 <button class="version-badge" id="version-badge">v15.0</button></h1>
+    <h1>產線即時監看板 <button class="version-badge" id="version-badge">v15.1</button></h1>
     <div class="topbar-right">
       <button class="export-btn" id="settings-btn">設定 API 網址</button>
       <div class="export-date-picker">
@@ -1610,6 +1610,14 @@ function computeOverviewStats(){
 // 收合狀態只存在當次瀏覽期間，重新整理頁面（例如隔天早上重開）就會恢復預設攤開。
 let runningListCollapsed = false;
 
+// 把分鐘數換算成好讀的格式：超過60分鐘就換算成「X小時Y分鐘」，不到60分鐘維持「X分鐘」。
+function formatEtaMinutes(mins){
+  if(mins < 60) return `${mins} 分鐘`;
+  const h = Math.floor(mins / 60);
+  const m = mins % 60;
+  return m > 0 ? `${h} 小時 ${m} 分鐘` : `${h} 小時`;
+}
+
 function renderRunningList(){
   const list = getRunningOrders();
   const wrap = document.getElementById('running-list');
@@ -1622,7 +1630,7 @@ function renderRunningList(){
   } else {
     wrap.innerHTML = list.map(o => {
       const isWarn = o.etaMinutes > 0 && o.etaMinutes < ETA_WARN_MINUTES;
-      const etaLabel = o.etaMinutes > 0 ? `約 ${o.etaMinutes} 分鐘` : '即將完成';
+      const etaLabel = o.etaMinutes > 0 ? `約 ${formatEtaMinutes(o.etaMinutes)}` : '即將完成';
       return `
       <div class="pending-row${isWarn ? ' eta-warn' : ''}">
         <div class="pending-info">
@@ -2471,6 +2479,7 @@ document.getElementById('records-switch').addEventListener('click', (e) => {
 
 // ---------- 版本紀錄 ----------
 const VERSION_LOG = [
+  {v:'v15.1', d:'「進行中訂單」的預估剩餘時間，超過60分鐘會自動換算成「X小時Y分鐘」，不到60分鐘維持顯示「X分鐘」（例如123分鐘會顯示成「2小時3分鐘」），剛好整數小時不會多顯示「0分鐘」的贅字'},
   {v:'v15.0', d:'新增機台異常類型「分料盤落料傾斜」，4台機台都支援。跟其他類型不同的是這個類型只需要記錄「料號」，不需要產地或原因——快速記錄按鈕、完整表單（選這個類型時會自動隱藏料盤產地欄位、改顯示料號欄位）、待補明細提醒、統計儀表板的圖表/表格、Excel/Word/CSV 匯出都同步支援這個新類型。試算表「機台異常」分頁需要先手動加上「料號」欄位（已確認妳這邊已經加好），後端 .gs 不用改，因為讀寫欄位本來就是照試算表實際的標題列動態對應'},
   {v:'v14.6', d:'查看紀錄的「機台產能記錄」新增疑似重複偵測：如果兩筆紀錄的機台、客戶、總箱數、目前箱數、當日箱數、開始時間、結束時間通通一模一樣（含精確到分鐘的時間），這種情況幾乎不可能是巧合，會用紅底整行標示、機台名稱前面加上⚠圖示，統計列也會顯示「疑似重複 X 筆」的醒目提示，方便發現網路不穩導致同一次存檔重複送出的情況，直接用旁邊的刪除按鈕處理即可。只針對機台產能記錄做這個判斷，機台異常/掃碼異常記錄的快速記錄兩筆一樣時可能是真的發生兩次，沒辦法只看資料本身分辨，不自動標記，避免誤刪真實紀錄'},
   {v:'v14.5', d:'「進行中訂單」的預估剩餘時間，計算每台機台自己的平均速度時，改成只看「最近14天」的實際表現，不再是從頭到尾全部歷史平均。這樣如果操作員的速度持續在進步，最近的資料很快就會把比較久以前、比較慢的紀錄擠出計算範圍，預估時間才能跟上目前的實際水準；用14天當窗口也能避免單一天的異常（例如卡料卡很久）就把數字整個拉歪'},
