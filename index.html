@@ -120,6 +120,11 @@
     background:var(--bg-field); border:1px solid var(--border-strong); color:var(--text-primary);
     font-family:var(--font-mono); font-size:12px; padding:6px 8px; border-radius:6px;
   }
+  .date-input{
+    background:var(--bg-field); border:1px solid var(--border-strong); color:var(--text-primary);
+    font-family:var(--font-mono); font-size:13px; padding:6px 8px; border-radius:6px;
+    color-scheme:dark;
+  }
   .dash-presets{display:flex; gap:6px;}
   .dash-note{font-size:10.5px; color:var(--text-muted); margin:0 0 16px; line-height:1.6;}
   .dash-section{margin-bottom:26px;}
@@ -393,6 +398,7 @@
     .gauge-track{height:20px;}
     .time-row select{font-size:13px !important;}
     .log-form .field-daterow{grid-column:1 / -1;}
+    .date-input{font-size:16px; padding:8px 6px;}
   }
 
   .card{
@@ -700,7 +706,7 @@
 
 <div class="wrap">
   <div class="topbar">
-    <h1>產線即時監看板 <button class="version-badge" id="version-badge">v15.1</button></h1>
+    <h1>產線即時監看板 <button class="version-badge" id="version-badge">v15.2</button></h1>
     <div class="topbar-right">
       <button class="export-btn" id="settings-btn">設定 API 網址</button>
       <div class="export-date-picker">
@@ -877,13 +883,9 @@
       <div class="dash-controls">
         <div class="dash-control-group">
           <span class="dash-control-label">日期範圍</span>
-          <select id="dash-start-year"></select>
-          <select id="dash-start-month"></select>
-          <select id="dash-start-day"></select>
+          <input type="date" id="dash-start-date" class="date-input">
           <span class="dash-tilde">～</span>
-          <select id="dash-end-year"></select>
-          <select id="dash-end-month"></select>
-          <select id="dash-end-day"></select>
+          <input type="date" id="dash-end-date" class="date-input">
         </div>
         <div class="dash-presets">
           <button class="date-tab" data-preset="today">今天</button>
@@ -899,6 +901,11 @@
         <h3>稼動率（時間／性能）</h3>
         <div class="dash-chart-wrap"><canvas id="dash-chart-uptime"></canvas></div>
         <div class="dash-table-wrap" id="dash-table-uptime"></div>
+      </div>
+
+      <div class="dash-section">
+        <h3>每日箱數（依日期）</h3>
+        <div class="dash-chart-wrap"><canvas id="dash-chart-boxes-trend"></canvas></div>
       </div>
 
       <div class="dash-section">
@@ -938,13 +945,9 @@
       <div class="dash-controls" style="margin-bottom:10px;">
         <button class="date-tab" id="viewer-range-toggle">📅 自訂日期區間</button>
         <div class="dash-control-group" id="viewer-range-picker" style="display:none;">
-          <select id="viewer-range-start-year"></select>
-          <select id="viewer-range-start-month"></select>
-          <select id="viewer-range-start-day"></select>
+          <input type="date" id="viewer-range-start-date" class="date-input">
           <span class="dash-tilde">～</span>
-          <select id="viewer-range-end-year"></select>
-          <select id="viewer-range-end-month"></select>
-          <select id="viewer-range-end-day"></select>
+          <input type="date" id="viewer-range-end-date" class="date-input">
           <button class="date-tab" id="viewer-range-clear">清除區間</button>
         </div>
       </div>
@@ -1428,6 +1431,11 @@ function render(){
       const dd = state[m.key];
       if(!dd.customer || !dd.totalBoxes){
         alert('請先填寫客戶名稱與總箱數，再標記完成。');
+        return;
+      }
+      // 這個按鈕會把訂單結案、清空整張卡片，後果比「記錄今日進度」大很多，
+      // 手機操作容易手滑點到，先跳出確認視窗給一次反悔的機會。
+      if(!confirm(`確定要標記「${dd.customer}」已完成嗎？\n\n這個動作會把這張訂單加入機台產能記錄，並清空這張卡片目前的資料。`)){
         return;
       }
       savingLock[m.key] = true;
@@ -2437,25 +2445,14 @@ document.getElementById('viewer-range-toggle').addEventListener('click', () => {
   const picker = document.getElementById('viewer-range-picker');
   picker.style.display = picker.style.display === 'none' ? 'flex' : 'none';
 });
+// 改用手機/電腦都有支援的原生日期選擇器，不用再連續點6個下拉選單。
 function initViewerRangePicker(){
-  const curYear = new Date().getFullYear();
-  document.getElementById('viewer-range-start-year').innerHTML = yearOptionsHtml(curYear);
-  document.getElementById('viewer-range-start-month').innerHTML = monthOptionsHtml('');
-  document.getElementById('viewer-range-start-day').innerHTML = dayOptionsHtml('');
-  document.getElementById('viewer-range-end-year').innerHTML = yearOptionsHtml(curYear);
-  document.getElementById('viewer-range-end-month').innerHTML = monthOptionsHtml('');
-  document.getElementById('viewer-range-end-day').innerHTML = dayOptionsHtml('');
-  ['viewer-range-start-year','viewer-range-start-month','viewer-range-start-day','viewer-range-end-year','viewer-range-end-month','viewer-range-end-day'].forEach(id => {
+  ['viewer-range-start-date','viewer-range-end-date'].forEach(id => {
     document.getElementById(id).addEventListener('change', () => {
-      const sy = document.getElementById('viewer-range-start-year').value;
-      const sm = document.getElementById('viewer-range-start-month').value;
-      const sd = document.getElementById('viewer-range-start-day').value;
-      const ey = document.getElementById('viewer-range-end-year').value;
-      const em = document.getElementById('viewer-range-end-month').value;
-      const ed = document.getElementById('viewer-range-end-day').value;
-      if(sy && sm && sd && ey && em && ed){
-        const pad = n => String(n).padStart(2,'0');
-        currentRangeFilter = {start:`${sy}-${pad(sm)}-${pad(sd)}`, end:`${ey}-${pad(em)}-${pad(ed)}`};
+      const s = document.getElementById('viewer-range-start-date').value;
+      const e = document.getElementById('viewer-range-end-date').value;
+      if(s && e){
+        currentRangeFilter = {start:s, end:e};
         currentDateFilter = null;
         renderViewer(currentLogView, false, true);
       }
@@ -2465,7 +2462,7 @@ function initViewerRangePicker(){
 initViewerRangePicker();
 document.getElementById('viewer-range-clear').addEventListener('click', () => {
   currentRangeFilter = null;
-  ['viewer-range-start-year','viewer-range-start-month','viewer-range-start-day','viewer-range-end-year','viewer-range-end-month','viewer-range-end-day'].forEach(id => {
+  ['viewer-range-start-date','viewer-range-end-date'].forEach(id => {
     document.getElementById(id).value = '';
   });
   renderViewer(currentLogView, false, true);
@@ -2479,6 +2476,7 @@ document.getElementById('records-switch').addEventListener('click', (e) => {
 
 // ---------- 版本紀錄 ----------
 const VERSION_LOG = [
+  {v:'v15.2', d:'三項調整：(1) 統計儀表板與查看紀錄的自訂日期區間，把原本要連續點6個下拉選單（年/月/日×開始/結束）改成手機/電腦都支援的原生日期選擇器，點一下跳出日曆直接選，操作動作從6次縮到2次；(2) 統計儀表板新增「每日箱數」堆疊長條圖，放在稼動率表格下方、稼動率趨勢圖上方，四台機台用不同顏色堆疊呈現，一眼看出每天總箱數跟各機台的量各是多少；(3)「確定完成並加入紀錄」按鈕點下去後會先跳出確認視窗，因為這個動作會結案清空整張卡片、後果比「記錄今日進度」大，手機操作容易手滑點到，加這一層確認可以有反悔機會，取消不會送出任何資料'},
   {v:'v15.1', d:'「進行中訂單」的預估剩餘時間，超過60分鐘會自動換算成「X小時Y分鐘」，不到60分鐘維持顯示「X分鐘」（例如123分鐘會顯示成「2小時3分鐘」），剛好整數小時不會多顯示「0分鐘」的贅字'},
   {v:'v15.0', d:'新增機台異常類型「分料盤落料傾斜」，4台機台都支援。跟其他類型不同的是這個類型只需要記錄「料號」，不需要產地或原因——快速記錄按鈕、完整表單（選這個類型時會自動隱藏料盤產地欄位、改顯示料號欄位）、待補明細提醒、統計儀表板的圖表/表格、Excel/Word/CSV 匯出都同步支援這個新類型。試算表「機台異常」分頁需要先手動加上「料號」欄位（已確認妳這邊已經加好），後端 .gs 不用改，因為讀寫欄位本來就是照試算表實際的標題列動態對應'},
   {v:'v14.6', d:'查看紀錄的「機台產能記錄」新增疑似重複偵測：如果兩筆紀錄的機台、客戶、總箱數、目前箱數、當日箱數、開始時間、結束時間通通一模一樣（含精確到分鐘的時間），這種情況幾乎不可能是巧合，會用紅底整行標示、機台名稱前面加上⚠圖示，統計列也會顯示「疑似重複 X 筆」的醒目提示，方便發現網路不穩導致同一次存檔重複送出的情況，直接用旁邊的刪除按鈕處理即可。只針對機台產能記錄做這個判斷，機台異常/掃碼異常記錄的快速記錄兩筆一樣時可能是真的發生兩次，沒辦法只看資料本身分辨，不自動標記，避免誤刪真實紀錄'},
@@ -2931,7 +2929,7 @@ const CHART_GRID_COLOR = '#2b313a';
 
 let dashRange = {start:null, end:null, label:'近7天'};
 let dashMachineFilter = null;
-let chartUptime=null, chartUptimeTrend=null, chartAbnType=null, chartTrend=null;
+let chartUptime=null, chartUptimeTrend=null, chartBoxesTrend=null, chartAbnType=null, chartTrend=null;
 
 function ymdToday(offsetDays){
   const now = new Date();
@@ -2950,40 +2948,26 @@ function setDashPreset(preset){
 }
 
 function syncDashDateSelects(){
-  const sp = dashRange.start ? dashRange.start.split('-') : ['','',''];
-  const ep = dashRange.end ? dashRange.end.split('-') : ['','',''];
-  document.getElementById('dash-start-year').value = sp[0] || '';
-  document.getElementById('dash-start-month').value = sp[1] ? String(parseInt(sp[1],10)) : '';
-  document.getElementById('dash-start-day').value = sp[2] ? String(parseInt(sp[2],10)) : '';
-  document.getElementById('dash-end-year').value = ep[0] || '';
-  document.getElementById('dash-end-month').value = ep[1] ? String(parseInt(ep[1],10)) : '';
-  document.getElementById('dash-end-day').value = ep[2] ? String(parseInt(ep[2],10)) : '';
+  document.getElementById('dash-start-date').value = dashRange.start || '';
+  document.getElementById('dash-end-date').value = dashRange.end || '';
 }
 
 function readDashDateSelects(){
-  const sy = document.getElementById('dash-start-year').value;
-  const sm = document.getElementById('dash-start-month').value;
-  const sd = document.getElementById('dash-start-day').value;
-  const ey = document.getElementById('dash-end-year').value;
-  const em = document.getElementById('dash-end-month').value;
-  const ed = document.getElementById('dash-end-day').value;
-  const pad = n => String(n).padStart(2,'0');
-  if(sy && sm && sd && ey && em && ed){
-    dashRange = {start:`${sy}-${pad(sm)}-${pad(sd)}`, end:`${ey}-${pad(em)}-${pad(ed)}`, label:'自訂區間'};
+  const s = document.getElementById('dash-start-date').value;
+  const e = document.getElementById('dash-end-date').value;
+  if(s && e){
+    dashRange = {start:s, end:e, label:'自訂區間'};
   } else {
     dashRange = {start:null, end:null, label:'全部'};
   }
   renderDashboard();
 }
 
+// 改用手機/電腦都有支援的原生日期選擇器（點一下跳出日曆），
+// 不用再像以前那樣連續點6個下拉選單（年/月/日各兩組）才能選好一個區間。
 function initDashDatePickers(){
-  const curYear = new Date().getFullYear();
-  ['dash-start-year','dash-end-year'].forEach(id => { document.getElementById(id).innerHTML = yearOptionsHtml(curYear); });
-  ['dash-start-month','dash-end-month'].forEach(id => { document.getElementById(id).innerHTML = monthOptionsHtml(''); });
-  ['dash-start-day','dash-end-day'].forEach(id => { document.getElementById(id).innerHTML = dayOptionsHtml(''); });
-  ['dash-start-year','dash-start-month','dash-start-day','dash-end-year','dash-end-month','dash-end-day'].forEach(id => {
-    document.getElementById(id).addEventListener('change', readDashDateSelects);
-  });
+  document.getElementById('dash-start-date').addEventListener('change', readDashDateSelects);
+  document.getElementById('dash-end-date').addEventListener('change', readDashDateSelects);
 }
 
 function dashDateInRange(ymd){
@@ -3185,6 +3169,24 @@ function computeDailyUptimeTrend(logs){
   return {labels: dates.map(d=>d.split('-').join('/')), datasets};
 }
 
+// 每天每台機台實際做了幾箱，用長條圖直接呈現數字本身（不是百分比），
+// 想直覺看「這幾天量多量少」時，比稼動率趨勢圖更直接。
+function computeDailyBoxesTrend(logs){
+  const byMachine = buildDailyMachineStats(logs);
+  const allDates = new Set();
+  MACHINES.forEach(m => Object.keys(byMachine[m.key]).forEach(d => allDates.add(d)));
+  const dates = Array.from(allDates).sort();
+  const datasets = MACHINES.map(m => ({
+    label: m.key,
+    data: dates.map(d => {
+      const day = byMachine[m.key][d];
+      return day ? Math.round(day.boxes) : 0;
+    }),
+    backgroundColor: MACHINE_COLORS[m.key]
+  }));
+  return {labels: dates.map(d=>d.split('-').join('/')), datasets};
+}
+
 // 找出每台機台在目前圖表的日期範圍裡，「頭尾之間」缺資料的日期（不含頭尾以外，那只是還沒開始/已經沒紀錄）。
 // 這些日期會讓折線斷開，用來產生下方的提示文字，只在真的有缺口時才顯示。
 function findUptimeGaps(uptimeTrend){
@@ -3289,6 +3291,7 @@ function renderDashboard(){
   const abnStats = computeAbnormalStats(abns, scans, logs);
   const trend = computeTrendStats(abns, scans);
   const uptimeTrend = computeDailyUptimeTrend(logs);
+  const boxesTrend = computeDailyBoxesTrend(logs);
   const colors = uptimeStats.map(s => MACHINE_COLORS[s.machine]);
 
   document.getElementById('dash-uptime-note').innerHTML = `<b>時間稼動率</b>＝機台有沒有在動；<b>性能稼動率</b>＝動的時候快不快（基準：大寶操作員實際效率約 ${RATE_PER_HOUR.toFixed(1)} 箱/小時，兩者都已扣除固定休息時段）。可作業時間依各機台班別（大寶/三寶 09:00-18:00，二寶/四寶 08:30-17:30）動態抓窗口，加班會自動延伸。《僅依人工記錄的起訖時間計算，無法偵測中途幾分鐘的小停機，數值可能略高於實際狀況。》異常率為每百箱異常次數，不是良率。`;
@@ -3306,6 +3309,15 @@ function renderDashboard(){
 
   document.getElementById('dash-table-uptime').innerHTML = `<table><tr><th>機台</th><th>時間稼動率</th><th>性能稼動率</th><th>平均每箱</th><th>實際運轉工時</th><th>可作業工時</th><th>實際箱數</th><th>有紀錄天數</th></tr>` +
     uptimeStats.map(s => `<tr><td>${s.machine}</td><td>${s.pct}%</td><td>${s.perfPct}%</td><td>${s.avgMinPerBox!==null ? s.avgMinPerBox+' 分鐘' : '—'}</td><td>${s.workedHours} 小時</td><td>${s.availableHours} 小時</td><td>${s.totalBoxes}</td><td>${s.activeDays} 天</td></tr>`).join('') + `</table>`;
+
+  if(chartBoxesTrend) chartBoxesTrend.destroy();
+  chartBoxesTrend = new Chart(document.getElementById('dash-chart-boxes-trend'), {
+    type:'bar',
+    data:{ labels: boxesTrend.labels, datasets: boxesTrend.datasets },
+    options:{ responsive:true, maintainAspectRatio:false,
+      plugins:{legend:{display:true, position:'top', labels:{color:CHART_TEXT_COLOR, boxWidth:12, font:{size:10}}}},
+      scales:{ x:{ stacked:true, ticks:{color:CHART_TEXT_COLOR}, grid:{display:false} }, y:{ stacked:true, beginAtZero:true, ticks:{color:CHART_TEXT_COLOR}, grid:{color:CHART_GRID_COLOR} } } }
+  });
 
   if(chartUptimeTrend) chartUptimeTrend.destroy();
   chartUptimeTrend = new Chart(document.getElementById('dash-chart-uptime-trend'), {
