@@ -723,7 +723,7 @@
 
 <div class="wrap">
   <div class="topbar">
-    <h1>產線即時監看板 <button class="version-badge" id="version-badge">v15.3</button></h1>
+    <h1>產線即時監看板 <button class="version-badge" id="version-badge">v15.4</button></h1>
     <div class="topbar-right">
       <button class="export-btn" id="settings-btn">設定 API 網址</button>
       <div class="export-date-picker">
@@ -2493,6 +2493,7 @@ document.getElementById('records-switch').addEventListener('click', (e) => {
 
 // ---------- 版本紀錄 ----------
 const VERSION_LOG = [
+  {v:'v15.4', date:'2026/09/04', d:'修正版本紀錄面板的三個顯示問題：(1) 統一所有版本一律用項目符號呈現，不再因為原始說明文字有沒有用「；」分段而有些版本有點、有些沒有；(2) 修正切割文字時結尾殘留多餘「；」的問題；(3) 修正判斷「這是不是真正的清單編號」的邏輯漏洞——如果某個版本的說明文字本身剛好提到「(1)(2)(3)」這種字樣（例如用來描述要拿掉的舊編號），之前會被誤判成新的清單標記、切錯位置，現在改成判斷數字是否從1開始依序出現、且標記之間要有足夠長度的內容，不會再被剛好出現的括號數字騙過去；同時修正「(3)(4)」這種兩個編號合併成一項時，只清掉第一個編號、殘留第二個編號的問題'},
   {v:'v15.3', date:'2026/09/04', d:'版本紀錄面板兩項調整：(1) 拿掉每個項目前面重複的「(1)(2)(3)」編號，項目符號本身已經有分隔效果，不需要再手動編號；(2) 補上全部94筆版本紀錄的實際日期——v15.2之後的版本是系統直接記錄，v15.2之前的版本是請妳提供、我逐筆核對日期順序沒有矛盾後才寫入的，不是用猜的'},
   {v:'v15.2', date:'2026/09/03', d:'三項調整：(1) 統計儀表板與查看紀錄的自訂日期區間，把原本要連續點6個下拉選單（年/月/日×開始/結束）改成手機/電腦都支援的原生日期選擇器，點一下跳出日曆直接選，操作動作從6次縮到2次；(2) 統計儀表板新增「每日箱數」堆疊長條圖，放在稼動率表格下方、稼動率趨勢圖上方，四台機台用不同顏色堆疊呈現，一眼看出每天總箱數跟各機台的量各是多少；(3)「確定完成並加入紀錄」按鈕點下去後會先跳出確認視窗，因為這個動作會結案清空整張卡片、後果比「記錄今日進度」大，手機操作容易手滑點到，加這一層確認可以有反悔機會，取消不會送出任何資料'},
   {v:'v15.1', date:'2026/09/02', d:'「進行中訂單」的預估剩餘時間，超過60分鐘會自動換算成「X小時Y分鐘」，不到60分鐘維持顯示「X分鐘」（例如123分鐘會顯示成「2小時3分鐘」），剛好整數小時不會多顯示「0分鐘」的贅字'},
@@ -2594,18 +2595,45 @@ const VERSION_LOG = [
 // 直接從現有「(1)...(2)...(3)...」或「甲項；乙項；丙項」這種寫法自動拆出來。
 function splitVersionDesc(d){
   // 每個項目前面已經有 <li> 的圓點符號了，不需要再重複顯示「(1)」「(2)」這種手動編號。
-  const stripNum = s => s.replace(/^\(\d+\)\s*/, '');
+  // 用 + 是因為有些項目是「(3)(4)」這種兩個編號合併成一項的寫法，要一次把開頭黏在一起的編號都清掉，
+  // 不然只清掉第一個「(3)」，會留下「(4) ...」這種殘留編號。
+  const stripNum = s => s.replace(/^(\(\d+\)\s*)+/, '');
+  // 切完之後，結尾如果殘留分隔用的標點（因為切割點抓在下一個標記「之前」，上一段結尾的頓號/分號會被留下來），一併清掉。
+  const stripTrailingPunct = s => s.replace(/[；、,，]\s*$/, '').trim();
+
+  // 判斷文字裡的「(1)」「(2)」「(3)」是不是「真正的清單標記」，而不是剛好在描述其他事情時提到的括號數字
+  // （例如某個版本的說明本身就寫到「拿掉…的「(1)(2)(3)」編號」，這幾個字元不是清單標記，只是被引用的文字）。
+  // 判斷方式：這些數字要是從1開始依序出現，而且標記跟標記之間要有夠長的內容（不會像「(1)(2)(3)」那樣緊黏在一起）。
+  function looksLikeRealList(text){
+    const matches = [...text.matchAll(/\((\d+)\)/g)];
+    if(matches.length < 2) return false;
+    for(let i=0;i<matches.length;i++){
+      if(parseInt(matches[i][1],10) !== i+1) return false;
+    }
+    for(let i=0;i<matches.length-1;i++){
+      const gap = matches[i+1].index - (matches[i].index + matches[i][0].length);
+      if(gap < 4) return false;
+    }
+    return true;
+  }
+
+  // 先抓開頭有沒有「總結句(1)...」這種寫法，不管等一下判斷出來是不是真清單，都先把這句總結抽出來，
+  // 這樣就算後面判斷「不是真清單」而改用分號切割，總結句也不會殘留黏在第一個項目前面。
   const introMatch = d.match(/^([^(]*)\(1\)/);
+  let intro = '', body = d;
   if(introMatch && introMatch[1].trim()){
-    const intro = introMatch[1].trim().replace(/[:：]\s*$/,'');
-    const rest = d.slice(introMatch[1].length);
-    const items = rest.split(/(?=\(\d+\))/).map(s=>stripNum(s.trim())).filter(Boolean);
+    intro = introMatch[1].trim().replace(/[:：]\s*$/,'');
+    body = d.slice(introMatch[1].length);
+  }
+
+  if(looksLikeRealList(body)){
+    const items = body.split(/(?=\(\d+\))/).map(s => stripTrailingPunct(stripNum(s.trim()))).filter(Boolean);
     if(items.length > 1) return {intro, items};
   }
-  const numbered = d.split(/(?=\(\d+\))/).map(s=>stripNum(s.trim())).filter(Boolean);
-  if(numbered.length > 1) return {intro:'', items:numbered};
-  const bySemi = d.split('；').map(s=>s.trim()).filter(Boolean);
-  if(bySemi.length > 1) return {intro:'', items:bySemi};
+
+  const bySemi = body.split('；').map(s => stripTrailingPunct(stripNum(s.trim()))).filter(Boolean);
+  if(bySemi.length > 1) return {intro, items:bySemi};
+
   return {intro:'', items:[d]};
 }
 
@@ -2614,9 +2642,8 @@ function renderVersionPanel(){
   body.innerHTML = VERSION_LOG.map(item => {
     const {intro, items} = splitVersionDesc(item.d);
     const introHtml = intro ? `<div class="vintro">${escapeHtml(intro)}</div>` : '';
-    const bodyHtml = items.length > 1
-      ? `<ul class="vlist">${items.map(x => `<li>${escapeHtml(x)}</li>`).join('')}</ul>`
-      : `<div class="vdesc">${escapeHtml(items[0])}</div>`;
+    // 不管有幾個重點，一律用項目符號呈現，掃過整份清單時樣式才會一致，不會有些版本有點、有些版本沒有。
+    const bodyHtml = `<ul class="vlist">${items.map(x => `<li>${escapeHtml(x)}</li>`).join('')}</ul>`;
     return `<div class="vrow">
       <div class="vhead"><span class="vnum">${item.v}</span>${item.date ? `<span class="vdate">${escapeHtml(item.date)}</span>` : ''}</div>
       ${introHtml}${bodyHtml}
