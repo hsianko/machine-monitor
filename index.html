@@ -723,13 +723,11 @@
 
 <div class="wrap">
   <div class="topbar">
-    <h1>產線即時監看板 <button class="version-badge" id="version-badge">v15.5</button></h1>
+    <h1>產線即時監看板 <button class="version-badge" id="version-badge">v15.6</button></h1>
     <div class="topbar-right">
       <button class="export-btn" id="settings-btn">設定 API 網址</button>
       <div class="export-date-picker">
-        <select id="export-year"></select>
-        <select id="export-month"></select>
-        <select id="export-day"></select>
+        <input type="date" id="export-date" class="date-input">
       </div>
       <button class="export-btn" id="export-btn">匯出紀錄 (CSV)</button>
       <div class="clock-wrap">
@@ -1868,26 +1866,16 @@ function csvEscape(v){
 }
 
 function exportCsv(){
-  const yearV = document.getElementById('export-year').value;
-  const monthV = document.getElementById('export-month').value;
-  const dayV = document.getElementById('export-day').value;
-
-  // 三個都要選才會套用日期篩選；只選了一部分不會套用，容易誤以為篩選有生效，先跟使用者確認一次。
-  const anySelected = yearV || monthV || dayV;
-  const allSelected = yearV && monthV && dayV;
-  if(anySelected && !allSelected){
-    const proceed = confirm('你只選了年/月/日其中一部分，這樣不會套用日期篩選，會匯出全部紀錄。\n\n要繼續匯出全部紀錄嗎？\n如果要匯出指定日期，請把年、月、日都選好後再重新匯出。');
-    if(!proceed) return;
-  }
-
-  const filterDate = allSelected ? `${yearV}-${monthV.padStart(2,'0')}-${dayV.padStart(2,'0')}` : null;
+  // 原生日期輸入框只有「完整選好一個日期」或「完全空白」兩種狀態，不會再有選一半的中間狀態，
+  // 不需要再另外檢查「只選了年、沒選月日」這種情況。
+  const filterDate = document.getElementById('export-date').value || null;
 
   const fLog = filterDate ? completedLog.filter(r => recordDateStr(VIEW_CONFIG.log, r) === filterDate) : completedLog;
   const fAbnormal = filterDate ? abnormalLog.filter(r => recordDateStr(VIEW_CONFIG.abnormal, r) === filterDate) : abnormalLog;
   const fScan = filterDate ? scanLog.filter(r => recordDateStr(VIEW_CONFIG.scan, r) === filterDate) : scanLog;
 
   if(!fLog.length && !fAbnormal.length && !fScan.length){
-    alert(filterDate ? `${yearV}/${monthV}/${dayV} 沒有任何紀錄可以匯出。` : '目前還沒有任何紀錄可以匯出。');
+    alert(filterDate ? `${filterDate.split('-').join('/')} 沒有任何紀錄可以匯出。` : '目前還沒有任何紀錄可以匯出。');
     return;
   }
   let csv = '\uFEFF';
@@ -2493,6 +2481,7 @@ document.getElementById('records-switch').addEventListener('click', (e) => {
 
 // ---------- 版本紀錄 ----------
 const VERSION_LOG = [
+  {v:'v15.6', date:'2026/09/07', d:'最上方「匯出紀錄」旁邊的日期篩選，改成跟統計儀表板、查看紀錄一樣的原生日期選擇器（月曆式），取代原本的年/月/日三個下拉選單，手機上點一下就跳出日曆直接選。因為原生日期輸入框只有「選好一個完整日期」或「完全空白」兩種狀態，不會再有選一半（例如只選了年）的中間狀態，原本用來提醒「選一半」的確認視窗也一併移除，邏輯更單純'},
   {v:'v15.5', date:'2026/09/04', d:'修正版本紀錄面板的切割邏輯：v15.4 自己的說明文字裡剛好寫到「不再因為…用「；」分段」這種引用分號本身當例子的寫法，被之前的判斷方式誤判成真正的分段符號，導致明明是一項卻被切成4段。這次改成先算出每個文字是不是在「」引號裡面，不管是判斷清單編號還是判斷分號，都只看引號「外面」的內容，引號裡面單純被引用的符號（例如舉例用的「；」或「(1)(2)(3)」）不會再被誤認成分隔依據'},
   {v:'v15.4', date:'2026/09/04', d:'修正版本紀錄面板的三個顯示問題：(1) 統一所有版本一律用項目符號呈現，不再因為原始說明文字有沒有用「；」分段而有些版本有點、有些沒有；(2) 修正切割文字時結尾殘留多餘「；」的問題；(3) 修正判斷「這是不是真正的清單編號」的邏輯漏洞——如果某個版本的說明文字本身剛好提到「(1)(2)(3)」這種字樣（例如用來描述要拿掉的舊編號），之前會被誤判成新的清單標記、切錯位置，現在改成判斷數字是否從1開始依序出現、且標記之間要有足夠長度的內容，不會再被剛好出現的括號數字騙過去；同時修正「(3)(4)」這種兩個編號合併成一項時，只清掉第一個編號、殘留第二個編號的問題'},
   {v:'v15.3', date:'2026/09/04', d:'版本紀錄面板兩項調整：(1) 拿掉每個項目前面重複的「(1)(2)(3)」編號，項目符號本身已經有分隔效果，不需要再手動編號；(2) 補上全部94筆版本紀錄的實際日期——v15.2之後的版本是系統直接記錄，v15.2之前的版本是請妳提供、我逐筆核對日期順序沒有矛盾後才寫入的，不是用猜的'},
@@ -2748,17 +2737,6 @@ document.getElementById('ab-day').innerHTML = dayOptionsHtml('');
 document.getElementById('sc-year').innerHTML = yearOptionsHtml(new Date().getFullYear());
 document.getElementById('sc-month').innerHTML = monthOptionsHtml('');
 document.getElementById('sc-day').innerHTML = dayOptionsHtml('');
-(function fillExportDatePicker(){
-  const curYear = new Date().getFullYear();
-  document.getElementById('export-year').innerHTML = '<option value="">全部</option>' + yearOptionsHtml('').replace('<option value="">年</option>','');
-  document.getElementById('export-year').value = '';
-  let monthOpts = '<option value="">月</option>';
-  for(let i=1;i<=12;i++){ monthOpts += `<option value="${i}">${i}月</option>`; }
-  document.getElementById('export-month').innerHTML = monthOpts;
-  let dayOpts = '<option value="">日</option>';
-  for(let i=1;i<=31;i++){ dayOpts += `<option value="${i}">${i}日</option>`; }
-  document.getElementById('export-day').innerHTML = dayOpts;
-})();
 (function fillCountOptions(){
   let out = '<option value="">請選擇</option>';
   for(let i=1;i<=20;i++){ out += `<option value="${i}">${i}</option>`; }
