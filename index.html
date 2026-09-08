@@ -125,6 +125,18 @@
     font-family:var(--font-mono); font-size:13px; padding:6px 8px; border-radius:6px;
     color-scheme:dark;
   }
+  /* iOS Safari 對原生日期欄位的已知相容性問題：自訂顏色有時候不會正確套用到裡面顯示日期的那一小塊，
+     導致「年/月/日」的提示文字看起來像隱形了。這裡針對 Safari 專用的內部元件補上明確的文字顏色。 */
+  .date-input::-webkit-date-and-time-value{ text-align:left; color:var(--text-primary); }
+  .date-input::-webkit-datetime-edit{ color:var(--text-primary); -webkit-text-fill-color:var(--text-primary); }
+  .date-input::-webkit-datetime-edit-fields-wrapper{ color:var(--text-primary); }
+  .date-input::-webkit-datetime-edit-text,
+  .date-input::-webkit-datetime-edit-year-field,
+  .date-input::-webkit-datetime-edit-month-field,
+  .date-input::-webkit-datetime-edit-day-field{
+    color:var(--text-primary);
+    -webkit-text-fill-color:var(--text-primary);
+  }
   .dash-presets{display:flex; gap:6px;}
   .dash-note{font-size:10.5px; color:var(--text-muted); margin:0 0 16px; line-height:1.6;}
   .dash-section{margin-bottom:26px;}
@@ -723,7 +735,7 @@
 
 <div class="wrap">
   <div class="topbar">
-    <h1>產線即時監看板 <button class="version-badge" id="version-badge">v15.6</button></h1>
+    <h1>產線即時監看板 <button class="version-badge" id="version-badge">v15.7</button></h1>
     <div class="topbar-right">
       <button class="export-btn" id="settings-btn">設定 API 網址</button>
       <div class="export-date-picker">
@@ -2481,6 +2493,7 @@ document.getElementById('records-switch').addEventListener('click', (e) => {
 
 // ---------- 版本紀錄 ----------
 const VERSION_LOG = [
+  {v:'v15.7', date:'2026/09/08', d:'修正手機（iOS Safari）上匯出紀錄旁邊的日期欄位顯示空白的問題——這是 Safari 對原生日期欄位的已知相容性問題，自訂顏色有時候不會正確套用到欄位內部顯示日期的那一小塊，導致「年/月/日」的提示文字看起來像隱形了。補上針對 Safari 內部元件的明確文字顏色設定後修正，這個問題只出現在部分瀏覽器，電腦版 Chrome 原本就顯示正常'},
   {v:'v15.6', date:'2026/09/07', d:'最上方「匯出紀錄」旁邊的日期篩選，改成跟統計儀表板、查看紀錄一樣的原生日期選擇器（月曆式），取代原本的年/月/日三個下拉選單，手機上點一下就跳出日曆直接選。因為原生日期輸入框只有「選好一個完整日期」或「完全空白」兩種狀態，不會再有選一半（例如只選了年）的中間狀態，原本用來提醒「選一半」的確認視窗也一併移除，邏輯更單純'},
   {v:'v15.5', date:'2026/09/04', d:'修正版本紀錄面板的切割邏輯：v15.4 自己的說明文字裡剛好寫到「不再因為…用「；」分段」這種引用分號本身當例子的寫法，被之前的判斷方式誤判成真正的分段符號，導致明明是一項卻被切成4段。這次改成先算出每個文字是不是在「」引號裡面，不管是判斷清單編號還是判斷分號，都只看引號「外面」的內容，引號裡面單純被引用的符號（例如舉例用的「；」或「(1)(2)(3)」）不會再被誤認成分隔依據'},
   {v:'v15.4', date:'2026/09/04', d:'修正版本紀錄面板的三個顯示問題：(1) 統一所有版本一律用項目符號呈現，不再因為原始說明文字有沒有用「；」分段而有些版本有點、有些沒有；(2) 修正切割文字時結尾殘留多餘「；」的問題；(3) 修正判斷「這是不是真正的清單編號」的邏輯漏洞——如果某個版本的說明文字本身剛好提到「(1)(2)(3)」這種字樣（例如用來描述要拿掉的舊編號），之前會被誤判成新的清單標記、切錯位置，現在改成判斷數字是否從1開始依序出現、且標記之間要有足夠長度的內容，不會再被剛好出現的括號數字騙過去；同時修正「(3)(4)」這種兩個編號合併成一項時，只清掉第一個編號、殘留第二個編號的問題'},
