@@ -123,16 +123,17 @@
   .date-input{
     background:var(--bg-field); border:1px solid var(--border-strong); color:var(--text-primary);
     font-family:var(--font-mono); font-size:13px; padding:6px 8px; border-radius:6px;
-    color-scheme:dark;
-    /* 真正的問題不是文字顏色，是這個欄位在手機上比較擁擠的排版位置（頂部工具列、自訂區間旁邊還有其他按鈕）
+    -webkit-text-fill-color:var(--text-primary);
+    /* 這個欄位在手機上比較擁擠的排版位置（頂部工具列、自訂區間旁邊還有其他按鈕）
        會被 flex 排版壓縮到快要消失，導致裡面的「年/月/日」文字跟日曆圖示整個被擠不見了。
        強制保留最小寬度、並且不允許被壓縮，不管旁邊擠了多少東西，這個欄位都會維持看得到內容的寬度，
        真的放不下時會自動換到下一行（父層本來就有設定 flex-wrap），而不是被壓扁到內容消失。 */
     min-width:132px;
     flex-shrink:0;
   }
-  /* iOS Safari 對原生日期欄位的已知相容性問題：自訂顏色有時候不會正確套用到裡面顯示日期的那一小塊，
-     導致「年/月/日」的提示文字看起來像隱形了。這裡針對 Safari 專用的內部元件補上明確的文字顏色。 */
+  /* iOS Safari 對原生日期欄位的已知相容性問題：拿掉 color-scheme:dark（懷疑它跟自訂顏色互相打架，
+     導致閒置狀態下 Safari 選了一個跟深色背景太接近的顏色去畫內容，看起來像整個消失了），
+     改成只針對 Safari 專用的內部元件，直接強制指定明確的文字顏色。 */
   .date-input::-webkit-date-and-time-value{ text-align:left; color:var(--text-primary); }
   .date-input::-webkit-datetime-edit{ color:var(--text-primary); -webkit-text-fill-color:var(--text-primary); }
   .date-input::-webkit-datetime-edit-fields-wrapper{ color:var(--text-primary); }
@@ -741,7 +742,7 @@
 
 <div class="wrap">
   <div class="topbar">
-    <h1>產線即時監看板 <button class="version-badge" id="version-badge">v15.8</button></h1>
+    <h1>產線即時監看板 <button class="version-badge" id="version-badge">v15.9</button></h1>
     <div class="topbar-right">
       <button class="export-btn" id="settings-btn">設定 API 網址</button>
       <div class="export-date-picker">
@@ -2499,6 +2500,7 @@ document.getElementById('records-switch').addEventListener('click', (e) => {
 
 // ---------- 版本紀錄 ----------
 const VERSION_LOG = [
+  {v:'v15.9', date:'2026/09/09', d:'再試一次修正手機日期欄位顯示空白的問題（方案A）：拿掉 color-scheme:dark 這個設定，懷疑它跟自訂的背景/文字顏色互相打架，導致 Safari 在欄位閒置狀態下，選了一個跟深色背景太接近的顏色去畫內容，看起來像整個消失了；改成只針對 Safari 專用的內部元件直接強制指定文字顏色。這次改動因為沒有裝置能實測 Safari，如果還是沒解決，下一步會改用完全自訂樣式的年/月/日下拉選單（不依賴瀏覽器原生日期元件），保證不會再有這類相容性問題'},
   {v:'v15.8', date:'2026/09/09', d:'真正修正手機上日期欄位顯示空白的問題：v15.7 的判斷方向錯了，以為是 Safari 文字顏色沒套用，但實際原因是這個欄位在手機上比較擁擠的排版位置（頂部工具列旁邊擠了「設定API網址」「匯出紀錄」按鈕、查看紀錄的自訂區間旁邊擠了「～」跟「清除區間」按鈕）被 flex 排版壓縮到快要消失，導致裡面的「年/月/日」文字跟日曆圖示整個被擠不見了，統計儀表板那邊版面比較寬鬆才沒出現這個狀況。這次改成強制保留最小寬度、不允許被壓縮，真的放不下時會自動換到下一行，不會再被壓扁到內容消失'},
   {v:'v15.7', date:'2026/09/08', d:'修正手機（iOS Safari）上匯出紀錄旁邊的日期欄位顯示空白的問題——這是 Safari 對原生日期欄位的已知相容性問題，自訂顏色有時候不會正確套用到欄位內部顯示日期的那一小塊，導致「年/月/日」的提示文字看起來像隱形了。補上針對 Safari 內部元件的明確文字顏色設定後修正，這個問題只出現在部分瀏覽器，電腦版 Chrome 原本就顯示正常'},
   {v:'v15.6', date:'2026/09/07', d:'最上方「匯出紀錄」旁邊的日期篩選，改成跟統計儀表板、查看紀錄一樣的原生日期選擇器（月曆式），取代原本的年/月/日三個下拉選單，手機上點一下就跳出日曆直接選。因為原生日期輸入框只有「選好一個完整日期」或「完全空白」兩種狀態，不會再有選一半（例如只選了年）的中間狀態，原本用來提醒「選一半」的確認視窗也一併移除，邏輯更單純'},
