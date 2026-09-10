@@ -120,30 +120,17 @@
     background:var(--bg-field); border:1px solid var(--border-strong); color:var(--text-primary);
     font-family:var(--font-mono); font-size:12px; padding:6px 8px; border-radius:6px;
   }
-  .date-input{
+  /* 改用完全自訂樣式的年/月/日下拉選單，取代瀏覽器原生的日期欄位——
+     原生日期欄位在部分手機瀏覽器上會有「閒置時內容顯示空白」的相容性問題，
+     且已經試過兩種修正方式都沒有解決，改成用我們自己畫的 select 選單，樣式完全由我們自己控制，
+     不會再受瀏覽器差異影響。年份數字比較長，寬度抓寬一點；月/日只需要1~2位數，寬度縮小。 */
+  .ymd-select{
     background:var(--bg-field); border:1px solid var(--border-strong); color:var(--text-primary);
-    font-family:var(--font-mono); font-size:13px; padding:6px 8px; border-radius:6px;
-    -webkit-text-fill-color:var(--text-primary);
-    /* 這個欄位在手機上比較擁擠的排版位置（頂部工具列、自訂區間旁邊還有其他按鈕）
-       會被 flex 排版壓縮到快要消失，導致裡面的「年/月/日」文字跟日曆圖示整個被擠不見了。
-       強制保留最小寬度、並且不允許被壓縮，不管旁邊擠了多少東西，這個欄位都會維持看得到內容的寬度，
-       真的放不下時會自動換到下一行（父層本來就有設定 flex-wrap），而不是被壓扁到內容消失。 */
-    min-width:132px;
-    flex-shrink:0;
+    font-family:var(--font-mono); font-size:12px; padding:6px 1px 6px 6px; border-radius:6px;
+    text-align:left; flex-shrink:0;
   }
-  /* iOS Safari 對原生日期欄位的已知相容性問題：拿掉 color-scheme:dark（懷疑它跟自訂顏色互相打架，
-     導致閒置狀態下 Safari 選了一個跟深色背景太接近的顏色去畫內容，看起來像整個消失了），
-     改成只針對 Safari 專用的內部元件，直接強制指定明確的文字顏色。 */
-  .date-input::-webkit-date-and-time-value{ text-align:left; color:var(--text-primary); }
-  .date-input::-webkit-datetime-edit{ color:var(--text-primary); -webkit-text-fill-color:var(--text-primary); }
-  .date-input::-webkit-datetime-edit-fields-wrapper{ color:var(--text-primary); }
-  .date-input::-webkit-datetime-edit-text,
-  .date-input::-webkit-datetime-edit-year-field,
-  .date-input::-webkit-datetime-edit-month-field,
-  .date-input::-webkit-datetime-edit-day-field{
-    color:var(--text-primary);
-    -webkit-text-fill-color:var(--text-primary);
-  }
+  .ymd-select.ymd-year{width:72px;}
+  .ymd-select.ymd-month, .ymd-select.ymd-day{width:50px;}
   .dash-presets{display:flex; gap:6px;}
   .dash-note{font-size:10.5px; color:var(--text-muted); margin:0 0 16px; line-height:1.6;}
   .dash-section{margin-bottom:26px;}
@@ -434,7 +421,6 @@
     .gauge-track{height:20px;}
     .time-row select{font-size:13px !important;}
     .log-form .field-daterow{grid-column:1 / -1;}
-    .date-input{font-size:16px; padding:8px 6px;}
   }
 
   .card{
@@ -742,11 +728,13 @@
 
 <div class="wrap">
   <div class="topbar">
-    <h1>產線即時監看板 <button class="version-badge" id="version-badge">v15.9</button></h1>
+    <h1>產線即時監看板 <button class="version-badge" id="version-badge">v16.1</button></h1>
     <div class="topbar-right">
       <button class="export-btn" id="settings-btn">設定 API 網址</button>
       <div class="export-date-picker">
-        <input type="date" id="export-date" class="date-input">
+        <select id="export-year" class="ymd-select ymd-year"></select>
+        <select id="export-month" class="ymd-select ymd-month"></select>
+        <select id="export-day" class="ymd-select ymd-day"></select>
       </div>
       <button class="export-btn" id="export-btn">匯出紀錄 (CSV)</button>
       <div class="clock-wrap">
@@ -917,9 +905,13 @@
       <div class="dash-controls">
         <div class="dash-control-group">
           <span class="dash-control-label">日期範圍</span>
-          <input type="date" id="dash-start-date" class="date-input">
+          <select id="dash-start-year" class="ymd-select ymd-year"></select>
+          <select id="dash-start-month" class="ymd-select ymd-month"></select>
+          <select id="dash-start-day" class="ymd-select ymd-day"></select>
           <span class="dash-tilde">～</span>
-          <input type="date" id="dash-end-date" class="date-input">
+          <select id="dash-end-year" class="ymd-select ymd-year"></select>
+          <select id="dash-end-month" class="ymd-select ymd-month"></select>
+          <select id="dash-end-day" class="ymd-select ymd-day"></select>
         </div>
         <div class="dash-presets">
           <button class="date-tab" data-preset="today">今天</button>
@@ -943,6 +935,11 @@
       </div>
 
       <div class="dash-section">
+        <h3>每日達成率（依日期）</h3>
+        <div class="dash-chart-wrap"><canvas id="dash-chart-achievement"></canvas></div>
+      </div>
+
+      <div class="dash-section">
         <h3>時間稼動率趨勢（依日期）</h3>
         <div class="dash-chart-wrap"><canvas id="dash-chart-uptime-trend"></canvas></div>
         <p class="dash-note" id="dash-uptime-trend-note" style="display:none;"></p>
@@ -954,11 +951,6 @@
         <div class="dash-chart-wrap"><canvas id="dash-chart-abnormal-type"></canvas></div>
         <div class="dash-table-wrap" id="dash-abn-rank"></div>
         <div class="dash-insight" id="dash-abn-insight"></div>
-      </div>
-
-      <div class="dash-section">
-        <h3>異常趨勢（依日期）</h3>
-        <div class="dash-chart-wrap"><canvas id="dash-chart-trend"></canvas></div>
       </div>
 
       <div class="dash-export">
@@ -979,9 +971,13 @@
       <div class="dash-controls" style="margin-bottom:10px;">
         <button class="date-tab" id="viewer-range-toggle">📅 自訂日期區間</button>
         <div class="dash-control-group" id="viewer-range-picker" style="display:none;">
-          <input type="date" id="viewer-range-start-date" class="date-input">
+          <select id="viewer-range-start-year" class="ymd-select ymd-year"></select>
+          <select id="viewer-range-start-month" class="ymd-select ymd-month"></select>
+          <select id="viewer-range-start-day" class="ymd-select ymd-day"></select>
           <span class="dash-tilde">～</span>
-          <input type="date" id="viewer-range-end-date" class="date-input">
+          <select id="viewer-range-end-year" class="ymd-select ymd-year"></select>
+          <select id="viewer-range-end-month" class="ymd-select ymd-month"></select>
+          <select id="viewer-range-end-day" class="ymd-select ymd-day"></select>
           <button class="date-tab" id="viewer-range-clear">清除區間</button>
         </div>
       </div>
@@ -1885,16 +1881,27 @@ function csvEscape(v){
 }
 
 function exportCsv(){
-  // 原生日期輸入框只有「完整選好一個日期」或「完全空白」兩種狀態，不會再有選一半的中間狀態，
-  // 不需要再另外檢查「只選了年、沒選月日」這種情況。
-  const filterDate = document.getElementById('export-date').value || null;
+  const yearV = document.getElementById('export-year').value;
+  const monthV = document.getElementById('export-month').value;
+  const dayV = document.getElementById('export-day').value;
+
+  // 三個都要選才會套用日期篩選；只選了一部分不會套用，容易誤以為篩選有生效，先跟使用者確認一次。
+  const anySelected = yearV || monthV || dayV;
+  const allSelected = yearV && monthV && dayV;
+  if(anySelected && !allSelected){
+    const proceed = confirm('你只選了年/月/日其中一部分，這樣不會套用日期篩選，會匯出全部紀錄。\n\n要繼續匯出全部紀錄嗎？\n如果要匯出指定日期，請把年、月、日都選好後再重新匯出。');
+    if(!proceed) return;
+  }
+
+  const pad = n => String(n).padStart(2,'0');
+  const filterDate = allSelected ? `${yearV}-${pad(monthV)}-${pad(dayV)}` : null;
 
   const fLog = filterDate ? completedLog.filter(r => recordDateStr(VIEW_CONFIG.log, r) === filterDate) : completedLog;
   const fAbnormal = filterDate ? abnormalLog.filter(r => recordDateStr(VIEW_CONFIG.abnormal, r) === filterDate) : abnormalLog;
   const fScan = filterDate ? scanLog.filter(r => recordDateStr(VIEW_CONFIG.scan, r) === filterDate) : scanLog;
 
   if(!fLog.length && !fAbnormal.length && !fScan.length){
-    alert(filterDate ? `${filterDate.split('-').join('/')} 沒有任何紀錄可以匯出。` : '目前還沒有任何紀錄可以匯出。');
+    alert(filterDate ? `${yearV}/${monthV}/${dayV} 沒有任何紀錄可以匯出。` : '目前還沒有任何紀錄可以匯出。');
     return;
   }
   let csv = '\uFEFF';
@@ -1935,7 +1942,6 @@ function exportCsv(){
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   const now = new Date();
-  const pad = n => String(n).padStart(2,'0');
   const tag = filterDate ? filterDate.replace(/-/g,'') : `${now.getFullYear()}${pad(now.getMonth()+1)}${pad(now.getDate())}`;
   a.href = url;
   a.download = `機台紀錄匯出_${tag}.csv`;
@@ -2471,12 +2477,24 @@ document.getElementById('viewer-range-toggle').addEventListener('click', () => {
 });
 // 改用手機/電腦都有支援的原生日期選擇器，不用再連續點6個下拉選單。
 function initViewerRangePicker(){
-  ['viewer-range-start-date','viewer-range-end-date'].forEach(id => {
+  const curYear = new Date().getFullYear();
+  document.getElementById('viewer-range-start-year').innerHTML = yearOptionsHtml(curYear);
+  document.getElementById('viewer-range-start-month').innerHTML = monthOptionsHtml('');
+  document.getElementById('viewer-range-start-day').innerHTML = dayOptionsHtml('');
+  document.getElementById('viewer-range-end-year').innerHTML = yearOptionsHtml(curYear);
+  document.getElementById('viewer-range-end-month').innerHTML = monthOptionsHtml('');
+  document.getElementById('viewer-range-end-day').innerHTML = dayOptionsHtml('');
+  ['viewer-range-start-year','viewer-range-start-month','viewer-range-start-day','viewer-range-end-year','viewer-range-end-month','viewer-range-end-day'].forEach(id => {
     document.getElementById(id).addEventListener('change', () => {
-      const s = document.getElementById('viewer-range-start-date').value;
-      const e = document.getElementById('viewer-range-end-date').value;
-      if(s && e){
-        currentRangeFilter = {start:s, end:e};
+      const sy = document.getElementById('viewer-range-start-year').value;
+      const sm = document.getElementById('viewer-range-start-month').value;
+      const sd = document.getElementById('viewer-range-start-day').value;
+      const ey = document.getElementById('viewer-range-end-year').value;
+      const em = document.getElementById('viewer-range-end-month').value;
+      const ed = document.getElementById('viewer-range-end-day').value;
+      if(sy && sm && sd && ey && em && ed){
+        const pad = n => String(n).padStart(2,'0');
+        currentRangeFilter = {start:`${sy}-${pad(sm)}-${pad(sd)}`, end:`${ey}-${pad(em)}-${pad(ed)}`};
         currentDateFilter = null;
         renderViewer(currentLogView, false, true);
       }
@@ -2486,7 +2504,7 @@ function initViewerRangePicker(){
 initViewerRangePicker();
 document.getElementById('viewer-range-clear').addEventListener('click', () => {
   currentRangeFilter = null;
-  ['viewer-range-start-date','viewer-range-end-date'].forEach(id => {
+  ['viewer-range-start-year','viewer-range-start-month','viewer-range-start-day','viewer-range-end-year','viewer-range-end-month','viewer-range-end-day'].forEach(id => {
     document.getElementById(id).value = '';
   });
   renderViewer(currentLogView, false, true);
@@ -2500,6 +2518,8 @@ document.getElementById('records-switch').addEventListener('click', (e) => {
 
 // ---------- 版本紀錄 ----------
 const VERSION_LOG = [
+  {v:'v16.1', date:'2026/09/09', d:'兩項調整：(1) 統計儀表板新增「每日達成率」長條圖，放在「每日箱數」下方，每天一根長條、高度就是當天達成率本身（不是箱數），達標（≥100%）顯示綠色、沒達標顯示橘色，搭配100%參考虛線，滑過長條會顯示精確百分比，不用像箱數圖表那樣自己心算比對目標；(2) 拿掉「異常趨勢（依日期）」這個折線圖，網頁畫面跟 Excel／Word 匯出報表都一併移除，因為異常率偏低時這張圖用不太到，之後如果要交報告需要客製化的異常趨勢圖，可以把當下的異常統計資料提供給我另外製作'},
+  {v:'v16.0', date:'2026/09/09', d:'放棄瀏覽器原生日期選擇器（方案A試過兩次都沒解決手機顯示空白的問題），改回完全自訂樣式的年/月/日下拉選單，套用在三個地方：頂部匯出紀錄旁邊、統計儀表板的自訂日期區間、查看紀錄的自訂日期區間。這次的選單刻意做得比之前窄（年72px、月/日各50px），過程中發現寬度太窄會讓「月」「日」這兩個字被裁切掉一小角（跟瀏覽器內建的下拉箭頭搶空間），調整寬度跟內距後確認不會再裁切。因為完全是自己畫的樣式，不會再受瀏覽器差異影響，保證不會再有這類相容性問題'},
   {v:'v15.9', date:'2026/09/09', d:'再試一次修正手機日期欄位顯示空白的問題（方案A）：拿掉 color-scheme:dark 這個設定，懷疑它跟自訂的背景/文字顏色互相打架，導致 Safari 在欄位閒置狀態下，選了一個跟深色背景太接近的顏色去畫內容，看起來像整個消失了；改成只針對 Safari 專用的內部元件直接強制指定文字顏色。這次改動因為沒有裝置能實測 Safari，如果還是沒解決，下一步會改用完全自訂樣式的年/月/日下拉選單（不依賴瀏覽器原生日期元件），保證不會再有這類相容性問題'},
   {v:'v15.8', date:'2026/09/09', d:'真正修正手機上日期欄位顯示空白的問題：v15.7 的判斷方向錯了，以為是 Safari 文字顏色沒套用，但實際原因是這個欄位在手機上比較擁擠的排版位置（頂部工具列旁邊擠了「設定API網址」「匯出紀錄」按鈕、查看紀錄的自訂區間旁邊擠了「～」跟「清除區間」按鈕）被 flex 排版壓縮到快要消失，導致裡面的「年/月/日」文字跟日曆圖示整個被擠不見了，統計儀表板那邊版面比較寬鬆才沒出現這個狀況。這次改成強制保留最小寬度、不允許被壓縮，真的放不下時會自動換到下一行，不會再被壓扁到內容消失'},
   {v:'v15.7', date:'2026/09/08', d:'修正手機（iOS Safari）上匯出紀錄旁邊的日期欄位顯示空白的問題——這是 Safari 對原生日期欄位的已知相容性問題，自訂顏色有時候不會正確套用到欄位內部顯示日期的那一小塊，導致「年/月/日」的提示文字看起來像隱形了。補上針對 Safari 內部元件的明確文字顏色設定後修正，這個問題只出現在部分瀏覽器，電腦版 Chrome 原本就顯示正常'},
@@ -2759,6 +2779,12 @@ document.getElementById('ab-day').innerHTML = dayOptionsHtml('');
 document.getElementById('sc-year').innerHTML = yearOptionsHtml(new Date().getFullYear());
 document.getElementById('sc-month').innerHTML = monthOptionsHtml('');
 document.getElementById('sc-day').innerHTML = dayOptionsHtml('');
+(function fillExportDatePicker(){
+  document.getElementById('export-year').innerHTML = '<option value="">全部</option>' + yearOptionsHtml('').replace('<option value="">年</option>','');
+  document.getElementById('export-year').value = '';
+  document.getElementById('export-month').innerHTML = monthOptionsHtml('');
+  document.getElementById('export-day').innerHTML = dayOptionsHtml('');
+})();
 (function fillCountOptions(){
   let out = '<option value="">請選擇</option>';
   for(let i=1;i<=20;i++){ out += `<option value="${i}">${i}</option>`; }
@@ -3044,7 +3070,7 @@ const CHART_GRID_COLOR = '#2b313a';
 
 let dashRange = {start:null, end:null, label:'近7天'};
 let dashMachineFilter = null;
-let chartUptime=null, chartUptimeTrend=null, chartBoxesTrend=null, chartAbnType=null, chartTrend=null;
+let chartUptime=null, chartUptimeTrend=null, chartBoxesTrend=null, chartAchievement=null, chartAbnType=null;
 
 function ymdToday(offsetDays){
   const now = new Date();
@@ -3063,26 +3089,41 @@ function setDashPreset(preset){
 }
 
 function syncDashDateSelects(){
-  document.getElementById('dash-start-date').value = dashRange.start || '';
-  document.getElementById('dash-end-date').value = dashRange.end || '';
+  const sp = dashRange.start ? dashRange.start.split('-') : ['','',''];
+  const ep = dashRange.end ? dashRange.end.split('-') : ['','',''];
+  document.getElementById('dash-start-year').value = sp[0] || '';
+  document.getElementById('dash-start-month').value = sp[1] ? String(parseInt(sp[1],10)) : '';
+  document.getElementById('dash-start-day').value = sp[2] ? String(parseInt(sp[2],10)) : '';
+  document.getElementById('dash-end-year').value = ep[0] || '';
+  document.getElementById('dash-end-month').value = ep[1] ? String(parseInt(ep[1],10)) : '';
+  document.getElementById('dash-end-day').value = ep[2] ? String(parseInt(ep[2],10)) : '';
 }
 
 function readDashDateSelects(){
-  const s = document.getElementById('dash-start-date').value;
-  const e = document.getElementById('dash-end-date').value;
-  if(s && e){
-    dashRange = {start:s, end:e, label:'自訂區間'};
+  const sy = document.getElementById('dash-start-year').value;
+  const sm = document.getElementById('dash-start-month').value;
+  const sd = document.getElementById('dash-start-day').value;
+  const ey = document.getElementById('dash-end-year').value;
+  const em = document.getElementById('dash-end-month').value;
+  const ed = document.getElementById('dash-end-day').value;
+  const pad = n => String(n).padStart(2,'0');
+  if(sy && sm && sd && ey && em && ed){
+    dashRange = {start:`${sy}-${pad(sm)}-${pad(sd)}`, end:`${ey}-${pad(em)}-${pad(ed)}`, label:'自訂區間'};
   } else {
     dashRange = {start:null, end:null, label:'全部'};
   }
   renderDashboard();
 }
 
-// 改用手機/電腦都有支援的原生日期選擇器（點一下跳出日曆），
-// 不用再像以前那樣連續點6個下拉選單（年/月/日各兩組）才能選好一個區間。
+// 改用完全自訂樣式的年/月/日下拉選單，不依賴瀏覽器原生的日期元件。
 function initDashDatePickers(){
-  document.getElementById('dash-start-date').addEventListener('change', readDashDateSelects);
-  document.getElementById('dash-end-date').addEventListener('change', readDashDateSelects);
+  const curYear = new Date().getFullYear();
+  ['dash-start-year','dash-end-year'].forEach(id => { document.getElementById(id).innerHTML = yearOptionsHtml(curYear); });
+  ['dash-start-month','dash-end-month'].forEach(id => { document.getElementById(id).innerHTML = monthOptionsHtml(''); });
+  ['dash-start-day','dash-end-day'].forEach(id => { document.getElementById(id).innerHTML = dayOptionsHtml(''); });
+  ['dash-start-year','dash-start-month','dash-start-day','dash-end-year','dash-end-month','dash-end-day'].forEach(id => {
+    document.getElementById(id).addEventListener('change', readDashDateSelects);
+  });
 }
 
 function dashDateInRange(ymd){
@@ -3302,6 +3343,25 @@ function computeDailyBoxesTrend(logs){
   return {labels: dates.map(d=>d.split('-').join('/')), datasets};
 }
 
+// 每天全部機台加總的箱數，換算成達成率（÷ 每日目標480箱），用長條圖直接呈現百分比本身，
+// 搭配100%參考線，一眼看出哪幾天有達標、哪幾天沒有，不用像箱數圖表那樣自己心算比對。
+function computeDailyAchievementTrend(logs){
+  const byMachine = buildDailyMachineStats(logs);
+  const allDates = new Set();
+  MACHINES.forEach(m => Object.keys(byMachine[m.key]).forEach(d => allDates.add(d)));
+  const dates = Array.from(allDates).sort();
+  const target = DAILY_TARGET_PER_MACHINE * MACHINES.length;
+  const rates = dates.map(d => {
+    let total = 0;
+    MACHINES.forEach(m => {
+      const day = byMachine[m.key][d];
+      if(day) total += day.boxes;
+    });
+    return target > 0 ? Math.round((total/target)*100) : 0;
+  });
+  return {labels: dates.map(d=>d.split('-').join('/')), rates};
+}
+
 // 找出每台機台在目前圖表的日期範圍裡，「頭尾之間」缺資料的日期（不含頭尾以外，那只是還沒開始/已經沒紀錄）。
 // 這些日期會讓折線斷開，用來產生下方的提示文字，只在真的有缺口時才顯示。
 function findUptimeGaps(uptimeTrend){
@@ -3389,14 +3449,6 @@ function buildAbnormalInsight(abnStats){
   return sentences.join('<br>');
 }
 
-function computeTrendStats(abns, scans){
-  const byDate = {};
-  abns.forEach(r => { const d=recordDateStr(VIEW_CONFIG.abnormal, r); if(!d) return; byDate[d]=(byDate[d]||0)+(parseFloat(r['異常次數'])||1); });
-  scans.forEach(r => { const d=recordDateStr(VIEW_CONFIG.scan, r); if(!d) return; byDate[d]=(byDate[d]||0)+(parseFloat(r['異常次數'])||1); });
-  const dates = Object.keys(byDate).sort();
-  return {labels: dates.map(d=>d.split('-').join('/')), data: dates.map(d=>byDate[d])};
-}
-
 const ABN_TYPE_COLORS = {'單捲標貼歪':'#3b82f6','料盤載台推擠':'#ef4444','料盤毀損':'#22c55e','分料盤落料傾斜':'#f59e0b','掃碼異常':'#a855f7'};
 const ABN_ALL_CATEGORIES = ['單捲標貼歪','料盤載台推擠','料盤毀損','分料盤落料傾斜','掃碼異常'];
 
@@ -3404,9 +3456,9 @@ function renderDashboard(){
   const {logs, abns, scans} = getDashRecords();
   const uptimeStats = computeUptimeStats(logs);
   const abnStats = computeAbnormalStats(abns, scans, logs);
-  const trend = computeTrendStats(abns, scans);
   const uptimeTrend = computeDailyUptimeTrend(logs);
   const boxesTrend = computeDailyBoxesTrend(logs);
+  const achievementTrend = computeDailyAchievementTrend(logs);
   const colors = uptimeStats.map(s => MACHINE_COLORS[s.machine]);
 
   document.getElementById('dash-uptime-note').innerHTML = `<b>時間稼動率</b>＝機台有沒有在動；<b>性能稼動率</b>＝動的時候快不快（基準：大寶操作員實際效率約 ${RATE_PER_HOUR.toFixed(1)} 箱/小時，兩者都已扣除固定休息時段）。可作業時間依各機台班別（大寶/三寶 09:00-18:00，二寶/四寶 08:30-17:30）動態抓窗口，加班會自動延伸。《僅依人工記錄的起訖時間計算，無法偵測中途幾分鐘的小停機，數值可能略高於實際狀況。》異常率為每百箱異常次數，不是良率。`;
@@ -3432,6 +3484,20 @@ function renderDashboard(){
     options:{ responsive:true, maintainAspectRatio:false,
       plugins:{legend:{display:true, position:'top', labels:{color:CHART_TEXT_COLOR, boxWidth:12, font:{size:10}}}},
       scales:{ x:{ stacked:true, ticks:{color:CHART_TEXT_COLOR}, grid:{display:false} }, y:{ stacked:true, beginAtZero:true, ticks:{color:CHART_TEXT_COLOR}, grid:{color:CHART_GRID_COLOR} } } }
+  });
+
+  // 每天的長條高度就是達成率本身（不是箱數），達標(≥100%)顯示綠色、沒達標顯示橘色，
+  // 搭配100%參考線，滑過長條會顯示精確的百分比，不用像箱數圖表那樣自己心算比對目標。
+  if(chartAchievement) chartAchievement.destroy();
+  const achieveColors = achievementTrend.rates.map(r => r >= 100 ? '#3fb86a' : '#e8a33d');
+  chartAchievement = new Chart(document.getElementById('dash-chart-achievement'), {
+    data:{ labels: achievementTrend.labels, datasets:[
+      { type:'bar', label:'達成率(%)', data: achievementTrend.rates, backgroundColor: achieveColors, borderRadius:4, order:2 },
+      { type:'line', label:'目標100%', data: achievementTrend.rates.map(()=>100), borderColor:'#e34948', borderDash:[6,4], pointRadius:0, order:1 }
+    ] },
+    options:{ responsive:true, maintainAspectRatio:false,
+      plugins:{legend:{display:false}, tooltip:{callbacks:{label:(ctx)=> ctx.dataset.label==='達成率(%)' ? '達成率 '+ctx.parsed.y+'%' : '目標 100%'}}},
+      scales:{ x:{ ticks:{color:CHART_TEXT_COLOR}, grid:{display:false} }, y:{ beginAtZero:true, ticks:{color:CHART_TEXT_COLOR, callback:(v)=>v+'%'}, grid:{color:CHART_GRID_COLOR} } } }
   });
 
   if(chartUptimeTrend) chartUptimeTrend.destroy();
@@ -3486,14 +3552,6 @@ function renderDashboard(){
     `</table>`;
 
   document.getElementById('dash-abn-insight').innerHTML = '⚠ 觀察重點：<br>' + buildAbnormalInsight(abnStats);
-
-  if(chartTrend) chartTrend.destroy();
-  chartTrend = new Chart(document.getElementById('dash-chart-trend'), {
-    type:'line',
-    data:{ labels: trend.labels, datasets:[{ label:'異常次數', data: trend.data, borderColor:'#e8a33d', backgroundColor:'rgba(232,163,61,0.15)', fill:true, tension:0.3 }] },
-    options:{ responsive:true, maintainAspectRatio:false, plugins:{legend:{display:false}},
-      scales:{ y:{ beginAtZero:true, ticks:{color:CHART_TEXT_COLOR}, grid:{color:CHART_GRID_COLOR} }, x:{ ticks:{color:CHART_TEXT_COLOR}, grid:{display:false} } } }
-  });
 }
 
 function renderDashMachineTabs(){
@@ -3547,7 +3605,6 @@ function buildDashReportHtml(){
   const {logs, abns, scans} = getDashRecords();
   const uptimeStats = computeUptimeStats(logs);
   const abnStats = computeAbnormalStats(abns, scans, logs);
-  const trend = computeTrendStats(abns, scans);
   const uptimeTrend = computeDailyUptimeTrend(logs);
   const colors = uptimeStats.map(s => MACHINE_COLORS[s.machine]);
   const now = new Date();
@@ -3576,12 +3633,6 @@ function buildDashReportHtml(){
     type:'bar',
     data:{ labels: abnStats.perMachine.map(p=>p.machine), datasets: ABN_ALL_CATEGORIES.map(t => ({ label:t, data: abnStats.perMachine.map(p=>p.byTypeAll[t]), backgroundColor: ABN_TYPE_COLORS[t] })) },
     options:{ indexAxis:'y', plugins:{legend:{display:true, position:'top'}}, scales:{ x:{ stacked:true, beginAtZero:true }, y:{ stacked:true } } }
-  }, W, H);
-
-  const imgTrend = renderChartForExport({
-    type:'line',
-    data:{ labels: trend.labels, datasets:[{ label:'異常次數', data: trend.data, borderColor:'#e8a33d', backgroundColor:'rgba(232,163,61,0.15)', fill:true, tension:0.3 }] },
-    options:{ plugins:{legend:{display:false}}, scales:{ y:{ beginAtZero:true } } }
   }, W, H);
 
   const uptimeRows = uptimeStats.map(s => `<tr><td>${s.machine}</td><td>${s.pct}%</td><td>${s.perfPct}%</td><td>${s.avgMinPerBox!==null ? s.avgMinPerBox : '—'}</td><td>${s.workedHours}</td><td>${s.availableHours}</td><td>${s.totalBoxes}</td><td>${s.activeDays}</td></tr>`).join('');
@@ -3651,10 +3702,6 @@ function buildDashReportHtml(){
       <table class="data-table"><tr><th>排名</th><th>機台</th><th>單捲標貼歪</th><th>料盤載台推擠</th><th>料盤毀損</th><th>分料盤落料傾斜</th><th>掃碼異常</th><th>合計</th><th>等級</th></tr>${rankRows}</table>
       <div class="insight">⚠ 觀察重點：<br>${insightHtml}</div>
     `)}
-
-    ${block('異常趨勢（依日期）', `
-      <img src="${imgTrend}" width="${W}" height="${H}">
-    `, true)}
   </body></html>`;
 }
 
