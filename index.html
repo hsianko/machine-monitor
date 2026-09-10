@@ -129,8 +129,8 @@
     font-family:var(--font-mono); font-size:12px; padding:6px 1px 6px 6px; border-radius:6px;
     text-align:left; flex-shrink:0;
   }
-  .ymd-select.ymd-year{width:72px;}
-  .ymd-select.ymd-month, .ymd-select.ymd-day{width:50px;}
+  .ymd-select.ymd-year{width:76px;}
+  .ymd-select.ymd-month, .ymd-select.ymd-day{width:68px;}
   .dash-presets{display:flex; gap:6px;}
   .dash-note{font-size:10.5px; color:var(--text-muted); margin:0 0 16px; line-height:1.6;}
   .dash-section{margin-bottom:26px;}
@@ -728,7 +728,7 @@
 
 <div class="wrap">
   <div class="topbar">
-    <h1>產線即時監看板 <button class="version-badge" id="version-badge">v16.1</button></h1>
+    <h1>產線即時監看板 <button class="version-badge" id="version-badge">v16.2</button></h1>
     <div class="topbar-right">
       <button class="export-btn" id="settings-btn">設定 API 網址</button>
       <div class="export-date-picker">
@@ -2518,6 +2518,7 @@ document.getElementById('records-switch').addEventListener('click', (e) => {
 
 // ---------- 版本紀錄 ----------
 const VERSION_LOG = [
+  {v:'v16.2', date:'2026/09/10', d:'修正月/日下拉選單兩位數字被裁切的問題：先前測試時只用「9月」「4日」這種單位數字確認過畫面，沒注意到「12月」「31日」這種兩位數字需要更多寬度，導致「日」字甚至整個消失不見。這次改用最寬的情況（12月、31日）重新測試，統計儀表板跟查看紀錄的自訂日期區間都確認不會再裁切，也確認手機窄螢幕下最擁擠的情況（6個選單＋清除按鈕）加寬後依然能正常換行，不會橫向溢出'},
   {v:'v16.1', date:'2026/09/09', d:'兩項調整：(1) 統計儀表板新增「每日達成率」長條圖，放在「每日箱數」下方，每天一根長條、高度就是當天達成率本身（不是箱數），達標（≥100%）顯示綠色、沒達標顯示橘色，搭配100%參考虛線，滑過長條會顯示精確百分比，不用像箱數圖表那樣自己心算比對目標；(2) 拿掉「異常趨勢（依日期）」這個折線圖，網頁畫面跟 Excel／Word 匯出報表都一併移除，因為異常率偏低時這張圖用不太到，之後如果要交報告需要客製化的異常趨勢圖，可以把當下的異常統計資料提供給我另外製作'},
   {v:'v16.0', date:'2026/09/09', d:'放棄瀏覽器原生日期選擇器（方案A試過兩次都沒解決手機顯示空白的問題），改回完全自訂樣式的年/月/日下拉選單，套用在三個地方：頂部匯出紀錄旁邊、統計儀表板的自訂日期區間、查看紀錄的自訂日期區間。這次的選單刻意做得比之前窄（年72px、月/日各50px），過程中發現寬度太窄會讓「月」「日」這兩個字被裁切掉一小角（跟瀏覽器內建的下拉箭頭搶空間），調整寬度跟內距後確認不會再裁切。因為完全是自己畫的樣式，不會再受瀏覽器差異影響，保證不會再有這類相容性問題'},
   {v:'v15.9', date:'2026/09/09', d:'再試一次修正手機日期欄位顯示空白的問題（方案A）：拿掉 color-scheme:dark 這個設定，懷疑它跟自訂的背景/文字顏色互相打架，導致 Safari 在欄位閒置狀態下，選了一個跟深色背景太接近的顏色去畫內容，看起來像整個消失了；改成只針對 Safari 專用的內部元件直接強制指定文字顏色。這次改動因為沒有裝置能實測 Safari，如果還是沒解決，下一步會改用完全自訂樣式的年/月/日下拉選單（不依賴瀏覽器原生日期元件），保證不會再有這類相容性問題'},
