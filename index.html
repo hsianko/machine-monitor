@@ -595,6 +595,27 @@
   }
   .log-submit:hover{border-color:var(--status-run); color:var(--status-run);}
   .log-hint{font-size:10.5px; color:var(--text-muted); margin-top:8px;}
+  .log-readonly{
+    background:var(--bg-page); border:1px solid var(--border); border-radius:6px;
+    color:var(--text-secondary); font-family:var(--font-mono); font-size:12.5px; padding:6px 8px;
+  }
+  .restriction-row{
+    display:flex; align-items:center; gap:12px; padding:10px 4px;
+    border-bottom:1px solid var(--border); font-size:13px;
+  }
+  .restriction-row:last-child{border-bottom:none;}
+  .restriction-row .rcust{flex:1; color:var(--text-primary); font-weight:700;}
+  .restriction-row .revent{flex:1.4; color:var(--text-secondary);}
+  .restriction-row .rmachine{flex-shrink:0; width:48px; color:var(--m-daibao);}
+  .restriction-row .rdel{
+    flex-shrink:0; background:none; border:1px solid var(--border-strong); color:var(--m-sanbao);
+    font-size:11px; padding:4px 10px; border-radius:6px; cursor:pointer;
+  }
+  .cust-warn{
+    margin-top:6px; background:rgba(213,101,74,0.12); border:1px solid var(--m-sanbao);
+    border-radius:6px; padding:7px 10px; display:flex; gap:7px; align-items:flex-start;
+    color:var(--m-sanbao); font-size:11.5px; line-height:1.5;
+  }
 
   .save-hint{text-align:100%; text-align:center; font-size:10.5px; color:var(--text-muted); margin-top:18px; letter-spacing:0.3px;}
 
@@ -728,7 +749,7 @@
 
 <div class="wrap">
   <div class="topbar">
-    <h1>產線即時監看板 <button class="version-badge" id="version-badge">v16.2</button></h1>
+    <h1>產線即時監看板 <button class="version-badge" id="version-badge">v17.0</button></h1>
     <div class="topbar-right">
       <button class="export-btn" id="settings-btn">設定 API 網址</button>
       <div class="export-date-picker">
@@ -777,6 +798,7 @@
     <button class="tab-btn" data-tab="abnormal">異常<span class="tab-badge" id="tab-abn-badge" style="display:none;"></span></button>
     <button class="tab-btn" data-tab="stats">統計</button>
     <button class="tab-btn" data-tab="records">紀錄</button>
+    <button class="tab-btn" data-tab="support">支援</button>
   </div>
 
   <div class="data-notice">
@@ -991,6 +1013,99 @@
   <datalist id="customer-suggestions"></datalist>
   <datalist id="remark-suggestions"></datalist>
 
+  <div class="tab-content" id="tab-support" style="display:none;">
+    <div class="section-title">支援紀錄・新增</div>
+    <div class="log-panel">
+      <div class="log-form" id="support-form">
+        <div class="field field-daterow">
+          <label>發生日期</label>
+          <div class="time-row">
+            <select data-part="year" id="sup-year"></select>
+            <select data-part="month" id="sup-month"></select>
+            <select data-part="day" id="sup-day"></select>
+          </div>
+        </div>
+        <div class="field">
+          <label>星期（自動帶出）</label>
+          <div class="log-readonly" id="sup-weekday">--</div>
+        </div>
+        <div class="field field-daterow">
+          <label>工作事項</label>
+          <div class="time-row">
+            <select id="sup-worktype" style="flex:1;"></select>
+            <button class="date-tab" id="sup-add-worktype" type="button">＋新增項目</button>
+          </div>
+        </div>
+        <div class="field">
+          <label>開始時間</label>
+          <select id="sup-start-time"></select>
+        </div>
+        <div class="field">
+          <label>結束時間</label>
+          <select id="sup-end-time"></select>
+        </div>
+        <div class="field">
+          <label>支援時數（自動計算，已扣午休）</label>
+          <div class="log-readonly" id="sup-hours">--</div>
+        </div>
+        <div class="field field-daterow">
+          <label>支援人員</label>
+          <div class="time-row">
+            <select id="sup-person" style="flex:1;"></select>
+            <button class="date-tab" id="sup-add-person" type="button">＋新增人員</button>
+          </div>
+        </div>
+        <button class="log-submit" id="sup-submit">新增紀錄</button>
+      </div>
+      <div class="log-hint" id="sup-hint"></div>
+    </div>
+
+    <div class="section-title">支援統計</div>
+    <div class="dash-controls" style="margin-bottom:16px;">
+      <div class="dash-control-group">
+        <span class="dash-control-label">日期範圍</span>
+        <select id="sup-stat-start-year" class="ymd-select ymd-year"></select>
+        <select id="sup-stat-start-month" class="ymd-select ymd-month"></select>
+        <select id="sup-stat-start-day" class="ymd-select ymd-day"></select>
+        <span class="dash-tilde">～</span>
+        <select id="sup-stat-end-year" class="ymd-select ymd-year"></select>
+        <select id="sup-stat-end-month" class="ymd-select ymd-month"></select>
+        <select id="sup-stat-end-day" class="ymd-select ymd-day"></select>
+      </div>
+      <div class="dash-presets">
+        <button class="date-tab" data-sup-preset="today">今天</button>
+        <button class="date-tab" data-sup-preset="week">近7天</button>
+        <button class="date-tab" data-sup-preset="month">近30天</button>
+        <button class="date-tab" data-sup-preset="all">全部</button>
+      </div>
+    </div>
+    <div class="dash-table-wrap" id="sup-stat-person"></div>
+    <div class="dash-table-wrap" id="sup-stat-worktype" style="margin-top:16px;"></div>
+
+    <div class="section-title" style="margin-top:28px;">不能跑名單</div>
+    <p class="quick-abn-hint">卡片輸入客戶名稱時，只要符合下面任一筆的關鍵字，就會即時跳出提醒。</p>
+    <div class="log-panel">
+      <div class="log-form" id="restriction-form">
+        <div class="field">
+          <label>客戶關鍵字</label>
+          <input type="text" id="res-customer" placeholder="輸入客戶關鍵字">
+        </div>
+        <div class="field">
+          <label>事件／原因</label>
+          <input type="text" id="res-event" placeholder="輸入事件或原因">
+        </div>
+        <div class="field">
+          <label>不能跑的機台</label>
+          <select id="res-machine"></select>
+        </div>
+        <button class="log-submit" id="res-submit">新增限制</button>
+      </div>
+      <div class="log-hint" id="res-hint"></div>
+    </div>
+    <div class="viewer-table-wrap" id="restriction-list"></div>
+    <button class="export-btn" id="res-export-btn" style="margin-top:12px;">匯出不能跑名單 (CSV)</button>
+  </div>
+
   <div class="save-hint" id="save-hint">載入中...</div>
 </div>
 
@@ -1033,6 +1148,28 @@ MACHINES.forEach(m => {
 let completedLog = [];
 let abnormalLog = [];
 let scanLog = [];
+let supportLog = [];
+let supportConfig = [];
+let restrictionsLog = [];
+
+// 判斷這個客戶名稱，在這台機台上，有沒有符合「不能跑名單」裡的限制——
+// 只要客戶名稱裡「包含」名單上的關鍵字就算符合（不用完全一樣），機台要對得上，或名單寫「全部」代表四台都算。
+function checkCustomerRestriction(machine, customerName){
+  const name = String(customerName||'').trim();
+  if(!name) return null;
+  return restrictionsLog.find(r => {
+    const kw = String(r['客戶關鍵字']||'').trim();
+    if(!kw || !name.includes(kw)) return false;
+    const rm = r['機台'];
+    return rm === machine || rm === '全部';
+  }) || null;
+}
+
+// 支援紀錄的「工作事項」「支援人員」下拉選單，選項是從 SupportConfig 分頁動態讀出來的
+// （不是寫死在程式碼裡），所以之後有新增人員/新增工作事項，選單會自動多這個選項。
+function getSupportConfigOptions(type){
+  return supportConfig.filter(r => r['類型'] === type).map(r => r['值']).filter(Boolean);
+}
 
 // 「結束時間跨到隔天」是不是有勾選——只是畫面上的顯示狀態，不會存進試算表，
 // 是跨日（例如夜班）還是同一天，最終都是看開始/結束時間本身的日期判斷。
@@ -1256,6 +1393,7 @@ function render(){
         <div class="field full">
           <label>客戶名稱</label>
           <input type="text" data-k="customer" list="customer-suggestions" placeholder="輸入客戶名稱" value="${escapeHtml(d.customer)}">
+          <div class="cust-warn" id="cust-warn-${m.key}" style="display:none;"></div>
         </div>
       </div>
       <div class="resume-hint${incompleteMatches.length ? ' show' : ''}${incompleteMatches.length > 1 ? ' multi' : ''}">
@@ -1371,6 +1509,25 @@ function render(){
         render();
       });
     });
+
+    // 客戶名稱即時比對「不能跑名單」：只要打的字裡有出現名單上的關鍵字，且機台對得上（或名單寫「全部」），
+    // 就在輸入框下面跳出警示，不用等存檔、也不用去翻名單查。
+    const custInput = card.querySelector('[data-k="customer"]');
+    const custWarnEl = card.querySelector(`#cust-warn-${m.key}`);
+    if(custInput && custWarnEl){
+      const updateCustWarn = () => {
+        const match = checkCustomerRestriction(m.key, custInput.value);
+        if(match){
+          custWarnEl.style.display = '';
+          const machineLabel = match['機台'] === '全部' ? '任何機台' : match['機台'];
+          custWarnEl.innerHTML = `<span>⚠</span><span>${escapeHtml(match['客戶關鍵字'])} 因為「${escapeHtml(match['事件']||'')}」不能在${escapeHtml(machineLabel)}運作，換一台機台或確認後再繼續</span>`;
+        } else {
+          custWarnEl.style.display = 'none';
+        }
+      };
+      custInput.addEventListener('input', updateCustWarn);
+      updateCustWarn();
+    }
 
     card.querySelectorAll('[data-inline-resume]').forEach(btn => {
       btn.addEventListener('click', () => resumeJob(btn.dataset.inlineResume, btn.dataset.inlineResumeMachine));
@@ -1856,6 +2013,12 @@ async function loadState(){
     if(json.log){ completedLog = json.log.map(r => fromChinese(LOG_MAP, r)); }
     if(json.abnormal){ abnormalLog = json.abnormal; }
     if(json.scan){ scanLog = json.scan; }
+    if(json.support){ supportLog = json.support; }
+    if(json.supportConfig){ supportConfig = json.supportConfig; }
+    if(json.restrictions){ restrictionsLog = json.restrictions; }
+    refreshSupportDropdowns();
+    renderRestrictionList();
+    if(document.getElementById('tab-support').style.display !== 'none'){ renderSupportStats(); }
     updateSuggestionLists();
     if(currentLogView){ renderViewer(currentLogView, false, true); }
     const beTag = json.backendVersion ? (' · 後端 ' + json.backendVersion) : ' · 後端版本未知（請確認 Apps Script 是否為最新版）';
@@ -1899,8 +2062,9 @@ function exportCsv(){
   const fLog = filterDate ? completedLog.filter(r => recordDateStr(VIEW_CONFIG.log, r) === filterDate) : completedLog;
   const fAbnormal = filterDate ? abnormalLog.filter(r => recordDateStr(VIEW_CONFIG.abnormal, r) === filterDate) : abnormalLog;
   const fScan = filterDate ? scanLog.filter(r => recordDateStr(VIEW_CONFIG.scan, r) === filterDate) : scanLog;
+  const fSupport = filterDate ? supportLog.filter(r => recordDateStr(VIEW_CONFIG.support, r) === filterDate) : supportLog;
 
-  if(!fLog.length && !fAbnormal.length && !fScan.length){
+  if(!fLog.length && !fAbnormal.length && !fScan.length && !fSupport.length){
     alert(filterDate ? `${yearV}/${monthV}/${dayV} 沒有任何紀錄可以匯出。` : '目前還沒有任何紀錄可以匯出。');
     return;
   }
@@ -1934,6 +2098,17 @@ function exportCsv(){
     csv += headers4.map(csvEscape).join(',') + '\r\n';
     fScan.forEach(r => {
       const row = headers4.map(h => cleanDisplayTime(r[h]));
+      csv += row.map(csvEscape).join(',') + '\r\n';
+    });
+    csv += '\r\n';
+  }
+
+  if(fSupport.length){
+    csv += '支援紀錄\r\n';
+    const headers5 = ['日期','星期','工作事項','開始時間','結束時間','支援時數','支援人員'];
+    csv += headers5.map(csvEscape).join(',') + '\r\n';
+    fSupport.forEach(r => {
+      const row = headers5.map(h => cleanDisplayTime(r[h]));
       csv += row.map(csvEscape).join(',') + '\r\n';
     });
   }
@@ -2101,6 +2276,19 @@ const VIEW_CONFIG = {
     statLabel:'總異常次數',
     getData: () => scanLog,
     toApi: (obj) => obj
+  },
+  support: {
+    title:'支援紀錄',
+    sheet:'SupportRecords',
+    headers:['日期','星期','工作事項','開始時間','結束時間','支援時數','支援人員'],
+    keys:['日期','星期','工作事項','開始時間','結束時間','支援時數','支援人員'],
+    fieldTypes:{'日期':{type:'date'}, '工作事項':{type:'select', options: () => getSupportConfigOptions('worktype')}, '支援人員':{type:'select', options: () => getSupportConfigOptions('person')}},
+    dateKey:'紀錄時間',
+    groupDateKey:'日期',
+    statKey:'支援時數',
+    statLabel:'總支援時數',
+    getData: () => supportLog,
+    toApi: (obj) => obj
   }
 };
 
@@ -2225,7 +2413,8 @@ function cleanDisplayTime(v){
 function fieldControlHtml(cfg, key, value){
   const ft = cfg.fieldTypes[key];
   if(ft && ft.type === 'select'){
-    const opts = ft.options.map(o => `<option value="${escapeHtml(o)}"${String(o)===String(value)?' selected':''}>${escapeHtml(o)}</option>`).join('');
+    const optionList = typeof ft.options === 'function' ? ft.options() : ft.options;
+    const opts = optionList.map(o => `<option value="${escapeHtml(o)}"${String(o)===String(value)?' selected':''}>${escapeHtml(o)}</option>`).join('');
     return `<select data-edit-key="${key}"><option value="">--</option>${opts}</select>`;
   }
   if(ft && ft.type === 'datetime'){
@@ -2268,7 +2457,7 @@ function renderViewer(view, highlightLast, keepDateFilter){
   document.getElementById('viewer-title').textContent = cfg.title;
   const allData = cfg.getData();
   const body = document.getElementById('viewer-body');
-  const machineKey = cfg.keys.indexOf('machine') !== -1 ? 'machine' : '機台';
+  const machineKey = cfg.keys.indexOf('machine') !== -1 ? 'machine' : (cfg.keys.indexOf('機台') !== -1 ? '機台' : null);
 
   // 依日期分組，最新的日期排在最前面；只列出最近 14 天，避免頁籤越堆越長，
   // 更早的資料改用「自訂日期區間」查詢，資料本身在試算表裡永久保留，不會被刪除。
@@ -2295,14 +2484,20 @@ function renderViewer(view, highlightLast, keepDateFilter){
     tabsWrap.style.display = 'none';
   }
 
-  // 機台篩選：只看某一台機台當天的資料
+  // 機台篩選：只看某一台機台當天的資料。支援紀錄沒有「機台」這個維度（是依人員記錄），
+  // 這種情況就不顯示機台篩選列，避免點了某台機台卻永遠篩不出資料、看起來像壞掉。
   const machineWrap = document.getElementById('viewer-machine-tabs');
-  const machineAllBtn = `<button class="date-tab${currentMachineFilter===null?' active':''}" data-machine="">全部機台</button>`;
-  const machineBtns = MACHINE_OPTS.map(mk =>
-    `<button class="date-tab${currentMachineFilter===mk?' active':''}" data-machine="${mk}">${mk}</button>`
-  ).join('');
-  machineWrap.innerHTML = machineAllBtn + machineBtns;
-  machineWrap.style.display = '';
+  if(machineKey){
+    const machineAllBtn = `<button class="date-tab${currentMachineFilter===null?' active':''}" data-machine="">全部機台</button>`;
+    const machineBtns = MACHINE_OPTS.map(mk =>
+      `<button class="date-tab${currentMachineFilter===mk?' active':''}" data-machine="${mk}">${mk}</button>`
+    ).join('');
+    machineWrap.innerHTML = machineAllBtn + machineBtns;
+    machineWrap.style.display = '';
+  } else {
+    machineWrap.innerHTML = '';
+    machineWrap.style.display = 'none';
+  }
 
   const remarkWrap = document.getElementById('viewer-remark-filter');
   if(cfg.remarkKey){
@@ -2377,7 +2572,8 @@ function renderRecordsSwitch(){
   const items = [
     {view:'log', label:'機台產能記錄'},
     {view:'abnormal', label:'機台異常記錄'},
-    {view:'scan', label:'機台掃碼異常記錄'}
+    {view:'scan', label:'機台掃碼異常記錄'},
+    {view:'support', label:'支援紀錄'}
   ];
   wrap.innerHTML = items.map(it => `<button class="date-tab${currentLogView===it.view?' active':''}" data-view="${it.view}">${it.label}</button>`).join('');
 }
@@ -2518,6 +2714,7 @@ document.getElementById('records-switch').addEventListener('click', (e) => {
 
 // ---------- 版本紀錄 ----------
 const VERSION_LOG = [
+  {v:'v17.0', date:'2026/09/22', d:'新增「支援」分頁，兩大功能：(1) 支援紀錄——記錄操作人員支援其他組別/工作事項的時數，日期會自動帶出星期、支援時數會自動計算並扣除跟12:00-13:00午休重疊的部分（跟機台稼動率算休息時間是不同的規則，已對照妳的實際資料驗證過完全吻合），「支援人員」「工作事項」都是下拉選單，選單旁邊有「＋新增」按鈕可以直接加入新選項不用找我改程式；下方有依人員、依工作事項的統計表，可選日期範圍；查看紀錄分頁也新增「支援紀錄」可以瀏覽/編輯/刪除；(2)不能跑名單——記錄哪些客戶因為什麼原因不能在哪台機台運作，卡片輸入客戶名稱時只要符合關鍵字就會即時跳出橘色警示提醒換機台，名單本身可以在分頁裡直接新增/刪除，不用透過我；兩項功能都能匯出CSV。試算表需要手動新增3個分頁：SupportRecords、SupportConfig、MachineRestrictions（詳細欄位說明已寫在後端.gs檔案最上方註解），後端.gs也需要重新部署新版本'},
   {v:'v16.2', date:'2026/09/10', d:'修正月/日下拉選單兩位數字被裁切的問題：先前測試時只用「9月」「4日」這種單位數字確認過畫面，沒注意到「12月」「31日」這種兩位數字需要更多寬度，導致「日」字甚至整個消失不見。這次改用最寬的情況（12月、31日）重新測試，統計儀表板跟查看紀錄的自訂日期區間都確認不會再裁切，也確認手機窄螢幕下最擁擠的情況（6個選單＋清除按鈕）加寬後依然能正常換行，不會橫向溢出'},
   {v:'v16.1', date:'2026/09/09', d:'兩項調整：(1) 統計儀表板新增「每日達成率」長條圖，放在「每日箱數」下方，每天一根長條、高度就是當天達成率本身（不是箱數），達標（≥100%）顯示綠色、沒達標顯示橘色，搭配100%參考虛線，滑過長條會顯示精確百分比，不用像箱數圖表那樣自己心算比對目標；(2) 拿掉「異常趨勢（依日期）」這個折線圖，網頁畫面跟 Excel／Word 匯出報表都一併移除，因為異常率偏低時這張圖用不太到，之後如果要交報告需要客製化的異常趨勢圖，可以把當下的異常統計資料提供給我另外製作'},
   {v:'v16.0', date:'2026/09/09', d:'放棄瀏覽器原生日期選擇器（方案A試過兩次都沒解決手機顯示空白的問題），改回完全自訂樣式的年/月/日下拉選單，套用在三個地方：頂部匯出紀錄旁邊、統計儀表板的自訂日期區間、查看紀錄的自訂日期區間。這次的選單刻意做得比之前窄（年72px、月/日各50px），過程中發現寬度太窄會讓「月」「日」這兩個字被裁切掉一小角（跟瀏覽器內建的下拉箭頭搶空間），調整寬度跟內距後確認不會再裁切。因為完全是自己畫的樣式，不會再受瀏覽器差異影響，保證不會再有這類相容性問題'},
@@ -2751,7 +2948,7 @@ document.getElementById('settings-btn').addEventListener('click', setupApiUrl);
 
 // ---------- 分頁籤切換（看板／異常／統計／紀錄） ----------
 function showTab(name){
-  const tabs = {board:'tab-board', abnormal:'tab-abnormal', stats:'tab-stats', records:'tab-records'};
+  const tabs = {board:'tab-board', abnormal:'tab-abnormal', stats:'tab-stats', records:'tab-records', support:'tab-support'};
   Object.keys(tabs).forEach(key => {
     const el = document.getElementById(tabs[key]);
     if(el) el.style.display = (key === name) ? '' : 'none';
@@ -2761,6 +2958,7 @@ function showTab(name){
   });
   if(name === 'stats'){ openDashboard(); }
   if(name === 'records' && !currentLogView){ renderViewer('log'); }
+  if(name === 'support'){ renderSupportStats(); renderRestrictionList(); }
 }
 document.getElementById('tab-bar').addEventListener('click', (e) => {
   const btn = e.target.closest('[data-tab]');
@@ -3063,6 +3261,207 @@ document.addEventListener('focusin', () => { lastInteractionAt = Date.now(); });
 document.addEventListener('touchstart', () => { lastInteractionAt = Date.now(); }, {passive:true});
 document.addEventListener('input', () => { lastInteractionAt = Date.now(); });
 
+// ---------- 支援紀錄 ----------
+function initSupportForm(){
+  const curYear = new Date().getFullYear();
+  document.getElementById('sup-year').innerHTML = yearOptionsHtml(String(curYear));
+  document.getElementById('sup-month').innerHTML = monthOptionsHtml('');
+  document.getElementById('sup-day').innerHTML = dayOptionsHtml('');
+  document.getElementById('sup-start-time').innerHTML = timeOptions('');
+  document.getElementById('sup-end-time').innerHTML = timeOptions('');
+  refreshSupportDropdowns();
+
+  const updateWeekdayAndHours = () => {
+    const y = document.getElementById('sup-year').value;
+    const mo = document.getElementById('sup-month').value;
+    const d = document.getElementById('sup-day').value;
+    document.getElementById('sup-weekday').textContent = computeWeekday(y, mo, d) || '--';
+    const s = document.getElementById('sup-start-time').value;
+    const e = document.getElementById('sup-end-time').value;
+    const hrs = computeSupportHours(s, e);
+    document.getElementById('sup-hours').textContent = hrs !== null ? `${hrs} 小時` : '--';
+  };
+  ['sup-year','sup-month','sup-day','sup-start-time','sup-end-time'].forEach(id => {
+    document.getElementById(id).addEventListener('change', updateWeekdayAndHours);
+  });
+  updateWeekdayAndHours();
+
+  document.getElementById('sup-add-worktype').addEventListener('click', () => addSupportConfigItem('worktype', '工作事項', 'sup-worktype'));
+  document.getElementById('sup-add-person').addEventListener('click', () => addSupportConfigItem('person', '支援人員', 'sup-person'));
+
+  document.getElementById('sup-submit').addEventListener('click', submitSupportRecord);
+
+  initSupStatDatePickers();
+}
+
+function refreshSupportDropdowns(){
+  const worktypes = getSupportConfigOptions('worktype');
+  const people = getSupportConfigOptions('person');
+  const buildOpts = (arr) => '<option value="">請選擇</option>' + arr.map(v => `<option value="${escapeHtml(v)}">${escapeHtml(v)}</option>`).join('');
+  const worktypeSel = document.getElementById('sup-worktype');
+  const personSel = document.getElementById('sup-person');
+  const prevWork = worktypeSel.value, prevPerson = personSel.value;
+  worktypeSel.innerHTML = buildOpts(worktypes);
+  personSel.innerHTML = buildOpts(people);
+  if(worktypes.includes(prevWork)) worktypeSel.value = prevWork;
+  if(people.includes(prevPerson)) personSel.value = prevPerson;
+}
+
+// 「＋新增項目」「＋新增人員」共用同一支：跳出輸入框讓使用者直接打新名字，
+// 存進 SupportConfig 分頁後，下拉選單馬上就會多這個選項，不用每次都要找我改程式。
+async function addSupportConfigItem(type, label, selectId){
+  const val = prompt(`輸入新的${label}：`);
+  if(!val || !val.trim()) return;
+  const trimmed = val.trim();
+  const existing = getSupportConfigOptions(type);
+  if(existing.includes(trimmed)){
+    alert(`「${trimmed}」已經在清單裡了。`);
+    document.getElementById(selectId).value = trimmed;
+    return;
+  }
+  if(!API_URL){ alert('尚未設定 API 網址，請先點右上角「設定 API 網址」。'); return; }
+  try{
+    await apiPost({action:'appendSupportConfig', data:{'類型':type, '值':trimmed}});
+    supportConfig.push({'類型':type, '值':trimmed});
+    refreshSupportDropdowns();
+    document.getElementById(selectId).value = trimmed;
+  }catch(err){
+    alert('新增失敗：' + err.message);
+  }
+}
+
+async function submitSupportRecord(){
+  const year = document.getElementById('sup-year').value;
+  const month = document.getElementById('sup-month').value;
+  const day = document.getElementById('sup-day').value;
+  const worktype = document.getElementById('sup-worktype').value;
+  const startTime = document.getElementById('sup-start-time').value;
+  const endTime = document.getElementById('sup-end-time').value;
+  const person = document.getElementById('sup-person').value;
+  const hint = document.getElementById('sup-hint');
+
+  if(!year || !month || !day || !worktype || !startTime || !endTime || !person){
+    hint.textContent = '請把日期、工作事項、開始/結束時間、支援人員都填完再送出。';
+    return;
+  }
+  const hours = computeSupportHours(startTime, endTime);
+  if(hours === null){
+    hint.textContent = '結束時間要晚於開始時間，請重新選擇。';
+    return;
+  }
+  if(!API_URL){ hint.textContent = '尚未設定 API 網址，請先點右上角「設定 API 網址」。'; return; }
+  try{
+    const record = {
+      '日期': buildDateOnly(year, month, day),
+      '星期': computeWeekday(year, month, day),
+      '工作事項': worktype,
+      '開始時間': startTime,
+      '結束時間': endTime,
+      '支援時數': hours,
+      '支援人員': person
+    };
+    await apiPost({action:'appendSupport', data: record});
+    await loadState();
+    hint.textContent = `已新增：${year}/${month}/${day} ${person} ${worktype}（${hours}小時）· ` + fmtClock();
+    document.getElementById('sup-worktype').value = '';
+    document.getElementById('sup-person').value = '';
+    document.getElementById('sup-start-time').value = '';
+    document.getElementById('sup-end-time').value = '';
+    document.getElementById('sup-hours').textContent = '--';
+    renderSupportStats();
+    if(currentLogView === 'support') renderViewer('support', true);
+  }catch(err){
+    hint.textContent = '新增失敗：' + err.message;
+  }
+}
+initSupportForm();
+
+// ---------- 不能跑名單 ----------
+function initRestrictionForm(){
+  const sel = document.getElementById('res-machine');
+  sel.innerHTML = '<option value="">請選擇</option><option value="全部">全部</option>' + MACHINE_OPTS.map(mk => `<option value="${mk}">${mk}</option>`).join('');
+  document.getElementById('res-submit').addEventListener('click', submitRestriction);
+  document.getElementById('res-export-btn').addEventListener('click', exportRestrictionsCsv);
+}
+
+function renderRestrictionList(){
+  const wrap = document.getElementById('restriction-list');
+  if(!wrap) return;
+  if(!restrictionsLog.length){
+    wrap.innerHTML = '<div class="viewer-empty">目前還沒有任何限制項目。</div>';
+    return;
+  }
+  wrap.innerHTML = restrictionsLog.map(r => `
+    <div class="restriction-row">
+      <span class="rcust">${escapeHtml(r['客戶關鍵字']||'')}</span>
+      <span class="revent">${escapeHtml(r['事件']||'')}</span>
+      <span class="rmachine">${escapeHtml(r['機台']||'')}</span>
+      <button class="rdel" data-del-row="${r._row}">刪除</button>
+    </div>`).join('');
+  wrap.querySelectorAll('[data-del-row]').forEach(btn => {
+    btn.addEventListener('click', () => deleteRestriction(parseInt(btn.dataset.delRow,10)));
+  });
+}
+
+async function submitRestriction(){
+  const customer = document.getElementById('res-customer').value.trim();
+  const event = document.getElementById('res-event').value.trim();
+  const machine = document.getElementById('res-machine').value;
+  const hint = document.getElementById('res-hint');
+  if(!customer || !machine){
+    hint.textContent = '請至少填寫客戶關鍵字、選好機台再新增。';
+    return;
+  }
+  if(!API_URL){ hint.textContent = '尚未設定 API 網址，請先點右上角「設定 API 網址」。'; return; }
+  try{
+    await apiPost({action:'appendRestriction', data:{'客戶關鍵字':customer, '事件':event, '機台':machine}});
+    await loadState();
+    renderRestrictionList();
+    document.getElementById('res-customer').value = '';
+    document.getElementById('res-event').value = '';
+    document.getElementById('res-machine').value = '';
+    hint.textContent = '已新增 · ' + fmtClock();
+    render(); // 卡片上的即時提醒要立刻反映最新名單
+  }catch(err){
+    hint.textContent = '新增失敗：' + err.message;
+  }
+}
+
+async function deleteRestriction(rowNum){
+  if(!confirm('確定要刪除這筆限制嗎？')) return;
+  if(!API_URL){ alert('尚未設定 API 網址。'); return; }
+  try{
+    await apiPost({action:'deleteRow', sheet:'MachineRestrictions', row: rowNum});
+    await loadState();
+    renderRestrictionList();
+    render();
+  }catch(err){
+    alert('刪除失敗：' + err.message);
+  }
+}
+
+function exportRestrictionsCsv(){
+  if(!restrictionsLog.length){ alert('目前還沒有任何限制項目可以匯出。'); return; }
+  let csv = '\uFEFF不能跑名單\r\n';
+  const headers = ['客戶關鍵字','事件','機台'];
+  csv += headers.map(csvEscape).join(',') + '\r\n';
+  restrictionsLog.forEach(r => {
+    csv += headers.map(h => csvEscape(r[h]||'')).join(',') + '\r\n';
+  });
+  const blob = new Blob([csv], {type:'text/csv;charset=utf-8;'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  const now = new Date();
+  const pad = n => String(n).padStart(2,'0');
+  a.href = url;
+  a.download = `不能跑名單_${now.getFullYear()}${pad(now.getMonth()+1)}${pad(now.getDate())}.csv`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+initRestrictionForm();
+
 // ---------- 統計儀表板 ----------
 const MACHINE_COLORS = {'大寶':'#e8a33d','二寶':'#3f9088','三寶':'#d5654a','四寶':'#7b8ce0'};
 const AVAILABLE_HOURS_PER_DAY = 7.5; // 標準班表下的可作業時數，僅在當天完全沒有時間紀錄時當備用分母；一般情況下可作業時數是依當天實際窗口動態計算的
@@ -3131,6 +3530,116 @@ function dashDateInRange(ymd){
   if(!ymd) return false;
   if(!dashRange.start || !dashRange.end) return true;
   return ymd >= dashRange.start && ymd <= dashRange.end;
+}
+
+// ---------- 支援紀錄 ----------
+// 支援時數只需要扣掉跟 12:00-13:00 午休重疊的部分，不像機台稼動率要扣掉全部4個固定休息時段——
+// 這是柯姐原本 Excel 裡的算法，套用她給的幾筆範例資料都能精準對得上，是獨立於機台端休息時段規則的另一套算法。
+function computeSupportHours(startTime, endTime){
+  const toMin = t => { const p = String(t||'').split(':'); return (parseInt(p[0],10)||0)*60 + (parseInt(p[1],10)||0); };
+  const s = toMin(startTime), e = toMin(endTime);
+  if(!startTime || !endTime || e <= s) return null;
+  let total = e - s;
+  const bs = 12*60, be = 13*60;
+  const os = Math.max(s, bs), oe = Math.min(e, be);
+  if(oe > os) total -= (oe - os);
+  return Math.round((total/60) * 10) / 10;
+}
+
+const WEEKDAY_NAMES = ['星期日','星期一','星期二','星期三','星期四','星期五','星期六'];
+function computeWeekday(year, month, day){
+  if(!year || !month || !day) return '';
+  const d = new Date(parseInt(year,10), parseInt(month,10)-1, parseInt(day,10));
+  return WEEKDAY_NAMES[d.getDay()];
+}
+
+let supStatRange = {start:null, end:null};
+
+function setSupStatPreset(preset){
+  if(preset === 'today'){ supStatRange = {start:ymdToday(0), end:ymdToday(0)}; }
+  else if(preset === 'week'){ supStatRange = {start:ymdToday(-6), end:ymdToday(0)}; }
+  else if(preset === 'month'){ supStatRange = {start:ymdToday(-29), end:ymdToday(0)}; }
+  else { supStatRange = {start:null, end:null}; }
+  syncSupStatDateSelects();
+  renderSupportStats();
+}
+
+function syncSupStatDateSelects(){
+  const sp = supStatRange.start ? supStatRange.start.split('-') : ['','',''];
+  const ep = supStatRange.end ? supStatRange.end.split('-') : ['','',''];
+  document.getElementById('sup-stat-start-year').value = sp[0] || '';
+  document.getElementById('sup-stat-start-month').value = sp[1] ? String(parseInt(sp[1],10)) : '';
+  document.getElementById('sup-stat-start-day').value = sp[2] ? String(parseInt(sp[2],10)) : '';
+  document.getElementById('sup-stat-end-year').value = ep[0] || '';
+  document.getElementById('sup-stat-end-month').value = ep[1] ? String(parseInt(ep[1],10)) : '';
+  document.getElementById('sup-stat-end-day').value = ep[2] ? String(parseInt(ep[2],10)) : '';
+}
+
+function readSupStatDateSelects(){
+  const sy = document.getElementById('sup-stat-start-year').value;
+  const sm = document.getElementById('sup-stat-start-month').value;
+  const sd = document.getElementById('sup-stat-start-day').value;
+  const ey = document.getElementById('sup-stat-end-year').value;
+  const em = document.getElementById('sup-stat-end-month').value;
+  const ed = document.getElementById('sup-stat-end-day').value;
+  const pad = n => String(n).padStart(2,'0');
+  if(sy && sm && sd && ey && em && ed){
+    supStatRange = {start:`${sy}-${pad(sm)}-${pad(sd)}`, end:`${ey}-${pad(em)}-${pad(ed)}`};
+  } else {
+    supStatRange = {start:null, end:null};
+  }
+  renderSupportStats();
+}
+
+function initSupStatDatePickers(){
+  const curYear = new Date().getFullYear();
+  ['sup-stat-start-year','sup-stat-end-year'].forEach(id => { document.getElementById(id).innerHTML = yearOptionsHtml(curYear); });
+  ['sup-stat-start-month','sup-stat-end-month'].forEach(id => { document.getElementById(id).innerHTML = monthOptionsHtml(''); });
+  ['sup-stat-start-day','sup-stat-end-day'].forEach(id => { document.getElementById(id).innerHTML = dayOptionsHtml(''); });
+  ['sup-stat-start-year','sup-stat-start-month','sup-stat-start-day','sup-stat-end-year','sup-stat-end-month','sup-stat-end-day'].forEach(id => {
+    document.getElementById(id).addEventListener('change', readSupStatDateSelects);
+  });
+  document.querySelectorAll('[data-sup-preset]').forEach(btn => {
+    btn.addEventListener('click', () => setSupStatPreset(btn.dataset.supPreset));
+  });
+}
+
+function supDateInRange(ymd){
+  if(!ymd) return false;
+  if(!supStatRange.start || !supStatRange.end) return true;
+  return ymd >= supStatRange.start && ymd <= supStatRange.end;
+}
+
+function renderSupportStats(){
+  const personEl = document.getElementById('sup-stat-person');
+  const workEl = document.getElementById('sup-stat-worktype');
+  if(!personEl || !workEl) return;
+  const filtered = supportLog.filter(r => supDateInRange(recordDateStr(VIEW_CONFIG.support, r)));
+
+  const byPerson = {};
+  filtered.forEach(r => {
+    const p = r['支援人員'];
+    if(!p) return;
+    if(!byPerson[p]) byPerson[p] = {count:0, hours:0};
+    byPerson[p].count++;
+    byPerson[p].hours += parseFloat(r['支援時數']) || 0;
+  });
+  const byWork = {};
+  filtered.forEach(r => {
+    const w = r['工作事項'];
+    if(!w) return;
+    byWork[w] = (byWork[w]||0) + 1;
+  });
+
+  const personRows = Object.keys(byPerson).sort((a,b)=>byPerson[b].hours-byPerson[a].hours)
+    .map(p => `<tr><td>${escapeHtml(p)}</td><td style="text-align:right;">${byPerson[p].count}</td><td style="text-align:right;">${byPerson[p].hours.toFixed(1)}</td></tr>`).join('');
+  personEl.innerHTML = personRows
+    ? `<table><tr><th>支援人員</th><th>次數</th><th>總時數</th></tr>${personRows}</table>`
+    : '<div class="viewer-empty">這個範圍沒有支援紀錄</div>';
+
+  const workRows = Object.keys(byWork).sort((a,b)=>byWork[b]-byWork[a])
+    .map(w => `<tr><td>${escapeHtml(w)}</td><td style="text-align:right;">${byWork[w]}</td></tr>`).join('');
+  workEl.innerHTML = workRows ? `<table><tr><th>工作事項</th><th>次數</th></tr>${workRows}</table>` : '';
 }
 
 function getDashRecords(){
