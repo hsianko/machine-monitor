@@ -749,7 +749,7 @@
 
 <div class="wrap">
   <div class="topbar">
-    <h1>產線即時監看板 <button class="version-badge" id="version-badge">v17.0</button></h1>
+    <h1>產線即時監看板 <button class="version-badge" id="version-badge">v17.1</button></h1>
     <div class="topbar-right">
       <button class="export-btn" id="settings-btn">設定 API 網址</button>
       <div class="export-date-picker">
@@ -919,6 +919,29 @@
       </div>
       <div class="log-hint" id="sc-hint"></div>
     </div>
+
+    <div class="section-title" style="margin-top:28px;">不能跑名單</div>
+    <p class="quick-abn-hint">卡片輸入客戶名稱時，只要符合下面任一筆的關鍵字，就會即時跳出提醒。</p>
+    <div class="log-panel">
+      <div class="log-form" id="restriction-form">
+        <div class="field">
+          <label>客戶關鍵字</label>
+          <input type="text" id="res-customer" placeholder="輸入客戶關鍵字">
+        </div>
+        <div class="field">
+          <label>事件／原因</label>
+          <input type="text" id="res-event" placeholder="輸入事件或原因">
+        </div>
+        <div class="field">
+          <label>不能跑的機台</label>
+          <select id="res-machine"></select>
+        </div>
+        <button class="log-submit" id="res-submit">新增限制</button>
+      </div>
+      <div class="log-hint" id="res-hint"></div>
+    </div>
+    <div class="viewer-table-wrap" id="restriction-list"></div>
+    <button class="export-btn" id="res-export-btn" style="margin-top:12px;">匯出不能跑名單 (CSV)</button>
   </div>
 
   <div class="tab-content" id="tab-stats" style="display:none;">
@@ -1020,9 +1043,9 @@
         <div class="field field-daterow">
           <label>發生日期</label>
           <div class="time-row">
-            <select data-part="year" id="sup-year"></select>
-            <select data-part="month" id="sup-month"></select>
-            <select data-part="day" id="sup-day"></select>
+            <select data-part="year" id="sup-year" class="ymd-select ymd-year"></select>
+            <select data-part="month" id="sup-month" class="ymd-select ymd-month"></select>
+            <select data-part="day" id="sup-day" class="ymd-select ymd-day"></select>
           </div>
         </div>
         <div class="field">
@@ -1081,29 +1104,7 @@
     </div>
     <div class="dash-table-wrap" id="sup-stat-person"></div>
     <div class="dash-table-wrap" id="sup-stat-worktype" style="margin-top:16px;"></div>
-
-    <div class="section-title" style="margin-top:28px;">不能跑名單</div>
-    <p class="quick-abn-hint">卡片輸入客戶名稱時，只要符合下面任一筆的關鍵字，就會即時跳出提醒。</p>
-    <div class="log-panel">
-      <div class="log-form" id="restriction-form">
-        <div class="field">
-          <label>客戶關鍵字</label>
-          <input type="text" id="res-customer" placeholder="輸入客戶關鍵字">
-        </div>
-        <div class="field">
-          <label>事件／原因</label>
-          <input type="text" id="res-event" placeholder="輸入事件或原因">
-        </div>
-        <div class="field">
-          <label>不能跑的機台</label>
-          <select id="res-machine"></select>
-        </div>
-        <button class="log-submit" id="res-submit">新增限制</button>
-      </div>
-      <div class="log-hint" id="res-hint"></div>
-    </div>
-    <div class="viewer-table-wrap" id="restriction-list"></div>
-    <button class="export-btn" id="res-export-btn" style="margin-top:12px;">匯出不能跑名單 (CSV)</button>
+    <button class="export-btn" id="sup-stat-export-btn" style="margin-top:12px;">匯出支援統計 (CSV)</button>
   </div>
 
   <div class="save-hint" id="save-hint">載入中...</div>
@@ -2714,6 +2715,7 @@ document.getElementById('records-switch').addEventListener('click', (e) => {
 
 // ---------- 版本紀錄 ----------
 const VERSION_LOG = [
+  {v:'v17.1', date:'2026/09/22', d:'修正 v17.0 上線後發現的幾個問題：(1) 支援紀錄表單的年份選單忘了套用寬度修正，「年」字被裁切，補上；(2)「新增紀錄」「＋新增項目」「＋新增人員」「新增限制」這四個按鈕，點下去後都補上「處理中…」的狀態並暫時鎖住，避免看不出有沒有送出、又點一次造成重複資料；(3) 支援統計表的表頭跟數字對齊方式不一致，看起來像跑位，統一改成靠右對齊；(4) 支援統計新增「匯出支援統計(CSV)」按鈕，可以匯出依人員/依工作事項的加總表；(5)不能跑名單從「支援」分頁移到「異常」分頁，因為它本質上是機台/客戶限制，跟支援紀錄是兩件不相關的事；(6) 修正一個後端真的存在的 bug：SupportRecords 的「日期」欄位沒有被強制存成純文字，導致 Google 試算表把它自動轉成日期格式，讀回來時又被誤判成含時間的欄位、多補了時分（例如顯示成「7/20 16:00」），這次補上修正，但已經存進試算表、已經被污染的舊資料需要手動重新編輯存一次才會恢復正常。這次後端 .gs 有異動，需要重新部署'},
   {v:'v17.0', date:'2026/09/22', d:'新增「支援」分頁，兩大功能：(1) 支援紀錄——記錄操作人員支援其他組別/工作事項的時數，日期會自動帶出星期、支援時數會自動計算並扣除跟12:00-13:00午休重疊的部分（跟機台稼動率算休息時間是不同的規則，已對照妳的實際資料驗證過完全吻合），「支援人員」「工作事項」都是下拉選單，選單旁邊有「＋新增」按鈕可以直接加入新選項不用找我改程式；下方有依人員、依工作事項的統計表，可選日期範圍；查看紀錄分頁也新增「支援紀錄」可以瀏覽/編輯/刪除；(2)不能跑名單——記錄哪些客戶因為什麼原因不能在哪台機台運作，卡片輸入客戶名稱時只要符合關鍵字就會即時跳出橘色警示提醒換機台，名單本身可以在分頁裡直接新增/刪除，不用透過我；兩項功能都能匯出CSV。試算表需要手動新增3個分頁：SupportRecords、SupportConfig、MachineRestrictions（詳細欄位說明已寫在後端.gs檔案最上方註解），後端.gs也需要重新部署新版本'},
   {v:'v16.2', date:'2026/09/10', d:'修正月/日下拉選單兩位數字被裁切的問題：先前測試時只用「9月」「4日」這種單位數字確認過畫面，沒注意到「12月」「31日」這種兩位數字需要更多寬度，導致「日」字甚至整個消失不見。這次改用最寬的情況（12月、31日）重新測試，統計儀表板跟查看紀錄的自訂日期區間都確認不會再裁切，也確認手機窄螢幕下最擁擠的情況（6個選單＋清除按鈕）加寬後依然能正常換行，不會橫向溢出'},
   {v:'v16.1', date:'2026/09/09', d:'兩項調整：(1) 統計儀表板新增「每日達成率」長條圖，放在「每日箱數」下方，每天一根長條、高度就是當天達成率本身（不是箱數），達標（≥100%）顯示綠色、沒達標顯示橘色，搭配100%參考虛線，滑過長條會顯示精確百分比，不用像箱數圖表那樣自己心算比對目標；(2) 拿掉「異常趨勢（依日期）」這個折線圖，網頁畫面跟 Excel／Word 匯出報表都一併移除，因為異常率偏低時這張圖用不太到，之後如果要交報告需要客製化的異常趨勢圖，可以把當下的異常統計資料提供給我另外製作'},
@@ -2958,7 +2960,8 @@ function showTab(name){
   });
   if(name === 'stats'){ openDashboard(); }
   if(name === 'records' && !currentLogView){ renderViewer('log'); }
-  if(name === 'support'){ renderSupportStats(); renderRestrictionList(); }
+  if(name === 'abnormal'){ renderRestrictionList(); }
+  if(name === 'support'){ renderSupportStats(); }
 }
 document.getElementById('tab-bar').addEventListener('click', (e) => {
   const btn = e.target.closest('[data-tab]');
@@ -3286,8 +3289,8 @@ function initSupportForm(){
   });
   updateWeekdayAndHours();
 
-  document.getElementById('sup-add-worktype').addEventListener('click', () => addSupportConfigItem('worktype', '工作事項', 'sup-worktype'));
-  document.getElementById('sup-add-person').addEventListener('click', () => addSupportConfigItem('person', '支援人員', 'sup-person'));
+  document.getElementById('sup-add-worktype').addEventListener('click', () => addSupportConfigItem('worktype', '工作事項', 'sup-worktype', 'sup-add-worktype'));
+  document.getElementById('sup-add-person').addEventListener('click', () => addSupportConfigItem('person', '支援人員', 'sup-person', 'sup-add-person'));
 
   document.getElementById('sup-submit').addEventListener('click', submitSupportRecord);
 
@@ -3309,28 +3312,44 @@ function refreshSupportDropdowns(){
 
 // 「＋新增項目」「＋新增人員」共用同一支：跳出輸入框讓使用者直接打新名字，
 // 存進 SupportConfig 分頁後，下拉選單馬上就會多這個選項，不用每次都要找我改程式。
-async function addSupportConfigItem(type, label, selectId){
+// 送出過程中會把按鈕鎖住、文字改成「新增中…」，成功後也會跳出確認訊息，
+// 這樣看得出來到底有沒有送出，不會因為看不出結果又點一次造成重複資料。
+let addSupportConfigBusy = false;
+async function addSupportConfigItem(type, label, selectId, btnId){
+  if(addSupportConfigBusy) return;
   const val = prompt(`輸入新的${label}：`);
   if(!val || !val.trim()) return;
   const trimmed = val.trim();
   const existing = getSupportConfigOptions(type);
   if(existing.includes(trimmed)){
-    alert(`「${trimmed}」已經在清單裡了。`);
+    alert(`「${trimmed}」已經在清單裡了，直接幫你選起來。`);
     document.getElementById(selectId).value = trimmed;
     return;
   }
   if(!API_URL){ alert('尚未設定 API 網址，請先點右上角「設定 API 網址」。'); return; }
+  const btn = document.getElementById(btnId);
+  addSupportConfigBusy = true;
+  const originalText = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = '新增中…';
   try{
     await apiPost({action:'appendSupportConfig', data:{'類型':type, '值':trimmed}});
     supportConfig.push({'類型':type, '值':trimmed});
     refreshSupportDropdowns();
     document.getElementById(selectId).value = trimmed;
+    alert(`已新增「${trimmed}」，下拉選單已經自動選好了。`);
   }catch(err){
     alert('新增失敗：' + err.message);
+  }finally{
+    addSupportConfigBusy = false;
+    btn.disabled = false;
+    btn.textContent = originalText;
   }
 }
 
+let submitSupportBusy = false;
 async function submitSupportRecord(){
+  if(submitSupportBusy) return;
   const year = document.getElementById('sup-year').value;
   const month = document.getElementById('sup-month').value;
   const day = document.getElementById('sup-day').value;
@@ -3350,6 +3369,10 @@ async function submitSupportRecord(){
     return;
   }
   if(!API_URL){ hint.textContent = '尚未設定 API 網址，請先點右上角「設定 API 網址」。'; return; }
+  const btn = document.getElementById('sup-submit');
+  submitSupportBusy = true;
+  btn.disabled = true;
+  btn.textContent = '儲存中…';
   try{
     const record = {
       '日期': buildDateOnly(year, month, day),
@@ -3372,6 +3395,10 @@ async function submitSupportRecord(){
     if(currentLogView === 'support') renderViewer('support', true);
   }catch(err){
     hint.textContent = '新增失敗：' + err.message;
+  }finally{
+    submitSupportBusy = false;
+    btn.disabled = false;
+    btn.textContent = '新增紀錄';
   }
 }
 initSupportForm();
@@ -3403,7 +3430,9 @@ function renderRestrictionList(){
   });
 }
 
+let submitRestrictionBusy = false;
 async function submitRestriction(){
+  if(submitRestrictionBusy) return;
   const customer = document.getElementById('res-customer').value.trim();
   const event = document.getElementById('res-event').value.trim();
   const machine = document.getElementById('res-machine').value;
@@ -3413,6 +3442,10 @@ async function submitRestriction(){
     return;
   }
   if(!API_URL){ hint.textContent = '尚未設定 API 網址，請先點右上角「設定 API 網址」。'; return; }
+  const btn = document.getElementById('res-submit');
+  submitRestrictionBusy = true;
+  btn.disabled = true;
+  btn.textContent = '儲存中…';
   try{
     await apiPost({action:'appendRestriction', data:{'客戶關鍵字':customer, '事件':event, '機台':machine}});
     await loadState();
@@ -3424,6 +3457,10 @@ async function submitRestriction(){
     render(); // 卡片上的即時提醒要立刻反映最新名單
   }catch(err){
     hint.textContent = '新增失敗：' + err.message;
+  }finally{
+    submitRestrictionBusy = false;
+    btn.disabled = false;
+    btn.textContent = '新增限制';
   }
 }
 
@@ -3634,13 +3671,57 @@ function renderSupportStats(){
   const personRows = Object.keys(byPerson).sort((a,b)=>byPerson[b].hours-byPerson[a].hours)
     .map(p => `<tr><td>${escapeHtml(p)}</td><td style="text-align:right;">${byPerson[p].count}</td><td style="text-align:right;">${byPerson[p].hours.toFixed(1)}</td></tr>`).join('');
   personEl.innerHTML = personRows
-    ? `<table><tr><th>支援人員</th><th>次數</th><th>總時數</th></tr>${personRows}</table>`
+    ? `<table><tr><th>支援人員</th><th style="text-align:right;">次數</th><th style="text-align:right;">總時數</th></tr>${personRows}</table>`
     : '<div class="viewer-empty">這個範圍沒有支援紀錄</div>';
 
   const workRows = Object.keys(byWork).sort((a,b)=>byWork[b]-byWork[a])
     .map(w => `<tr><td>${escapeHtml(w)}</td><td style="text-align:right;">${byWork[w]}</td></tr>`).join('');
-  workEl.innerHTML = workRows ? `<table><tr><th>工作事項</th><th>次數</th></tr>${workRows}</table>` : '';
+  workEl.innerHTML = workRows ? `<table><tr><th>工作事項</th><th style="text-align:right;">次數</th></tr>${workRows}</table>` : '';
 }
+
+function exportSupportStatsCsv(){
+  const filtered = supportLog.filter(r => supDateInRange(recordDateStr(VIEW_CONFIG.support, r)));
+  if(!filtered.length){ alert('這個日期範圍沒有支援紀錄可以匯出。'); return; }
+
+  const byPerson = {};
+  filtered.forEach(r => {
+    const p = r['支援人員'];
+    if(!p) return;
+    if(!byPerson[p]) byPerson[p] = {count:0, hours:0};
+    byPerson[p].count++;
+    byPerson[p].hours += parseFloat(r['支援時數']) || 0;
+  });
+  const byWork = {};
+  filtered.forEach(r => {
+    const w = r['工作事項'];
+    if(!w) return;
+    byWork[w] = (byWork[w]||0) + 1;
+  });
+
+  let csv = '\uFEFF依支援人員統計\r\n';
+  csv += ['支援人員','支援次數','支援總時數'].map(csvEscape).join(',') + '\r\n';
+  Object.keys(byPerson).sort((a,b)=>byPerson[b].hours-byPerson[a].hours).forEach(p => {
+    csv += [p, byPerson[p].count, byPerson[p].hours.toFixed(1)].map(csvEscape).join(',') + '\r\n';
+  });
+  csv += '\r\n依工作事項統計\r\n';
+  csv += ['工作事項','支援次數'].map(csvEscape).join(',') + '\r\n';
+  Object.keys(byWork).sort((a,b)=>byWork[b]-byWork[a]).forEach(w => {
+    csv += [w, byWork[w]].map(csvEscape).join(',') + '\r\n';
+  });
+
+  const blob = new Blob([csv], {type:'text/csv;charset=utf-8;'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  const now = new Date();
+  const pad = n => String(n).padStart(2,'0');
+  a.href = url;
+  a.download = `支援統計_${now.getFullYear()}${pad(now.getMonth()+1)}${pad(now.getDate())}.csv`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+document.getElementById('sup-stat-export-btn').addEventListener('click', exportSupportStatsCsv);
 
 function getDashRecords(){
   const logs = completedLog.filter(r => (!dashMachineFilter || r.machine===dashMachineFilter) && dashDateInRange(recordDateStr(VIEW_CONFIG.log, r)));
