@@ -413,6 +413,7 @@
     .card{padding:14px 14px 16px;}
     .field-row{grid-template-columns:1fr;}
     .times{grid-template-columns:1fr;}
+    .sup-stat-cols{grid-template-columns:1fr !important;}
     .field input, .field select, .times .field select, .log-form select, .log-form input{
       font-size:16px;
       padding:10px 10px;
@@ -450,6 +451,7 @@
   .status.done{color:var(--status-done);}
 
   .field-row{display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:8px;}
+  .sup-stat-cols{display:grid; grid-template-columns:1fr 1fr; gap:16px; align-items:start;}
   .field{display:flex; flex-direction:column; gap:3px;}
   .field.full{grid-column:1 / -1;}
   .field label{font-size:10px; color:var(--text-muted); letter-spacing:0.4px;}
@@ -584,6 +586,11 @@
   }
   .log-form{display:grid; grid-template-columns:repeat(auto-fit, minmax(110px, 1fr)); gap:8px; align-items:end;}
   .log-form .field-daterow{grid-column:span 2;}
+  /* 桌機上這排欄位固定佔「2個欄位寬度」，實際換算出來的寬度只有70幾px，
+     「2026年」這5個字在某些瀏覽器的字型渲染下會剛好被切到一點點。
+     年/月/日三個選單本身還是維持一樣寬（之前特別調整過），這裡只是讓整排多留一點最小寬度，
+     兩者不衝突：只在手機沒有的桌機場合加寬，不會影響手機（手機走的是上面423行那條直接佔滿整行的規則）。 */
+  .log-form .field-daterow .time-row{min-width:300px;}
   .log-form .field label{font-size:10px; color:var(--text-muted);}
   .log-form select, .log-form input{
     background:var(--bg-field); border:1px solid var(--border); border-radius:6px;
@@ -749,7 +756,7 @@
 
 <div class="wrap">
   <div class="topbar">
-    <h1>產線即時監看板 <button class="version-badge" id="version-badge">v17.1</button></h1>
+    <h1>產線即時監看板 <button class="version-badge" id="version-badge">v17.2</button></h1>
     <div class="topbar-right">
       <button class="export-btn" id="settings-btn">設定 API 網址</button>
       <div class="export-date-picker">
@@ -1102,8 +1109,10 @@
         <button class="date-tab" data-sup-preset="all">全部</button>
       </div>
     </div>
-    <div class="dash-table-wrap" id="sup-stat-person"></div>
-    <div class="dash-table-wrap" id="sup-stat-worktype" style="margin-top:16px;"></div>
+    <div class="sup-stat-cols">
+      <div class="dash-table-wrap" id="sup-stat-person"></div>
+      <div class="dash-table-wrap" id="sup-stat-worktype"></div>
+    </div>
     <button class="export-btn" id="sup-stat-export-btn" style="margin-top:12px;">匯出支援統計 (CSV)</button>
   </div>
 
@@ -2715,6 +2724,7 @@ document.getElementById('records-switch').addEventListener('click', (e) => {
 
 // ---------- 版本紀錄 ----------
 const VERSION_LOG = [
+  {v:'v17.2', date:'2026/09/23', d:'修正 v17.1 之後桌機上發現的兩個問題（純前端調整，不影響手機，手機原本就正常）：(1) 機台掃碼異常紀錄、支援紀錄・新增這兩處的發生日期，桌機上「2026年」還是會被切到一點點——原因是這排日期欄位在桌機被固定分配到「2個欄位寬度」，換算下來只有70幾px，對某些瀏覽器的字型渲染來說是勉強擦邊，這次讓整排日期欄位在桌機多留一點最小寬度（年/月/日三個還是維持一樣寬，只是整體更寬鬆）；(2) 支援統計的「依人員」「依工作事項」兩張表，桌機上改成左右並排瀏覽，手機維持原本上下的排列方式；順便修正了一個既有的CSS疊層順序問題（手機版的樣式規則寫在桌機版之前，會被桌機版覆蓋掉，這次一併用更保險的方式處理，確保手機版本不會受影響）'},
   {v:'v17.1', date:'2026/09/22', d:'修正 v17.0 上線後發現的幾個問題：(1) 支援紀錄表單的年份選單忘了套用寬度修正，「年」字被裁切，補上；(2)「新增紀錄」「＋新增項目」「＋新增人員」「新增限制」這四個按鈕，點下去後都補上「處理中…」的狀態並暫時鎖住，避免看不出有沒有送出、又點一次造成重複資料；(3) 支援統計表的表頭跟數字對齊方式不一致，看起來像跑位，統一改成靠右對齊；(4) 支援統計新增「匯出支援統計(CSV)」按鈕，可以匯出依人員/依工作事項的加總表；(5)不能跑名單從「支援」分頁移到「異常」分頁，因為它本質上是機台/客戶限制，跟支援紀錄是兩件不相關的事；(6) 修正一個後端真的存在的 bug：SupportRecords 的「日期」欄位沒有被強制存成純文字，導致 Google 試算表把它自動轉成日期格式，讀回來時又被誤判成含時間的欄位、多補了時分（例如顯示成「7/20 16:00」），這次補上修正，但已經存進試算表、已經被污染的舊資料需要手動重新編輯存一次才會恢復正常。這次後端 .gs 有異動，需要重新部署'},
   {v:'v17.0', date:'2026/09/22', d:'新增「支援」分頁，兩大功能：(1) 支援紀錄——記錄操作人員支援其他組別/工作事項的時數，日期會自動帶出星期、支援時數會自動計算並扣除跟12:00-13:00午休重疊的部分（跟機台稼動率算休息時間是不同的規則，已對照妳的實際資料驗證過完全吻合），「支援人員」「工作事項」都是下拉選單，選單旁邊有「＋新增」按鈕可以直接加入新選項不用找我改程式；下方有依人員、依工作事項的統計表，可選日期範圍；查看紀錄分頁也新增「支援紀錄」可以瀏覽/編輯/刪除；(2)不能跑名單——記錄哪些客戶因為什麼原因不能在哪台機台運作，卡片輸入客戶名稱時只要符合關鍵字就會即時跳出橘色警示提醒換機台，名單本身可以在分頁裡直接新增/刪除，不用透過我；兩項功能都能匯出CSV。試算表需要手動新增3個分頁：SupportRecords、SupportConfig、MachineRestrictions（詳細欄位說明已寫在後端.gs檔案最上方註解），後端.gs也需要重新部署新版本'},
   {v:'v16.2', date:'2026/09/10', d:'修正月/日下拉選單兩位數字被裁切的問題：先前測試時只用「9月」「4日」這種單位數字確認過畫面，沒注意到「12月」「31日」這種兩位數字需要更多寬度，導致「日」字甚至整個消失不見。這次改用最寬的情況（12月、31日）重新測試，統計儀表板跟查看紀錄的自訂日期區間都確認不會再裁切，也確認手機窄螢幕下最擁擠的情況（6個選單＋清除按鈕）加寬後依然能正常換行，不會橫向溢出'},
