@@ -756,7 +756,7 @@
 
 <div class="wrap">
   <div class="topbar">
-    <h1>產線即時監看板 <button class="version-badge" id="version-badge">v17.2</button></h1>
+    <h1>產線即時監看板 <button class="version-badge" id="version-badge">v17.3</button></h1>
     <div class="topbar-right">
       <button class="export-btn" id="settings-btn">設定 API 網址</button>
       <div class="export-date-picker">
@@ -879,7 +879,7 @@
           <input type="text" id="ab-reason-other" placeholder="輸入原因">
         </div>
         <div class="field" id="ab-partno-wrap" style="display:none;">
-          <label>料號</label>
+          <label id="ab-partno-label">料號</label>
           <input type="text" id="ab-partno" placeholder="輸入料號">
         </div>
         <button class="log-submit" id="ab-submit">新增紀錄</button>
@@ -2618,6 +2618,17 @@ async function handleSaveEdit(view, idx){
     }
   });
   if(!API_URL){ alert('尚未設定 API 網址，無法儲存修改。'); return; }
+
+  // 補明細存檔前的提醒：如果照這筆的異常類型，應該要有的欄位還是空的，先跳出提醒，
+  // 不是直接擋下來不給存——「取消」可以回去繼續填，「確定」則是先這樣存起來，之後還是能再回來補。
+  if(view === 'abnormal'){
+    const missing = getAbnormalMissingFields(newValues);
+    if(missing.length){
+      const proceed = confirm(`這筆還缺少「${missing.join('、')}」，確定要先這樣儲存嗎？\n\n按「取消」可以回去繼續填寫。`);
+      if(!proceed) return;
+    }
+  }
+
   // 只是讓使用者知道「現在正在存」，避免網路比較慢時誤以為沒反應；
   // 這裡儲存的是覆蓋同一列，就算真的按兩次也不會變成重複資料，不用像卡片那邊額外做鎖定。
   const saveBtn = tr.querySelector('[data-act="save"]');
@@ -2724,6 +2735,7 @@ document.getElementById('records-switch').addEventListener('click', (e) => {
 
 // ---------- 版本紀錄 ----------
 const VERSION_LOG = [
+  {v:'v17.3', date:'2026/09/23', d:'兩項調整：(1) 補明細存檔時如果還缺該類型應該要有的欄位，會先跳出提醒（例如「這筆還缺少「產地」，確定要先這樣儲存嗎？」），按「取消」可以回去繼續填，按「確定」則是先這樣存起來、之後仍然可以再回來補，不是直接擋死不給存；(2)「料盤毀損」新增可選填的「料號」欄位（原本只有「分料盤落料傾斜」才能填料號），欄位旁邊會標示「選填」，跟「分料盤落料傾斜」那種一定要填的料號做區別'},
   {v:'v17.2', date:'2026/09/23', d:'修正 v17.1 之後桌機上發現的兩個問題（純前端調整，不影響手機，手機原本就正常）：(1) 機台掃碼異常紀錄、支援紀錄・新增這兩處的發生日期，桌機上「2026年」還是會被切到一點點——原因是這排日期欄位在桌機被固定分配到「2個欄位寬度」，換算下來只有70幾px，對某些瀏覽器的字型渲染來說是勉強擦邊，這次讓整排日期欄位在桌機多留一點最小寬度（年/月/日三個還是維持一樣寬，只是整體更寬鬆）；(2) 支援統計的「依人員」「依工作事項」兩張表，桌機上改成左右並排瀏覽，手機維持原本上下的排列方式；順便修正了一個既有的CSS疊層順序問題（手機版的樣式規則寫在桌機版之前，會被桌機版覆蓋掉，這次一併用更保險的方式處理，確保手機版本不會受影響）'},
   {v:'v17.1', date:'2026/09/22', d:'修正 v17.0 上線後發現的幾個問題：(1) 支援紀錄表單的年份選單忘了套用寬度修正，「年」字被裁切，補上；(2)「新增紀錄」「＋新增項目」「＋新增人員」「新增限制」這四個按鈕，點下去後都補上「處理中…」的狀態並暫時鎖住，避免看不出有沒有送出、又點一次造成重複資料；(3) 支援統計表的表頭跟數字對齊方式不一致，看起來像跑位，統一改成靠右對齊；(4) 支援統計新增「匯出支援統計(CSV)」按鈕，可以匯出依人員/依工作事項的加總表；(5)不能跑名單從「支援」分頁移到「異常」分頁，因為它本質上是機台/客戶限制，跟支援紀錄是兩件不相關的事；(6) 修正一個後端真的存在的 bug：SupportRecords 的「日期」欄位沒有被強制存成純文字，導致 Google 試算表把它自動轉成日期格式，讀回來時又被誤判成含時間的欄位、多補了時分（例如顯示成「7/20 16:00」），這次補上修正，但已經存進試算表、已經被污染的舊資料需要手動重新編輯存一次才會恢復正常。這次後端 .gs 有異動，需要重新部署'},
   {v:'v17.0', date:'2026/09/22', d:'新增「支援」分頁，兩大功能：(1) 支援紀錄——記錄操作人員支援其他組別/工作事項的時數，日期會自動帶出星期、支援時數會自動計算並扣除跟12:00-13:00午休重疊的部分（跟機台稼動率算休息時間是不同的規則，已對照妳的實際資料驗證過完全吻合），「支援人員」「工作事項」都是下拉選單，選單旁邊有「＋新增」按鈕可以直接加入新選項不用找我改程式；下方有依人員、依工作事項的統計表，可選日期範圍；查看紀錄分頁也新增「支援紀錄」可以瀏覽/編輯/刪除；(2)不能跑名單——記錄哪些客戶因為什麼原因不能在哪台機台運作，卡片輸入客戶名稱時只要符合關鍵字就會即時跳出橘色警示提醒換機台，名單本身可以在分頁裡直接新增/刪除，不用透過我；兩項功能都能匯出CSV。試算表需要手動新增3個分頁：SupportRecords、SupportConfig、MachineRestrictions（詳細欄位說明已寫在後端.gs檔案最上方註解），後端.gs也需要重新部署新版本'},
@@ -3005,21 +3017,25 @@ document.getElementById('sc-day').innerHTML = dayOptionsHtml('');
 })();
 
 // 異常類型選「料盤毀損」時才顯示「原因」欄位；選「其他」再顯示自行輸入框。
-// 選「分料盤落料傾斜」時，不需要料盤產地，改顯示「料號」欄位。
+// 選「分料盤落料傾斜」時，不需要料盤產地，改顯示「料號」欄位；
+// 「料盤毀損」也可以順便填料號（選填，不是必要），所以這兩種類型都會顯示料號欄位。
 document.getElementById('ab-type').addEventListener('change', (e) => {
   const isDamage = e.target.value === '料盤毀損';
   const isTilt = e.target.value === '分料盤落料傾斜';
+  const showPartNo = isDamage || isTilt;
   document.getElementById('ab-reason-wrap').style.display = isDamage ? '' : 'none';
   document.getElementById('ab-reason-other-wrap').style.display = 'none';
   document.getElementById('ab-origin-wrap').style.display = isTilt ? 'none' : '';
-  document.getElementById('ab-partno-wrap').style.display = isTilt ? '' : 'none';
+  document.getElementById('ab-partno-wrap').style.display = showPartNo ? '' : 'none';
+  document.getElementById('ab-partno-label').textContent = isDamage ? '料號（選填）' : '料號';
   if(!isDamage){
     document.getElementById('ab-reason').value = '';
     document.getElementById('ab-reason-other').value = '';
   }
   if(isTilt){
     document.getElementById('ab-origin').value = '';
-  } else {
+  }
+  if(!showPartNo){
     document.getElementById('ab-partno').value = '';
   }
 });
@@ -3039,7 +3055,7 @@ document.getElementById('ab-submit').addEventListener('click', async () => {
   const reasonSel = document.getElementById('ab-reason').value;
   const reasonOther = document.getElementById('ab-reason-other').value.trim();
   const reason = type === '料盤毀損' ? (reasonSel === '其他' ? reasonOther : reasonSel) : '';
-  const partNo = type === '分料盤落料傾斜' ? document.getElementById('ab-partno').value.trim() : '';
+  const partNo = (type === '分料盤落料傾斜' || type === '料盤毀損') ? document.getElementById('ab-partno').value.trim() : '';
   const hint = document.getElementById('ab-hint');
   if(!year || !month || !day || !machine || !type){
     hint.textContent = '請把發生日期、機台、異常類型都選完再送出。';
@@ -3073,6 +3089,7 @@ document.getElementById('ab-submit').addEventListener('click', async () => {
     document.getElementById('ab-reason-other-wrap').style.display = 'none';
     document.getElementById('ab-origin-wrap').style.display = '';
     document.getElementById('ab-partno-wrap').style.display = 'none';
+    document.getElementById('ab-partno-label').textContent = '料號';
     renderViewer('abnormal', true);
   }catch(err){
     hint.textContent = '新增失敗：' + err;
@@ -3187,18 +3204,27 @@ renderQuickAbnormalGrid();
 
 // 待補明細：機台異常一定要有「料盤產地」，選「料盤毀損」時還要有「原因」；
 // 掃碼異常一定要有 Scan位置、LOT、產地。缺了任一項，就算「待補」。
+// 機台異常紀錄依照異常類型，判斷這筆還缺哪些欄位——
+// 單捲標貼歪不需要產地也不需要原因；料盤載台推擠只需要產地；
+// 料盤毀損產地跟原因都需要（料號是選填，不算缺）；分料盤落料傾斜只需要料號。
+// 待補明細清單、以及補明細時存檔的提醒，共用同一份規則，兩邊才不會兜不起來。
+function getAbnormalMissingFields(r){
+  const missing = [];
+  const type = r['異常類型'];
+  const needOrigin = (type === '料盤載台推擠' || type === '料盤毀損');
+  const needReason = (type === '料盤毀損');
+  const needPartNo = (type === '分料盤落料傾斜');
+  if(needOrigin && !r['料盤產地']) missing.push('產地');
+  if(needReason && !r['原因']) missing.push('原因');
+  if(needPartNo && !r['料號']) missing.push('料號');
+  return missing;
+}
+
 function computePendingDetails(){
   const items = [];
   abnormalLog.forEach(r => {
-    const missing = [];
+    const missing = getAbnormalMissingFields(r);
     const type = r['異常類型'];
-    // 單捲標貼歪不需要產地也不需要原因；料盤載台推擠只需要產地；料盤毀損兩項都需要；分料盤落料傾斜只需要料號。
-    const needOrigin = (type === '料盤載台推擠' || type === '料盤毀損');
-    const needReason = (type === '料盤毀損');
-    const needPartNo = (type === '分料盤落料傾斜');
-    if(needOrigin && !r['料盤產地']) missing.push('產地');
-    if(needReason && !r['原因']) missing.push('原因');
-    if(needPartNo && !r['料號']) missing.push('料號');
     if(missing.length){
       items.push({ kind:'abnormal', machine:r['機台'], label:type, date:r['發生日期'], missing, row:r });
     }
