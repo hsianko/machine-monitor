@@ -414,6 +414,7 @@
     .field-row{grid-template-columns:1fr;}
     .times{grid-template-columns:1fr;}
     .sup-stat-cols{grid-template-columns:1fr !important;}
+    .restriction-cols{grid-template-columns:1fr !important;}
     .field input, .field select, .times .field select, .log-form select, .log-form input{
       font-size:16px;
       padding:10px 10px;
@@ -453,6 +454,7 @@
 
   .field-row{display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:8px;}
   .sup-stat-cols{display:grid; grid-template-columns:1fr 1fr; gap:16px; align-items:start;}
+  .restriction-cols{display:grid; grid-template-columns:1fr 1fr; gap:16px; align-items:start;}
   .field{display:flex; flex-direction:column; gap:3px;}
   .field.full{grid-column:1 / -1;}
   .field label{font-size:10px; color:var(--text-muted); letter-spacing:0.4px;}
@@ -586,18 +588,14 @@
     padding:16px 18px 18px;
   }
   .log-form{display:grid; grid-template-columns:repeat(auto-fit, minmax(110px, 1fr)); gap:8px; align-items:end;}
-  .log-form .field-daterow{grid-column:span 2;}
-  /* 桌機上這排欄位固定佔「2個欄位寬度」，實際換算出來的寬度只有70幾px，
-     「2026年」這5個字在某些瀏覽器的字型渲染下會剛好被切到一點點。
-     年/月/日三個選單本身還是維持一樣寬（之前特別調整過），這裡只是讓整排多留一點最小寬度，
-     兩者不衝突：只在手機沒有的桌機場合加寬，不會影響手機（手機走的是上面423行那條直接佔滿整行的規則）。 */
-  .log-form .field-daterow .time-row{min-width:300px;}
+  /* 日期欄位（年/月/日三個選單）一律獨占整行，不管螢幕多寬、旁邊有幾個欄位在搶空間都一樣，
+     保證有足夠寬度不會被壓縮到裁切或跟旁邊的欄位重疊——之前用「佔2個欄位寬度＋設最小寬度」的做法，
+     實際寬度會因為同一列有幾個欄位、瀏覽器視窗多寬而改變，在不同情況下時好時壞，改成直接獨占整行最保險。 */
+  .log-form .field-daterow{grid-column:1 / -1;}
   /* 這個是「一個下拉選單 + 一顆新增按鈕」的欄位（例如工作事項、支援人員旁邊的「＋新增」），
-     跟上面「年/月/日三個選單」的日期欄位是不同的排版需求，不能共用同一個 class，
-     不然會被上面那條300px的最小寬度規則影響到，把旁邊的欄位擠到重疊。
-     這裡只需要比一般欄位寬一點、讓按鈕跟選單並排顯示得下就好。 */
+     跟上面日期欄位是不同的排版需求，只需要比一般欄位寬一點、讓按鈕跟選單並排顯示得下就好，
+     不需要像日期欄位那樣獨占整行。 */
   .log-form .field-addrow{grid-column:span 2;}
-  .log-form .field-addrow .time-row{min-width:0;}
   .log-form .field label{font-size:10px; color:var(--text-muted);}
   .log-form select, .log-form input{
     background:var(--bg-field); border:1px solid var(--border); border-radius:6px;
@@ -767,7 +765,7 @@
 
 <div class="wrap">
   <div class="topbar">
-    <h1>產線即時監看板 <button class="version-badge" id="version-badge">v17.6</button></h1>
+    <h1>產線即時監看板 <button class="version-badge" id="version-badge">v17.7</button></h1>
     <div class="topbar-right">
       <button class="export-btn" id="settings-btn">設定 API 網址</button>
       <div class="export-date-picker">
@@ -940,27 +938,31 @@
 
     <div class="section-title" style="margin-top:28px;">不能跑名單</div>
     <p class="quick-abn-hint">卡片輸入客戶名稱時，只要符合下面任一筆的關鍵字，就會即時跳出提醒。</p>
-    <div class="log-panel">
-      <div class="log-form" id="restriction-form">
-        <div class="field">
-          <label>客戶關鍵字</label>
-          <input type="text" id="res-customer" placeholder="輸入客戶關鍵字">
+    <div class="restriction-cols">
+      <div class="log-panel">
+        <div class="log-form" id="restriction-form">
+          <div class="field">
+            <label>客戶關鍵字</label>
+            <input type="text" id="res-customer" placeholder="輸入客戶關鍵字">
+          </div>
+          <div class="field">
+            <label>事件／原因</label>
+            <input type="text" id="res-event" placeholder="輸入事件或原因">
+          </div>
+          <div class="field">
+            <label>不能跑的機台</label>
+            <select id="res-machine"></select>
+          </div>
+          <button class="log-submit" id="res-submit">新增限制</button>
         </div>
-        <div class="field">
-          <label>事件／原因</label>
-          <input type="text" id="res-event" placeholder="輸入事件或原因">
-        </div>
-        <div class="field">
-          <label>不能跑的機台</label>
-          <select id="res-machine"></select>
-        </div>
-        <button class="log-submit" id="res-submit">新增限制</button>
+        <div class="log-hint" id="res-hint"></div>
       </div>
-      <div class="log-hint" id="res-hint"></div>
+      <div>
+        <div class="restriction-count" id="restriction-count"></div>
+        <div class="viewer-table-wrap" id="restriction-list"></div>
+        <button class="export-btn" id="res-export-btn" style="margin-top:12px;">匯出不能跑名單 (CSV)</button>
+      </div>
     </div>
-    <div class="restriction-count" id="restriction-count"></div>
-    <div class="viewer-table-wrap" id="restriction-list"></div>
-    <button class="export-btn" id="res-export-btn" style="margin-top:12px;">匯出不能跑名單 (CSV)</button>
   </div>
 
   <div class="tab-content" id="tab-stats" style="display:none;">
@@ -2746,6 +2748,7 @@ document.getElementById('records-switch').addEventListener('click', (e) => {
 
 // ---------- 版本紀錄 ----------
 const VERSION_LOG = [
+  {v:'v17.7', date:'2026/09/24', d:'兩項調整：(1) 徹底解決發生日期跟星期欄位重疊的問題——之前用「佔2個欄位寬度＋設最小寬度」的做法，實際寬度會因為同一列有幾個欄位、瀏覽器視窗多寬而改變，在不同情況下時好時壞，這次改成日期欄位（年/月/日三個選單）不管螢幕多寬都直接獨占整行，不再跟旁邊欄位共用同一列搶空間，保證不會再重疊；(2) 不能跑名單改成左右並排——左邊是新增限制的表單，右邊是清單本身，桌機上比原本上下排列精簡，手機則維持原本上下排列'},
   {v:'v17.6', date:'2026/09/24', d:'修正支援紀錄・新增表單裡三處欄位重疊的問題：發生日期跟星期重疊、工作事項旁的新增按鈕跟開始時間重疊、支援人員旁的新增按鈕跟新增紀錄按鈕重疊。原因是上次修「年被切到」時，把一個原本只設計給「年/月/日三個選單」用的樣式規則，也套用到「工作事項」「支援人員」這兩個「一個選單+一顆新增按鈕」的不同版型欄位上，導致這兩個欄位也被要求跟日期欄位一樣寬，把旁邊的欄位擠到重疊。這次拆成兩個獨立的樣式，日期欄位維持原本的加寬效果，新增按鈕的欄位改用適合自己版型的寬度，兩者不再互相干擾；桌機、手機兩種畫面都截圖確認過'},
   {v:'v17.5', date:'2026/09/24', d:'兩項調整：(1) 支援紀錄的排序改回跟其他分頁一樣新到舊，之前為了配合整批貼歷史資料改過一次舊到新，這次改回統一，瀏覽時比較好對照（那批貼上時出問題的舊資料，之後會直接用監看板手動補key，不用再處理資料本身的顯示問題）；(2) 不能跑名單資料一多會落落長，把整個異常分頁往下撐得很長，改成清單固定高度、超過用內部捲動瀏覽，不會影響整頁的瀏覽動線，上方也加了「共幾筆」的提示'},
   {v:'v17.4', date:'2026/09/24', d:'修正手動貼上歷史資料到 SupportRecords 分頁後出現的日期時間亂碼問題（後端 .gs 有異動，需要重新部署）：手動複製貼上文字到 Google 試算表時，試算表自己會把「2026/7/22」「13:00」這種文字自動解析成日期/時間格式，跟透過監看板表單新增（會強制存成純文字）是不同的路徑，之前的修正方式（用試算表本身的時區去重新換算）在某些試算表時區設定下會算錯（日期跑掉一天、時間也跟著跑掉），這次改成直接讀「儲存格顯示出來的文字」來換算，不再依賴任何時區換算，理論上不管試算表時區怎麼設定都會跟妳親眼看到的一樣（也一併處理了12小時制上午/下午的情況）。另外三項調整：(1)「支援紀錄」在查看紀錄分頁改成依日期由舊到新排序（其他記錄維持新到舊，因為那些是看最近狀況比較重要）；(2) 拿掉「匯出支援統計(CSV)」按鈕，改成沿用最上方「匯出紀錄(CSV)」（支援紀錄其實從 v17.0 就已經包含在裡面了，跟機台產能/異常/掃碼異常紀錄一起匯出成同一個檔案）；(3) 確認「今年只顯示月/日、跨年才顯示完整年份」這個規則本來就是全站共用的顯示邏輯，支援紀錄、機台異常、機台掃碼異常都一體適用，不用另外調整'},
