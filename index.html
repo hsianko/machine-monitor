@@ -756,7 +756,7 @@
 
 <div class="wrap">
   <div class="topbar">
-    <h1>產線即時監看板 <button class="version-badge" id="version-badge">v17.3</button></h1>
+    <h1>產線即時監看板 <button class="version-badge" id="version-badge">v17.4</button></h1>
     <div class="topbar-right">
       <button class="export-btn" id="settings-btn">設定 API 網址</button>
       <div class="export-date-picker">
@@ -1113,7 +1113,6 @@
       <div class="dash-table-wrap" id="sup-stat-person"></div>
       <div class="dash-table-wrap" id="sup-stat-worktype"></div>
     </div>
-    <button class="export-btn" id="sup-stat-export-btn" style="margin-top:12px;">匯出支援統計 (CSV)</button>
   </div>
 
   <div class="save-hint" id="save-hint">載入中...</div>
@@ -2538,8 +2537,11 @@ function renderViewer(view, highlightLast, keepDateFilter){
   if(currentMachineFilter){
     filtered = filtered.filter(r => r[machineKey] === currentMachineFilter);
   }
-  // 依日期＋時間排序（最新在最前面），不管試算表裡實際的列順序是不是亂的都一樣正確。
-  currentViewRows = filtered.slice().sort((a,b) => sortKeyForRow(cfg,b) - sortKeyForRow(cfg,a));
+  // 依日期＋時間排序：大部分紀錄最新在最前面比較方便看最近狀況；
+  // 支援紀錄妳是整批把舊資料貼進來的，看歷史軌跡比較習慣舊到新，所以這裡改成正序。
+  currentViewRows = filtered.slice().sort((a,b) => view === 'support'
+    ? sortKeyForRow(cfg,a) - sortKeyForRow(cfg,b)
+    : sortKeyForRow(cfg,b) - sortKeyForRow(cfg,a));
 
   // 統計列：純畫面顯示用，跟匯出的 CSV 完全無關
   const dupRowKeys = computeDuplicateRowKeys(view, filtered);
@@ -2735,6 +2737,7 @@ document.getElementById('records-switch').addEventListener('click', (e) => {
 
 // ---------- 版本紀錄 ----------
 const VERSION_LOG = [
+  {v:'v17.4', date:'2026/09/24', d:'修正手動貼上歷史資料到 SupportRecords 分頁後出現的日期時間亂碼問題（後端 .gs 有異動，需要重新部署）：手動複製貼上文字到 Google 試算表時，試算表自己會把「2026/7/22」「13:00」這種文字自動解析成日期/時間格式，跟透過監看板表單新增（會強制存成純文字）是不同的路徑，之前的修正方式（用試算表本身的時區去重新換算）在某些試算表時區設定下會算錯（日期跑掉一天、時間也跟著跑掉），這次改成直接讀「儲存格顯示出來的文字」來換算，不再依賴任何時區換算，理論上不管試算表時區怎麼設定都會跟妳親眼看到的一樣（也一併處理了12小時制上午/下午的情況）。另外三項調整：(1)「支援紀錄」在查看紀錄分頁改成依日期由舊到新排序（其他記錄維持新到舊，因為那些是看最近狀況比較重要）；(2) 拿掉「匯出支援統計(CSV)」按鈕，改成沿用最上方「匯出紀錄(CSV)」（支援紀錄其實從 v17.0 就已經包含在裡面了，跟機台產能/異常/掃碼異常紀錄一起匯出成同一個檔案）；(3) 確認「今年只顯示月/日、跨年才顯示完整年份」這個規則本來就是全站共用的顯示邏輯，支援紀錄、機台異常、機台掃碼異常都一體適用，不用另外調整'},
   {v:'v17.3', date:'2026/09/23', d:'兩項調整：(1) 補明細存檔時如果還缺該類型應該要有的欄位，會先跳出提醒（例如「這筆還缺少「產地」，確定要先這樣儲存嗎？」），按「取消」可以回去繼續填，按「確定」則是先這樣存起來、之後仍然可以再回來補，不是直接擋死不給存；(2)「料盤毀損」新增可選填的「料號」欄位（原本只有「分料盤落料傾斜」才能填料號），欄位旁邊會標示「選填」，跟「分料盤落料傾斜」那種一定要填的料號做區別'},
   {v:'v17.2', date:'2026/09/23', d:'修正 v17.1 之後桌機上發現的兩個問題（純前端調整，不影響手機，手機原本就正常）：(1) 機台掃碼異常紀錄、支援紀錄・新增這兩處的發生日期，桌機上「2026年」還是會被切到一點點——原因是這排日期欄位在桌機被固定分配到「2個欄位寬度」，換算下來只有70幾px，對某些瀏覽器的字型渲染來說是勉強擦邊，這次讓整排日期欄位在桌機多留一點最小寬度（年/月/日三個還是維持一樣寬，只是整體更寬鬆）；(2) 支援統計的「依人員」「依工作事項」兩張表，桌機上改成左右並排瀏覽，手機維持原本上下的排列方式；順便修正了一個既有的CSS疊層順序問題（手機版的樣式規則寫在桌機版之前，會被桌機版覆蓋掉，這次一併用更保險的方式處理，確保手機版本不會受影響）'},
   {v:'v17.1', date:'2026/09/22', d:'修正 v17.0 上線後發現的幾個問題：(1) 支援紀錄表單的年份選單忘了套用寬度修正，「年」字被裁切，補上；(2)「新增紀錄」「＋新增項目」「＋新增人員」「新增限制」這四個按鈕，點下去後都補上「處理中…」的狀態並暫時鎖住，避免看不出有沒有送出、又點一次造成重複資料；(3) 支援統計表的表頭跟數字對齊方式不一致，看起來像跑位，統一改成靠右對齊；(4) 支援統計新增「匯出支援統計(CSV)」按鈕，可以匯出依人員/依工作事項的加總表；(5)不能跑名單從「支援」分頁移到「異常」分頁，因為它本質上是機台/客戶限制，跟支援紀錄是兩件不相關的事；(6) 修正一個後端真的存在的 bug：SupportRecords 的「日期」欄位沒有被強制存成純文字，導致 Google 試算表把它自動轉成日期格式，讀回來時又被誤判成含時間的欄位、多補了時分（例如顯示成「7/20 16:00」），這次補上修正，但已經存進試算表、已經被污染的舊資料需要手動重新編輯存一次才會恢復正常。這次後端 .gs 有異動，需要重新部署'},
@@ -3714,50 +3717,6 @@ function renderSupportStats(){
     .map(w => `<tr><td>${escapeHtml(w)}</td><td style="text-align:right;">${byWork[w]}</td></tr>`).join('');
   workEl.innerHTML = workRows ? `<table><tr><th>工作事項</th><th style="text-align:right;">次數</th></tr>${workRows}</table>` : '';
 }
-
-function exportSupportStatsCsv(){
-  const filtered = supportLog.filter(r => supDateInRange(recordDateStr(VIEW_CONFIG.support, r)));
-  if(!filtered.length){ alert('這個日期範圍沒有支援紀錄可以匯出。'); return; }
-
-  const byPerson = {};
-  filtered.forEach(r => {
-    const p = r['支援人員'];
-    if(!p) return;
-    if(!byPerson[p]) byPerson[p] = {count:0, hours:0};
-    byPerson[p].count++;
-    byPerson[p].hours += parseFloat(r['支援時數']) || 0;
-  });
-  const byWork = {};
-  filtered.forEach(r => {
-    const w = r['工作事項'];
-    if(!w) return;
-    byWork[w] = (byWork[w]||0) + 1;
-  });
-
-  let csv = '\uFEFF依支援人員統計\r\n';
-  csv += ['支援人員','支援次數','支援總時數'].map(csvEscape).join(',') + '\r\n';
-  Object.keys(byPerson).sort((a,b)=>byPerson[b].hours-byPerson[a].hours).forEach(p => {
-    csv += [p, byPerson[p].count, byPerson[p].hours.toFixed(1)].map(csvEscape).join(',') + '\r\n';
-  });
-  csv += '\r\n依工作事項統計\r\n';
-  csv += ['工作事項','支援次數'].map(csvEscape).join(',') + '\r\n';
-  Object.keys(byWork).sort((a,b)=>byWork[b]-byWork[a]).forEach(w => {
-    csv += [w, byWork[w]].map(csvEscape).join(',') + '\r\n';
-  });
-
-  const blob = new Blob([csv], {type:'text/csv;charset=utf-8;'});
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  const now = new Date();
-  const pad = n => String(n).padStart(2,'0');
-  a.href = url;
-  a.download = `支援統計_${now.getFullYear()}${pad(now.getMonth()+1)}${pad(now.getDate())}.csv`;
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  URL.revokeObjectURL(url);
-}
-document.getElementById('sup-stat-export-btn').addEventListener('click', exportSupportStatsCsv);
 
 function getDashRecords(){
   const logs = completedLog.filter(r => (!dashMachineFilter || r.machine===dashMachineFilter) && dashDateInRange(recordDateStr(VIEW_CONFIG.log, r)));
