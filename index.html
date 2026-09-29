@@ -612,7 +612,7 @@
     color:var(--text-secondary); font-family:var(--font-mono); font-size:12.5px; padding:6px 8px;
   }
   .restriction-row{
-    display:flex; align-items:center; gap:12px; padding:10px 4px;
+    display:flex; flex-wrap:wrap; align-items:center; gap:8px 12px; padding:10px 4px;
     border-bottom:1px solid var(--border); font-size:13px;
   }
   .restriction-row:last-child{border-bottom:none;}
@@ -623,6 +623,15 @@
     flex-shrink:0; background:none; border:1px solid var(--border-strong); color:var(--m-sanbao);
     font-size:11px; padding:4px 10px; border-radius:6px; cursor:pointer;
   }
+  /* 編輯模式下的三個輸入欄位，跟顯示模式的 .rcust/.revent/.rmachine 用差不多的比例，
+     排版看起來才不會跳動太多；手機螢幕比較窄時會自動換行（上面 flex-wrap:wrap 已經處理）。 */
+  .restriction-row .redit-cust, .restriction-row .redit-event, .restriction-row .redit-machine{
+    background:var(--bg-field); border:1px solid var(--border-strong); border-radius:6px;
+    color:var(--text-primary); font-family:var(--font-mono); font-size:12.5px; padding:6px 8px;
+  }
+  .restriction-row .redit-cust{flex:1; min-width:100px;}
+  .restriction-row .redit-event{flex:1.4; min-width:120px;}
+  .restriction-row .redit-machine{flex-shrink:0; width:70px;}
   .cust-warn{
     margin-top:6px; background:rgba(213,101,74,0.12); border:1px solid var(--m-sanbao);
     border-radius:6px; padding:7px 10px; display:flex; gap:7px; align-items:flex-start;
@@ -765,7 +774,7 @@
 
 <div class="wrap">
   <div class="topbar">
-    <h1>產線即時監看板 <button class="version-badge" id="version-badge">v17.7</button></h1>
+    <h1>產線即時監看板 <button class="version-badge" id="version-badge">v17.8</button></h1>
     <div class="topbar-right">
       <button class="export-btn" id="settings-btn">設定 API 網址</button>
       <div class="export-date-picker">
@@ -2748,6 +2757,7 @@ document.getElementById('records-switch').addEventListener('click', (e) => {
 
 // ---------- 版本紀錄 ----------
 const VERSION_LOG = [
+  {v:'v17.8', date:'2026/09/25', d:'不能跑名單的每一筆新增「編輯」按鈕，不用再打錯字就只能刪除重新輸入——點編輯後該筆會變成三個輸入欄位（客戶關鍵字、事件/原因、機台），改好後按儲存或取消，桌機、手機畫面都確認過排版正常'},
   {v:'v17.7', date:'2026/09/24', d:'兩項調整：(1) 徹底解決發生日期跟星期欄位重疊的問題——之前用「佔2個欄位寬度＋設最小寬度」的做法，實際寬度會因為同一列有幾個欄位、瀏覽器視窗多寬而改變，在不同情況下時好時壞，這次改成日期欄位（年/月/日三個選單）不管螢幕多寬都直接獨占整行，不再跟旁邊欄位共用同一列搶空間，保證不會再重疊；(2) 不能跑名單改成左右並排——左邊是新增限制的表單，右邊是清單本身，桌機上比原本上下排列精簡，手機則維持原本上下排列'},
   {v:'v17.6', date:'2026/09/24', d:'修正支援紀錄・新增表單裡三處欄位重疊的問題：發生日期跟星期重疊、工作事項旁的新增按鈕跟開始時間重疊、支援人員旁的新增按鈕跟新增紀錄按鈕重疊。原因是上次修「年被切到」時，把一個原本只設計給「年/月/日三個選單」用的樣式規則，也套用到「工作事項」「支援人員」這兩個「一個選單+一顆新增按鈕」的不同版型欄位上，導致這兩個欄位也被要求跟日期欄位一樣寬，把旁邊的欄位擠到重疊。這次拆成兩個獨立的樣式，日期欄位維持原本的加寬效果，新增按鈕的欄位改用適合自己版型的寬度，兩者不再互相干擾；桌機、手機兩種畫面都截圖確認過'},
   {v:'v17.5', date:'2026/09/24', d:'兩項調整：(1) 支援紀錄的排序改回跟其他分頁一樣新到舊，之前為了配合整批貼歷史資料改過一次舊到新，這次改回統一，瀏覽時比較好對照（那批貼上時出問題的舊資料，之後會直接用監看板手動補key，不用再處理資料本身的顯示問題）；(2) 不能跑名單資料一多會落落長，把整個異常分頁往下撐得很長，改成清單固定高度、超過用內部捲動瀏覽，不會影響整頁的瀏覽動線，上方也加了「共幾筆」的提示'},
@@ -3464,6 +3474,8 @@ function initRestrictionForm(){
   document.getElementById('res-export-btn').addEventListener('click', exportRestrictionsCsv);
 }
 
+let editingRestrictionRow = null;
+
 function renderRestrictionList(){
   const wrap = document.getElementById('restriction-list');
   const countEl = document.getElementById('restriction-count');
@@ -3473,16 +3485,65 @@ function renderRestrictionList(){
     wrap.innerHTML = '<div class="viewer-empty">目前還沒有任何限制項目。</div>';
     return;
   }
-  wrap.innerHTML = restrictionsLog.map(r => `
+  wrap.innerHTML = restrictionsLog.map(r => {
+    if(editingRestrictionRow === r._row){
+      const machineOpts = ['全部', ...MACHINE_OPTS].map(mk =>
+        `<option value="${mk}"${mk===r['機台']?' selected':''}>${mk}</option>`).join('');
+      return `
+      <div class="restriction-row">
+        <input type="text" class="redit-cust" value="${escapeHtml(r['客戶關鍵字']||'')}" placeholder="客戶關鍵字">
+        <input type="text" class="redit-event" value="${escapeHtml(r['事件']||'')}" placeholder="事件／原因">
+        <select class="redit-machine">${machineOpts}</select>
+        <button class="rdel" data-save-row="${r._row}">儲存</button>
+        <button class="rdel" data-cancel-row="${r._row}">取消</button>
+      </div>`;
+    }
+    return `
     <div class="restriction-row">
       <span class="rcust">${escapeHtml(r['客戶關鍵字']||'')}</span>
       <span class="revent">${escapeHtml(r['事件']||'')}</span>
       <span class="rmachine">${escapeHtml(r['機台']||'')}</span>
+      <button class="rdel" data-edit-row="${r._row}">編輯</button>
       <button class="rdel" data-del-row="${r._row}">刪除</button>
-    </div>`).join('');
+    </div>`;
+  }).join('');
   wrap.querySelectorAll('[data-del-row]').forEach(btn => {
     btn.addEventListener('click', () => deleteRestriction(parseInt(btn.dataset.delRow,10)));
   });
+  wrap.querySelectorAll('[data-edit-row]').forEach(btn => {
+    btn.addEventListener('click', () => { editingRestrictionRow = parseInt(btn.dataset.editRow,10); renderRestrictionList(); });
+  });
+  wrap.querySelectorAll('[data-cancel-row]').forEach(btn => {
+    btn.addEventListener('click', () => { editingRestrictionRow = null; renderRestrictionList(); });
+  });
+  wrap.querySelectorAll('[data-save-row]').forEach(btn => {
+    btn.addEventListener('click', (e) => saveRestrictionEdit(parseInt(e.target.dataset.saveRow,10), e.target));
+  });
+}
+
+async function saveRestrictionEdit(rowNum, btn){
+  const rowEl = btn.closest('.restriction-row');
+  const customer = rowEl.querySelector('.redit-cust').value.trim();
+  const event = rowEl.querySelector('.redit-event').value.trim();
+  const machine = rowEl.querySelector('.redit-machine').value;
+  if(!customer || !machine){
+    alert('客戶關鍵字、機台不能空白。');
+    return;
+  }
+  if(!API_URL){ alert('尚未設定 API 網址，請先點右上角「設定 API 網址」。'); return; }
+  btn.disabled = true;
+  btn.textContent = '儲存中…';
+  try{
+    await apiPost({action:'updateRow', sheet:'MachineRestrictions', row: rowNum, data:{'客戶關鍵字':customer, '事件':event, '機台':machine}});
+    editingRestrictionRow = null;
+    await loadState();
+    renderRestrictionList();
+    render(); // 卡片上的即時提醒要立刻反映最新名單
+  }catch(err){
+    alert('儲存失敗：' + err.message);
+    btn.disabled = false;
+    btn.textContent = '儲存';
+  }
 }
 
 let submitRestrictionBusy = false;
