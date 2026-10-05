@@ -470,6 +470,12 @@
   }
   .field input:focus, .field select:focus{outline:none; border-color:var(--accent);}
 
+  .simple-blocked{
+    text-align:center; padding:60px 20px; color:var(--text-secondary);
+    background:var(--bg-panel); border:1px solid var(--border); border-radius:12px;
+  }
+  .simple-blocked-title{font-size:18px; font-weight:700; color:var(--text-primary); margin-bottom:10px;}
+  .simple-blocked-text{font-size:13px; line-height:1.7;}
   .gauge-wrap{margin:14px 0 12px;}
   .gauge-label{display:flex; justify-content:space-between; font-size:11px; color:var(--text-secondary); margin-bottom:5px;}
   .gauge-label .pct{color:var(--text-primary); font-weight:600;}
@@ -774,7 +780,7 @@
 
 <div class="wrap">
   <div class="topbar">
-    <h1>產線即時監看板 <button class="version-badge" id="version-badge">v17.8</button></h1>
+    <h1>產線即時監看板 <button class="version-badge" id="version-badge">v18.1</button></h1>
     <div class="topbar-right">
       <button class="export-btn" id="settings-btn">設定 API 網址</button>
       <div class="export-date-picker">
@@ -1162,6 +1168,55 @@ const MACHINES = [
   {key:'四寶', accent:'var(--m-sibao)'}
 ];
 
+// 簡化版單機台填報頁面：網址後面帶 ?machine=大寶 這種參數，就只會顯示那一台機台的卡片，
+// 其他機台、統計、紀錄、異常這些跟那台機台無關的東西全部不會出現在畫面上。
+// 這是給機台人員在管理者（柯姐）休假期間自行輸入用的簡化入口，不是另外一個檔案、也不是另一組系統，
+// 跟平常完整版用的是同一份網頁、同一份試算表，只是依照網址參數決定要顯示全部還是只顯示一台。
+const SIMPLE_MODE_MACHINE = (() => {
+  const v = new URLSearchParams(window.location.search).get('machine');
+  return MACHINES.some(m => m.key === v) ? v : null;
+})();
+
+// 簡化版可以額外加上 &from=2026-10-08&to=2026-10-08 這種參數，限制這個網址只有特定日期（或一段期間）能輸入資料，
+// 單日就把 from、to 設一樣；沒有帶這兩個參數就跟以前一樣沒有時間限制。
+// 這是看「裝置本身的日期」判斷的，不是連到伺服器驗證，如果有人手動調裝置日期理論上能繞過去，
+// 只是一般使用情況下足夠擋住非開放日期的輸入，不是滴水不漏的鎖，這點要讓柯姐知道。
+const SIMPLE_MODE_FROM = new URLSearchParams(window.location.search).get('from') || null;
+const SIMPLE_MODE_TO = new URLSearchParams(window.location.search).get('to') || null;
+
+function isSimpleModeDateAllowed(){
+  if(!SIMPLE_MODE_FROM && !SIMPLE_MODE_TO) return true;
+  const now = new Date();
+  const pad = n => String(n).padStart(2,'0');
+  const todayStr = `${now.getFullYear()}-${pad(now.getMonth()+1)}-${pad(now.getDate())}`;
+  if(SIMPLE_MODE_FROM && todayStr < SIMPLE_MODE_FROM) return false;
+  if(SIMPLE_MODE_TO && todayStr > SIMPLE_MODE_TO) return false;
+  return true;
+}
+
+function simpleModeDateRangeLabel(){
+  const toDisplay = s => s.split('-').join('/');
+  if(SIMPLE_MODE_FROM && SIMPLE_MODE_TO && SIMPLE_MODE_FROM === SIMPLE_MODE_TO) return toDisplay(SIMPLE_MODE_FROM);
+  if(SIMPLE_MODE_FROM && SIMPLE_MODE_TO) return `${toDisplay(SIMPLE_MODE_FROM)} ～ ${toDisplay(SIMPLE_MODE_TO)}`;
+  if(SIMPLE_MODE_FROM) return `${toDisplay(SIMPLE_MODE_FROM)} 之後`;
+  return `${toDisplay(SIMPLE_MODE_TO)} 之前`;
+}
+
+function applySimpleModeLayout(){
+  if(!SIMPLE_MODE_MACHINE) return;
+  document.title = `${SIMPLE_MODE_MACHINE}機台填報`;
+  const versionText = document.getElementById('version-badge').textContent;
+  document.querySelector('.topbar h1').innerHTML = `${SIMPLE_MODE_MACHINE} 機台填報 <button class="version-badge" id="version-badge">${versionText}</button>`;
+  // 簡化版不顯示：跨機台的總覽數字、進行中訂單（會看到其他機台的狀態）、分頁籤（異常/統計/紀錄/支援都跟單機台填報無關）、
+  // 匯出功能（這是管理者彙整全部機台資料用的，不是操作人員的工作）。
+  // 「設定 API 網址」保留，因為每台裝置第一次使用時還是需要設定一次，跟平常的完整版一樣。
+  ['overview-bar','running-board','tab-bar','export-btn','pending-section'].forEach(id => {
+    const el = document.getElementById(id);
+    if(el) el.style.display = 'none';
+  });
+  document.querySelectorAll('.export-date-picker').forEach(el => { el.style.display = 'none'; });
+}
+
 const BOX_MIN = 1;
 const BOX_MAX = 1000;
 const TIME_START_MIN = 8*60+30; // 08:30
@@ -1173,7 +1228,7 @@ MACHINES.forEach(m => {
   state[m.key] = {
     customer:'',
     totalBoxes:'', currentBox:'',
-    startTime:'', actualEnd:'', remark:'', jobId:''
+    startTime:'', actualEnd:'', remark:'', jobId:'', filledBy:''
   };
 });
 
@@ -1386,10 +1441,21 @@ function nowComposite(){
 function render(){
   const grid = document.getElementById('grid');
   grid.innerHTML = '';
+  // 簡化版如果有帶 from/to 日期限制，不在開放期間內的話，不顯示卡片，改顯示一段說明文字，
+  // 每次重畫畫面都會重新檢查一次（例如剛好跨過午夜，開放期間變了，不用重新整理頁面就會反映）。
+  if(SIMPLE_MODE_MACHINE && !isSimpleModeDateAllowed()){
+    grid.innerHTML = `<div class="simple-blocked">
+      <div class="simple-blocked-title">目前不在開放輸入的時間</div>
+      <div class="simple-blocked-text">這個連結只開放 ${simpleModeDateRangeLabel()} 可以輸入資料，如果時間不對，請聯繫管理者確認。</div>
+    </div>`;
+    return;
+  }
   const todayY = new Date().getFullYear();
   const todayM = new Date().getMonth()+1;
   const todayD = new Date().getDate();
-  MACHINES.forEach(m => {
+  // 簡化版（網址帶 ?machine=機台名稱）只渲染那一台機台的卡片，其他機台的資料完全不會出現在畫面上。
+  const machinesToRender = SIMPLE_MODE_MACHINE ? MACHINES.filter(m => m.key === SIMPLE_MODE_MACHINE) : MACHINES;
+  machinesToRender.forEach(m => {
     const d = state[m.key];
     const st = computeStatus(m.key);
     const pct = computePct(m.key);
@@ -1421,6 +1487,14 @@ function render(){
         <span class="name">${m.key}</span>
         <span class="status ${st.cls}"><span class="dot"></span>${st.label}</span>
       </div>
+      ${SIMPLE_MODE_MACHINE === m.key ? `
+      <div class="field-row">
+        <div class="field full">
+          <label>填寫人</label>
+          <input type="text" data-k="filledBy" placeholder="輸入你的名字" value="${escapeHtml(d.filledBy||'')}">
+        </div>
+      </div>
+      ` : ''}
       <div class="field-row">
         <div class="field full">
           <label>客戶名稱</label>
@@ -1615,7 +1689,7 @@ function render(){
     const clearBtn = card.querySelector('[data-clear]');
     if(clearBtn) clearBtn.addEventListener('click', () => {
       if(confirm(`確定要清空 ${m.key} 的資料嗎？`)){
-        state[m.key] = { customer:'', totalBoxes:'', currentBox:'', startTime:'', actualEnd:'', remark:'', jobId:'' };
+        state[m.key] = { customer:'', totalBoxes:'', currentBox:'', startTime:'', actualEnd:'', remark:'', jobId:'', filledBy:'' };
         delete crossDayToggle[m.key];
         saveState(m.key);
         render();
@@ -1670,7 +1744,8 @@ function render(){
         const dayBoxes = computeDailyDelta(m.key, dd.customer, dd.totalBoxes, parseFloat(dd.currentBox) || 0, jobId);
         const record = {
           machine:m.key, customer:dd.customer, totalBoxes:dd.totalBoxes, currentBox:dd.currentBox,
-          dayBoxes, startTime:dd.startTime, actualEnd:finishTime, remark:dd.remark, pct:computePct(m.key), jobId, status:'已完成'
+          dayBoxes, startTime:dd.startTime, actualEnd:finishTime, remark:dd.remark, pct:computePct(m.key), jobId, status:'已完成',
+          filledBy:dd.filledBy||''
         };
 
         try{
@@ -1680,7 +1755,7 @@ function render(){
           return;
         }
 
-        state[m.key] = { customer:'', totalBoxes:'', currentBox:'', startTime:'', actualEnd:'', remark:'', jobId:'' };
+        state[m.key] = { customer:'', totalBoxes:'', currentBox:'', startTime:'', actualEnd:'', remark:'', jobId:'', filledBy:'' };
         delete crossDayToggle[m.key];
         await saveState(m.key);
         const syncHint = document.getElementById('save-hint').textContent;
@@ -1719,7 +1794,8 @@ function render(){
         const dayBoxes = computeDailyDelta(m.key, dd.customer, dd.totalBoxes, cur, jobId);
         const record = {
           machine:m.key, customer:dd.customer, totalBoxes:dd.totalBoxes, currentBox:cur,
-          dayBoxes, startTime:dd.startTime, actualEnd:finishTime, remark:dd.remark, pct:computePct(m.key), jobId, status:'進行中'
+          dayBoxes, startTime:dd.startTime, actualEnd:finishTime, remark:dd.remark, pct:computePct(m.key), jobId, status:'進行中',
+          filledBy:dd.filledBy||''
         };
         await saveLog(record);
         // 這張訂單還沒做完，只清開始／結束時間，客戶、箱數、訂單序號都留著，方便明天接續。
@@ -1952,11 +2028,12 @@ async function apiPost(payload){
 // 網頁內部用英文欄位名稱，試算表用中文標題列 -> 這裡做雙向轉換，避免對不上
 const STATE_MAP = {
   customer:'客戶名稱', totalBoxes:'總箱數', currentBox:'目前第幾箱',
-  startTime:'開始作業時間', actualEnd:'實際結束時間', remark:'備註', jobId:'任務序號'
+  startTime:'開始作業時間', actualEnd:'實際結束時間', remark:'備註', jobId:'任務序號', filledBy:'填寫人'
 };
 const LOG_MAP = {
   machine:'機台', customer:'客戶名稱', totalBoxes:'總箱數', currentBox:'完成箱數', dayBoxes:'當日箱數',
-  startTime:'開始作業時間', actualEnd:'實際結束時間', remark:'備註', pct:'完成率', loggedAt:'紀錄時間', jobId:'任務序號', status:'狀態'
+  startTime:'開始作業時間', actualEnd:'實際結束時間', remark:'備註', pct:'完成率', loggedAt:'紀錄時間', jobId:'任務序號', status:'狀態',
+  filledBy:'填寫人'
 };
 
 function toChinese(map, obj){
@@ -2757,6 +2834,8 @@ document.getElementById('records-switch').addEventListener('click', (e) => {
 
 // ---------- 版本紀錄 ----------
 const VERSION_LOG = [
+  {v:'v18.1', date:'2026/10/02', d:'簡化版單機台填報網址新增時效性：後面可以再加 &from=2026-10-08&to=2026-10-08 這種參數，限制這個連結只有特定日期（或一段期間）能輸入資料，單日就把 from、to 設一樣；不帶這兩個參數就跟原本一樣沒有時間限制。不在開放期間內打開連結，會看到清楚的提示訊息（寫明這個連結開放的日期），不會顯示卡片、也不能輸入任何資料。這是看裝置本身的日期判斷，不是連到伺服器驗證，如果有人手動調裝置日期理論上能繞過去，一般使用情況下足夠擋住非開放日期的誤觸，不是滴水不漏的鎖'},
+  {v:'v18.0', date:'2026/10/02', d:'新增「簡化版單機台填報」，解決管理者休假期間沒人能輸入資料的問題：網址後面加上 ?machine=機台名稱（例如 .../?machine=大寶），打開後只會顯示那一台機台的卡片，看板其他三台機台、統計、紀錄、異常、支援這些分頁跟匯出功能都不會出現，機台人員只看得到、只能填自己這一台，不會誤觸到別台的資料。簡化版多了一個「填寫人」欄位（自由輸入姓名），會跟著這筆資料一起存進試算表、也會帶進完成紀錄裡，但不會出現在平常完整版監看板的畫面上，純粹是方便之後萬一要追查某筆資料是誰填的。因為跟完整版是同一份網頁、同一份試算表，只是依照網址參數決定顯示範圍，之後如果要在簡化版加其他功能（例如異常記錄），不會需要換網址，現有的書籤/QR Code 都可以繼續用。試算表需要手動在 State、Log 這兩個分頁各加一欄「填寫人」，後端 .gs 本身不用改程式碼（本來就是依照分頁欄位名稱動態讀寫），但因為文件註解有更新，還是附上最新版 .gs 檔案'},
   {v:'v17.8', date:'2026/09/25', d:'不能跑名單的每一筆新增「編輯」按鈕，不用再打錯字就只能刪除重新輸入——點編輯後該筆會變成三個輸入欄位（客戶關鍵字、事件/原因、機台），改好後按儲存或取消，桌機、手機畫面都確認過排版正常'},
   {v:'v17.7', date:'2026/09/24', d:'兩項調整：(1) 徹底解決發生日期跟星期欄位重疊的問題——之前用「佔2個欄位寬度＋設最小寬度」的做法，實際寬度會因為同一列有幾個欄位、瀏覽器視窗多寬而改變，在不同情況下時好時壞，這次改成日期欄位（年/月/日三個選單）不管螢幕多寬都直接獨占整行，不再跟旁邊欄位共用同一列搶空間，保證不會再重疊；(2) 不能跑名單改成左右並排——左邊是新增限制的表單，右邊是清單本身，桌機上比原本上下排列精簡，手機則維持原本上下排列'},
   {v:'v17.6', date:'2026/09/24', d:'修正支援紀錄・新增表單裡三處欄位重疊的問題：發生日期跟星期重疊、工作事項旁的新增按鈕跟開始時間重疊、支援人員旁的新增按鈕跟新增紀錄按鈕重疊。原因是上次修「年被切到」時，把一個原本只設計給「年/月/日三個選單」用的樣式規則，也套用到「工作事項」「支援人員」這兩個「一個選單+一顆新增按鈕」的不同版型欄位上，導致這兩個欄位也被要求跟日期欄位一樣寬，把旁邊的欄位擠到重疊。這次拆成兩個獨立的樣式，日期欄位維持原本的加寬效果，新增按鈕的欄位改用適合自己版型的寬度，兩者不再互相干擾；桌機、手機兩種畫面都截圖確認過'},
@@ -4510,6 +4589,7 @@ document.getElementById('dash-export-excel').addEventListener('click', exportDas
 document.getElementById('dash-export-word').addEventListener('click', exportDashboardWord);
 document.getElementById('dash-export-pdf').addEventListener('click', exportDashboardPdf);
 
+applySimpleModeLayout();
 tickClock();
 setInterval(tickClock, 1000);
 setInterval(() => {
