@@ -250,6 +250,18 @@
     cursor:pointer;
   }
   .pending-resume-btn:hover{border-color:var(--status-run); color:var(--status-run);}
+  .pending-actions{display:flex; flex-direction:column; gap:6px; flex-shrink:0; align-items:stretch;}
+  .pending-close-btn{
+    background:none;
+    border:1px solid var(--border);
+    color:var(--text-muted);
+    font-family:var(--font-mono);
+    font-size:11px;
+    padding:4px 14px;
+    border-radius:6px;
+    cursor:pointer;
+  }
+  .pending-close-btn:hover{border-color:var(--m-sanbao); color:var(--m-sanbao);}
 
   .overview-bar{
     display:grid;
@@ -821,7 +833,7 @@
 
 <div class="wrap">
   <div class="topbar">
-    <h1>產線即時監看板 <button class="version-badge" id="version-badge">v19.0</button></h1>
+    <h1>產線即時監看板 <button class="version-badge" id="version-badge">v19.1</button></h1>
     <div class="topbar-right">
       <button class="export-btn" id="settings-btn">設定 API 網址</button>
       <button class="export-btn" id="admin-btn">管理者設定</button>
@@ -2474,6 +2486,13 @@ function renderPendingJobs(){
   const body = document.getElementById('pending-board');
   const section = document.getElementById('pending-section');
   if(!body || !section) return;
+  // 簡化版（單機台填報）不顯示這個清單。之前只在啟動時把它藏起來，
+  // 但每次重畫畫面這裡又會把它打開，等於蓋掉隱藏，所以要在這裡就擋住。
+  if(SIMPLE_MODE_MACHINE){
+    section.style.display = 'none';
+    body.innerHTML = '';
+    return;
+  }
   const jobs = findIncompleteJobs();
   if(!jobs.length){
     // 平常不太會遇到「卡住的訂單」，沒有資料時整塊收起來，不佔看板版面。
@@ -2490,7 +2509,10 @@ function renderPendingJobs(){
           <div><span class="pmachine ${escapeHtml(r.machine)}">${escapeHtml(r.machine)}</span>${escapeHtml(r.customer)}</div>
           <div class="pmeta">目前累計 ${escapeHtml(r.currentBox)} 箱${totalText}・最後更新 ${escapeHtml(cleanDisplayTime(r.loggedAt))}</div>
         </div>
-        <button class="pending-resume-btn" data-resume-job="${escapeHtml(r.jobId)}">接續此訂單</button>
+        <div class="pending-actions">
+          <button class="pending-resume-btn" data-resume-job="${escapeHtml(r.jobId)}">接續此訂單</button>
+          <button class="pending-close-btn" data-close-job="${escapeHtml(r.jobId)}" title="這張訂單其實已經做完了，只是紀錄沒有標記完成">結案</button>
+        </div>
       </div>`;
   }).join('');
 }
@@ -2521,7 +2543,33 @@ async function resumeJob(jobId, targetMachine){
   render();
 }
 
+// 「結案」：這張訂單其實早就做完了，只是最後一筆紀錄沒被標記成「已完成」（例如中途換卡片重新輸入、
+// 沒有按「接續此訂單」，後面的箱數記在另一個訂單序號底下），所以一直卡在清單裡。
+// 做法只是把那張訂單「最新一筆紀錄」的狀態改成「已完成」，已經記錄的箱數完全不會變動。
+async function closePendingJob(jobId, btn){
+  let latest = null;
+  completedLog.forEach(r => {
+    if(r.jobId === jobId && (!latest || String(r.loggedAt||'') > String(latest.loggedAt||''))) latest = r;
+  });
+  if(!latest || latest._row === undefined) return;
+  const totalText = latest.totalBoxes ? `／總箱數 ${latest.totalBoxes}` : '';
+  if(!confirm(`確定要把「${latest.machine} ${latest.customer}」（目前累計 ${latest.currentBox} 箱${totalText}）標記為已完成嗎？\n\n標記後這張訂單就不會再出現在「卡住的訂單」裡，已經記錄的箱數不會有任何變動。`)) return;
+  if(!API_URL){ alert('尚未設定 API 網址。'); return; }
+  btn.disabled = true;
+  btn.textContent = '處理中…';
+  try{
+    await apiPost({action:'updateRow', sheet:'Log', row: latest._row, data:{'狀態':'已完成'}});
+    await loadState();
+  }catch(err){
+    alert('結案失敗：' + err.message);
+    btn.disabled = false;
+    btn.textContent = '結案';
+  }
+}
+
 document.getElementById('pending-board').addEventListener('click', (e) => {
+  const closeBtn = e.target.closest('[data-close-job]');
+  if(closeBtn){ closePendingJob(closeBtn.dataset.closeJob, closeBtn); return; }
   const btn = e.target.closest('[data-resume-job]');
   if(!btn) return;
   resumeJob(btn.dataset.resumeJob);
@@ -3023,6 +3071,7 @@ document.getElementById('records-switch').addEventListener('click', (e) => {
 
 // ---------- 版本紀錄 ----------
 const VERSION_LOG = [
+  {v:'v19.1', date:'2026/10/05', d:'兩項修正：(1) 簡化版（單機台填報）不該出現的「卡住的訂單」區塊又跑出來了——原本只在啟動時把它藏起來，但畫面每次重畫時這個區塊會自己重新打開，把隱藏蓋掉，現在改成在重畫的地方就擋住，簡化版永遠不會顯示；(2) 完整版「卡住的訂單」每一筆新增「結案」按鈕：有些訂單其實早就做完了，卻因為中途換卡片重新輸入、沒有按「接續此訂單」，後面的箱數記在另一個訂單序號底下，前面那筆就變成孤兒一直卡在清單裡。按「結案」只會把那張訂單最新一筆紀錄的「狀態」改成已完成，已經記錄的箱數完全不會變動，按之前會先跳出確認'},
   {v:'v19.0', date:'2026/10/05', d:'密碼保護與通行鑰匙（後端 .gs 大改，需要重新部署）：(1) 管理者密碼——在 Apps Script 設定 ADMIN_PASSWORD 之後，完整版第一次打開要輸入密碼（這台裝置會記住），沒有密碼的人讀不到、也寫不進任何資料；(2) 簡化版填報連結改成帶「通行鑰匙」——每個連結綁定一台機台跟開放日期，驗證是在伺服器上做的，改手機日期、改網址上的機台名稱、直接送請求都繞不過去，過了開放日自動失效，管理者也能隨時按「作廢」讓它立刻失效；(3) 簡化版只會從伺服器拿到自己那一台的資料（其他機台、異常、支援的資料完全不會送到操作人員的裝置上），也只能寫入自己那一台；(4) 設定 API 網址旁邊新增「管理者設定」：選機台跟開放日期按「產生連結」就會得到專屬網址與 QR Code（可複製、可下載），下方列出所有連結的狀態（有效中／尚未開始／已過期／已作廢）可以作廢或刪除；(5) 讀取資料改用 POST，密碼與鑰匙不再放在網址裡；(6) 過期、作廢、尚未開放、鑰匙不對時，簡化版畫面會直接說明原因。舊版沒帶鑰匙的簡化版連結，在密碼保護啟用後會失效，需要用管理者設定重新產生新連結。上線順序：先部署新後端、再上傳新網頁、最後才設定 ADMIN_PASSWORD'},
   {v:'v18.1', date:'2026/10/02', d:'簡化版單機台填報網址新增時效性：後面可以再加 &from=2026-10-08&to=2026-10-08 這種參數，限制這個連結只有特定日期（或一段期間）能輸入資料，單日就把 from、to 設一樣；不帶這兩個參數就跟原本一樣沒有時間限制。不在開放期間內打開連結，會看到清楚的提示訊息（寫明這個連結開放的日期），不會顯示卡片、也不能輸入任何資料。這是看裝置本身的日期判斷，不是連到伺服器驗證，如果有人手動調裝置日期理論上能繞過去，一般使用情況下足夠擋住非開放日期的誤觸，不是滴水不漏的鎖'},
   {v:'v18.0', date:'2026/10/02', d:'新增「簡化版單機台填報」，解決管理者休假期間沒人能輸入資料的問題：網址後面加上 ?machine=機台名稱（例如 .../?machine=大寶），打開後只會顯示那一台機台的卡片，看板其他三台機台、統計、紀錄、異常、支援這些分頁跟匯出功能都不會出現，機台人員只看得到、只能填自己這一台，不會誤觸到別台的資料。簡化版多了一個「填寫人」欄位（自由輸入姓名），會跟著這筆資料一起存進試算表、也會帶進完成紀錄裡，但不會出現在平常完整版監看板的畫面上，純粹是方便之後萬一要追查某筆資料是誰填的。因為跟完整版是同一份網頁、同一份試算表，只是依照網址參數決定顯示範圍，之後如果要在簡化版加其他功能（例如異常記錄），不會需要換網址，現有的書籤/QR Code 都可以繼續用。試算表需要手動在 State、Log 這兩個分頁各加一欄「填寫人」，後端 .gs 本身不用改程式碼（本來就是依照分頁欄位名稱動態讀寫），但因為文件註解有更新，還是附上最新版 .gs 檔案'},
