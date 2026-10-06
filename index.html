@@ -436,6 +436,7 @@
     .time-row select{font-size:13px !important;}
     .log-form .field-daterow{grid-column:1 / -1;}
     .log-form .field-addrow{grid-column:1 / -1;}
+    .log-form .field-wide{grid-column:1 / -1;}
   }
 
   .card{
@@ -655,6 +656,10 @@
      跟上面日期欄位是不同的排版需求，只需要比一般欄位寬一點、讓按鈕跟選單並排顯示得下就好，
      不需要像日期欄位那樣獨占整行。 */
   .log-form .field-addrow{grid-column:span 2;}
+  /* 選項文字比較長的下拉選單（例如「分料盤落料傾斜」七個字），佔 2 個欄位寬度，才不會被截掉。 */
+  .log-form .field-wide{grid-column:span 2;}
+  /* 不能跑名單的新增表單：每個欄位各自一行，輸入框可以拉寬。 */
+  #restriction-form{grid-template-columns:1fr;}
   .log-form .field label{font-size:10px; color:var(--text-muted);}
   .log-form select, .log-form input{
     background:var(--bg-field); border:1px solid var(--border); border-radius:6px;
@@ -833,7 +838,7 @@
 
 <div class="wrap">
   <div class="topbar">
-    <h1>產線即時監看板 <button class="version-badge" id="version-badge">v19.2</button></h1>
+    <h1>產線即時監看板 <button class="version-badge" id="version-badge">v19.3</button></h1>
     <div class="topbar-right">
       <button class="export-btn" id="settings-btn">設定 API 網址</button>
       <button class="export-btn" id="admin-btn">管理者設定</button>
@@ -924,7 +929,7 @@
           <label>機台</label>
           <select id="ab-machine"></select>
         </div>
-        <div class="field">
+        <div class="field field-wide">
           <label>異常類型</label>
           <select id="ab-type">
             <option value="">請選擇</option>
@@ -3084,6 +3089,7 @@ document.getElementById('records-switch').addEventListener('click', (e) => {
 
 // ---------- 版本紀錄 ----------
 const VERSION_LOG = [
+  {v:'v19.3', date:'2026/10/06', d:'兩項版面調整（純前端）：(1) 機台異常紀錄的「異常類型」下拉選單，「分料盤落料傾斜」七個字被截掉看不到完整，改成這個欄位佔 2 個欄位寬度（手機上本來就是整行寬，不受影響）；(2) 不能跑名單的新增表單改成每個欄位各自一行（客戶關鍵字、事件／原因、不能跑的機台、新增限制按鈕），輸入框可以拉得比較寬'},
   {v:'v19.2', date:'2026/10/05', d:'修正簡化版填好的「填寫人」，在完整版操作後會變成空白的問題（後端 .gs 有異動，需要重新部署）。找到兩個原因：(1) 完整版按「接續此訂單」時，重建卡片資料漏帶了填寫人；(2) 更根本的原因是完整版沒有填寫人欄位，但每次存檔都會把「它記憶體裡的整列資料」寫回試算表，如果完整版是早就開著的舊畫面（手機分頁放在背景再切回來特別常見），記憶體裡的填寫人還是空的，就會把簡化版剛填好的名字蓋成空白。修正方式：完整版平常存檔時完全不碰填寫人（後端遇到請求裡沒帶的欄位會保持試算表原本的內容），只有「清空卡片」「完成訂單」這種真的要清掉它的操作才會明確清除；「接續此訂單」會保留名字；完整版讀取資料時，填寫人永遠以伺服器為準；另外手機分頁從背景切回來的當下會立刻更新一次資料，減少拿舊資料操作的機會'},
   {v:'v19.1', date:'2026/10/05', d:'兩項修正：(1) 簡化版（單機台填報）不該出現的「卡住的訂單」區塊又跑出來了——原本只在啟動時把它藏起來，但畫面每次重畫時這個區塊會自己重新打開，把隱藏蓋掉，現在改成在重畫的地方就擋住，簡化版永遠不會顯示；(2) 完整版「卡住的訂單」每一筆新增「結案」按鈕：有些訂單其實早就做完了，卻因為中途換卡片重新輸入、沒有按「接續此訂單」，後面的箱數記在另一個訂單序號底下，前面那筆就變成孤兒一直卡在清單裡。按「結案」只會把那張訂單最新一筆紀錄的「狀態」改成已完成，已經記錄的箱數完全不會變動，按之前會先跳出確認'},
   {v:'v19.0', date:'2026/10/05', d:'密碼保護與通行鑰匙（後端 .gs 大改，需要重新部署）：(1) 管理者密碼——在 Apps Script 設定 ADMIN_PASSWORD 之後，完整版第一次打開要輸入密碼（這台裝置會記住），沒有密碼的人讀不到、也寫不進任何資料；(2) 簡化版填報連結改成帶「通行鑰匙」——每個連結綁定一台機台跟開放日期，驗證是在伺服器上做的，改手機日期、改網址上的機台名稱、直接送請求都繞不過去，過了開放日自動失效，管理者也能隨時按「作廢」讓它立刻失效；(3) 簡化版只會從伺服器拿到自己那一台的資料（其他機台、異常、支援的資料完全不會送到操作人員的裝置上），也只能寫入自己那一台；(4) 設定 API 網址旁邊新增「管理者設定」：選機台跟開放日期按「產生連結」就會得到專屬網址與 QR Code（可複製、可下載），下方列出所有連結的狀態（有效中／尚未開始／已過期／已作廢）可以作廢或刪除；(5) 讀取資料改用 POST，密碼與鑰匙不再放在網址裡；(6) 過期、作廢、尚未開放、鑰匙不對時，簡化版畫面會直接說明原因。舊版沒帶鑰匙的簡化版連結，在密碼保護啟用後會失效，需要用管理者設定重新產生新連結。上線順序：先部署新後端、再上傳新網頁、最後才設定 ADMIN_PASSWORD'},
