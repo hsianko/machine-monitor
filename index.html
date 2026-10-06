@@ -548,7 +548,14 @@
     margin:-4px 0 8px;
     font-size:11.5px;
   }
-  .resume-hint.show{display:flex;}
+  .resume-hint.show{display:flex; position:relative; padding-right:42px;}
+  .resume-hint .resume-hint-close{
+    position:absolute; top:4px; right:4px;
+    width:32px; height:32px; padding:0; line-height:1;
+    background:none; border:none; color:var(--status-run); opacity:0.75;
+    font-size:14px; border-radius:6px; cursor:pointer;
+  }
+  .resume-hint .resume-hint-close:hover{opacity:1; background:rgba(76,175,109,0.18);}
   .resume-hint.multi{flex-direction:column; align-items:stretch;}
   .resume-hint .resume-hint-text{color:var(--status-run);}
   .resume-hint button{
@@ -838,7 +845,7 @@
 
 <div class="wrap">
   <div class="topbar">
-    <h1>產線即時監看板 <button class="version-badge" id="version-badge">v19.3</button></h1>
+    <h1>產線即時監看板 <button class="version-badge" id="version-badge">v19.4</button></h1>
     <div class="topbar-right">
       <button class="export-btn" id="settings-btn">設定 API 網址</button>
       <button class="export-btn" id="admin-btn">管理者設定</button>
@@ -1632,7 +1639,12 @@ function render(){
     const pendingTotal = !d.totalBoxes && parseFloat(d.currentBox) > 0;
     // 偵測未完成訂單時，不限制同一台機台——訂單常常會換機台接力做完，所以全部機台都要一起找。
     // 同一個客戶名稱可能同時有好幾張未完成訂單，全部抓出來讓使用者自己選要接哪一筆。
-    const incompleteMatches = (!d.jobId && d.customer)
+    // 提示只在「這張卡片還沒開始做」的時候才有意義：已經填了「目前第幾箱」（開始作業了），
+    // 就代表使用者已經決定這是另一張新訂單，再問「要接續嗎？」只會一直干擾；
+    // 另外使用者按過提示右上角的 ✕，同一個客戶名稱就不再跳出來（換客戶、清空、完成之後才會重新提示）。
+    const cardStarted = parseFloat(d.currentBox) > 0;
+    const hintDismissed = isResumeHintDismissed(m.key, d.customer);
+    const incompleteMatches = (!d.jobId && d.customer && !cardStarted && !hintDismissed)
       ? findIncompleteJobs().filter(r => r.customer === d.customer)
       : [];
 
@@ -1661,6 +1673,7 @@ function render(){
         </div>
       </div>
       <div class="resume-hint${incompleteMatches.length ? ' show' : ''}${incompleteMatches.length > 1 ? ' multi' : ''}">
+        ${incompleteMatches.length ? `<button class="resume-hint-close" data-hint-close="${m.key}" title="不再提示這個客戶" aria-label="關閉提示">✕</button>` : ''}
         ${incompleteMatches.length === 1 ? `
         <span class="resume-hint-text">⚠ 偵測到「${escapeHtml(d.customer)}」${incompleteMatches[0].machine === m.key ? '在本機台' : `在${incompleteMatches[0].machine}`}有未完成的訂單（累計 ${incompleteMatches[0].currentBox} 箱），要接續${incompleteMatches[0].machine === m.key ? '' : `到${m.key}`}嗎？</span>
         <button data-inline-resume="${escapeHtml(incompleteMatches[0].jobId)}" data-inline-resume-machine="${m.key}">接續此訂單</button>
@@ -1796,6 +1809,9 @@ function render(){
     card.querySelectorAll('[data-inline-resume]').forEach(btn => {
       btn.addEventListener('click', () => resumeJob(btn.dataset.inlineResume, btn.dataset.inlineResumeMachine));
     });
+    card.querySelectorAll('[data-hint-close]').forEach(btn => {
+      btn.addEventListener('click', () => { dismissResumeHint(m.key, state[m.key].customer); render(); });
+    });
 
     // 日期只需要選一次（預設就是今天），開始/結束時間各自只留時間選單；
     // 不管是改日期、改開始時間、還是改結束時間，都用同一套邏輯重新組合成完整的日期時間存進去。
@@ -1849,6 +1865,7 @@ function render(){
       if(confirm(`確定要清空 ${m.key} 的資料嗎？`)){
         state[m.key] = { customer:'', totalBoxes:'', currentBox:'', startTime:'', actualEnd:'', remark:'', jobId:'', filledBy:'' };
         delete crossDayToggle[m.key];
+        clearResumeHintDismiss(m.key);
         saveState(m.key, {writeFilledBy:true});
         render();
       }
@@ -1915,6 +1932,7 @@ function render(){
 
         state[m.key] = { customer:'', totalBoxes:'', currentBox:'', startTime:'', actualEnd:'', remark:'', jobId:'', filledBy:'' };
         delete crossDayToggle[m.key];
+        clearResumeHintDismiss(m.key);
         await saveState(m.key, {writeFilledBy:true});
         const syncHint = document.getElementById('save-hint').textContent;
         if(syncHint.indexOf('失敗') !== -1){
@@ -2308,6 +2326,9 @@ async function loadState(){
     const json = await apiLoad();
     if(json.lockActive !== undefined) LOCK_ACTIVE = json.lockActive;
     SIMPLE_AUTH_ERROR = '';
+    serverActiveJobIds = new Set(json.activeJobIds || []);
+    jobOverrides = {};
+    (json.jobOverrides || []).forEach(o => { jobOverrides[o.jobId] = o; });
     if(json.state){
       MACHINES.forEach(m => {
         const stillDirty = dirtyUntil[m.key] && Date.now() < dirtyUntil[m.key];
@@ -2464,8 +2485,33 @@ function tickClock(){
 // 目前正掛在某台機台卡片上（不管是待命前的輸入中、還是已經在進行中）的訂單序號集合。
 // 只要訂單序號還留在某台機台的卡片上，就代表這張訂單目前有人正在處理，
 // 不算是「卡在半路、需要提示接續」的未完成訂單——即使它的紀錄還沒被標記完成、箱數也還沒補滿。
+// 簡化版只拿得到自己這台的資料，別台機台的卡片、紀錄看不到，所以伺服器會另外告訴它：
+//   serverActiveJobIds：這台碰過的訂單，目前正掛在別台機台的卡片上；
+//   jobOverrides：這台碰過的訂單，全部機台加起來「最新一筆」的狀態與箱數（只有最新那筆不在這台時才有）。
+// 完整版自己就有全部資料，這兩個都是空的。
+const HINT_DISMISS_KEY = 'monitor-board-dismissed-resume-hints';
+function loadDismissedHints(){
+  try{ return JSON.parse(sessionStorage.getItem(HINT_DISMISS_KEY) || '{}'); }catch(e){ return {}; }
+}
+function isResumeHintDismissed(machine, customer){
+  const v = loadDismissedHints()[machine];
+  return !!customer && v === customer;
+}
+function dismissResumeHint(machine, customer){
+  const all = loadDismissedHints();
+  all[machine] = customer;
+  try{ sessionStorage.setItem(HINT_DISMISS_KEY, JSON.stringify(all)); }catch(e){}
+}
+function clearResumeHintDismiss(machine){
+  const all = loadDismissedHints();
+  delete all[machine];
+  try{ sessionStorage.setItem(HINT_DISMISS_KEY, JSON.stringify(all)); }catch(e){}
+}
+let serverActiveJobIds = new Set();
+let jobOverrides = {};
+
 function getActiveJobIds(){
-  const ids = new Set();
+  const ids = new Set(serverActiveJobIds);
   MACHINES.forEach(m => {
     const jobId = state[m.key] && state[m.key].jobId;
     if(jobId) ids.add(jobId);
@@ -2482,6 +2528,12 @@ function findIncompleteJobs(){
     if(!existing || String(r.loggedAt||'') > String(existing.loggedAt||'')){
       latestByJob[r.jobId] = r;
     }
+  });
+  // 套用伺服器告知的「別台機台上更新的紀錄」，才不會把已經在別台做完的訂單誤判成還沒做完。
+  Object.keys(jobOverrides).forEach(id => {
+    if(!latestByJob[id]) return;
+    const o = jobOverrides[id];
+    latestByJob[id] = Object.assign({}, latestByJob[id], {status:o.status, currentBox:o.currentBox, totalBoxes:o.totalBoxes, loggedAt:o.loggedAt});
   });
   return Object.values(latestByJob)
     .filter(r => {
@@ -3089,6 +3141,7 @@ document.getElementById('records-switch').addEventListener('click', (e) => {
 
 // ---------- 版本紀錄 ----------
 const VERSION_LOG = [
+  {v:'v19.4', date:'2026/10/06', d:'修正簡化版明明沒有未完成的訂單，卻一直跳出綠色「偵測到未完成的訂單，要接續嗎？」的問題（後端 .gs 有異動，需要重新部署）。原因：訂單常常會換機台接力做完（用「接續此訂單」，沿用同一個訂單序號），但簡化版只拿得到自己這台的紀錄，如果訂單在這台做了一部分、後來在別台做完，完成的那筆紀錄在別台，簡化版看不到，就誤以為還停在這台沒做完（完整版有全部機台的資料，所以不會誤判）。現在伺服器會針對「這台碰過的訂單」，額外告訴簡化版它在別台的最新狀態、以及是否正掛在別台的卡片上，兩者都不含客戶名稱與機台名稱，不會洩漏其他機台的內容。另外兩項調整：(1) 提示框右上角新增 ✕ 可以關閉，關閉後同一個客戶名稱就不再跳出（換客戶、清空卡片、完成訂單之後才會重新提示，重新整理頁面不會又跳出來）；(2) 卡片只要已經填了「目前第幾箱」（開始作業了），就不再顯示這個提示，因為這時再問要不要接續只會干擾'},
   {v:'v19.3', date:'2026/10/06', d:'兩項版面調整（純前端）：(1) 機台異常紀錄的「異常類型」下拉選單，「分料盤落料傾斜」七個字被截掉看不到完整，改成這個欄位佔 2 個欄位寬度（手機上本來就是整行寬，不受影響）；(2) 不能跑名單的新增表單改成每個欄位各自一行（客戶關鍵字、事件／原因、不能跑的機台、新增限制按鈕），輸入框可以拉得比較寬'},
   {v:'v19.2', date:'2026/10/05', d:'修正簡化版填好的「填寫人」，在完整版操作後會變成空白的問題（後端 .gs 有異動，需要重新部署）。找到兩個原因：(1) 完整版按「接續此訂單」時，重建卡片資料漏帶了填寫人；(2) 更根本的原因是完整版沒有填寫人欄位，但每次存檔都會把「它記憶體裡的整列資料」寫回試算表，如果完整版是早就開著的舊畫面（手機分頁放在背景再切回來特別常見），記憶體裡的填寫人還是空的，就會把簡化版剛填好的名字蓋成空白。修正方式：完整版平常存檔時完全不碰填寫人（後端遇到請求裡沒帶的欄位會保持試算表原本的內容），只有「清空卡片」「完成訂單」這種真的要清掉它的操作才會明確清除；「接續此訂單」會保留名字；完整版讀取資料時，填寫人永遠以伺服器為準；另外手機分頁從背景切回來的當下會立刻更新一次資料，減少拿舊資料操作的機會'},
   {v:'v19.1', date:'2026/10/05', d:'兩項修正：(1) 簡化版（單機台填報）不該出現的「卡住的訂單」區塊又跑出來了——原本只在啟動時把它藏起來，但畫面每次重畫時這個區塊會自己重新打開，把隱藏蓋掉，現在改成在重畫的地方就擋住，簡化版永遠不會顯示；(2) 完整版「卡住的訂單」每一筆新增「結案」按鈕：有些訂單其實早就做完了，卻因為中途換卡片重新輸入、沒有按「接續此訂單」，後面的箱數記在另一個訂單序號底下，前面那筆就變成孤兒一直卡在清單裡。按「結案」只會把那張訂單最新一筆紀錄的「狀態」改成已完成，已經記錄的箱數完全不會變動，按之前會先跳出確認'},
