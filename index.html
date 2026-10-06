@@ -833,7 +833,7 @@
 
 <div class="wrap">
   <div class="topbar">
-    <h1>產線即時監看板 <button class="version-badge" id="version-badge">v19.1</button></h1>
+    <h1>產線即時監看板 <button class="version-badge" id="version-badge">v19.2</button></h1>
     <div class="topbar-right">
       <button class="export-btn" id="settings-btn">設定 API 網址</button>
       <button class="export-btn" id="admin-btn">管理者設定</button>
@@ -1844,7 +1844,7 @@ function render(){
       if(confirm(`確定要清空 ${m.key} 的資料嗎？`)){
         state[m.key] = { customer:'', totalBoxes:'', currentBox:'', startTime:'', actualEnd:'', remark:'', jobId:'', filledBy:'' };
         delete crossDayToggle[m.key];
-        saveState(m.key);
+        saveState(m.key, {writeFilledBy:true});
         render();
       }
     });
@@ -1910,7 +1910,7 @@ function render(){
 
         state[m.key] = { customer:'', totalBoxes:'', currentBox:'', startTime:'', actualEnd:'', remark:'', jobId:'', filledBy:'' };
         delete crossDayToggle[m.key];
-        await saveState(m.key);
+        await saveState(m.key, {writeFilledBy:true});
         const syncHint = document.getElementById('save-hint').textContent;
         if(syncHint.indexOf('失敗') !== -1){
           alert('提醒：完成紀錄已經確實存進機台產能記錄了，但清空這張卡片時同步失敗（可能是網路瞬間不穩）。畫面可能還會顯示舊資料，麻煩重新整理一次，如果還是沒清空，再點一次「清空本機台資料」即可，不會影響已經存好的紀錄。');
@@ -2247,12 +2247,18 @@ function fromChinese(map, obj){
 let dirtyUntil = {};
 const DIRTY_GRACE_MS = 25000;
 
-async function saveState(machine){
+async function saveState(machine, opts){
   const hint = document.getElementById('save-hint');
   dirtyUntil[machine] = Date.now() + DIRTY_GRACE_MS;
   if(!API_URL){ hint.textContent = '尚未設定 API 網址，資料暫時只存在畫面上'; return; }
   try{
-    await apiPost({action:'saveState', machine: machine, data: toChinese(STATE_MAP, state[machine])});
+    const data = toChinese(STATE_MAP, state[machine]);
+    // 完整版沒有「填寫人」欄位，平常存檔時完全不碰它（後端遇到沒帶的欄位會保持原樣）。
+    // 不然完整版記憶體裡如果是舊資料（例如手機切回來的舊分頁），整列寫回去就會把簡化版剛填好的名字蓋成空白。
+    // 只有「清空卡片」「完成訂單」「接續訂單」這種真的要改動它的操作，才會明確帶上來（writeFilledBy）。
+    // 簡化版本身就有這個欄位可以輸入，一律照常帶。
+    if(!SIMPLE_MODE_MACHINE && !(opts && opts.writeFilledBy)) delete data['填寫人'];
+    await apiPost({action:'saveState', machine: machine, data});
     hint.textContent = '已同步至試算表 · ' + fmtClock();
   }catch(err){
     hint.textContent = '同步失敗，請檢查網路或 API 網址：' + err;
@@ -2300,7 +2306,12 @@ async function loadState(){
     if(json.state){
       MACHINES.forEach(m => {
         const stillDirty = dirtyUntil[m.key] && Date.now() < dirtyUntil[m.key];
-        if(stillDirty) return; // 最近才本機修改過，先不要用伺服器資料覆蓋
+        if(stillDirty){
+          // 最近才本機修改過，先不要用伺服器資料覆蓋。
+          // 但完整版沒有填寫人欄位、使用者不可能在本機改它，所以永遠以伺服器為準（簡化版填的名字才不會被舊資料擋住）。
+          if(!SIMPLE_MODE_MACHINE && json.state[m.key]) state[m.key].filledBy = fromChinese(STATE_MAP, json.state[m.key]).filledBy;
+          return;
+        }
         if(json.state[m.key]) state[m.key] = Object.assign(state[m.key], fromChinese(STATE_MAP, json.state[m.key]));
       });
     }
@@ -2534,11 +2545,13 @@ async function resumeJob(jobId, targetMachine){
     const ok = confirm(`${machine} 卡片目前有其他資料（${state[machine].customer}），接續這張訂單會覆蓋掉。確定要繼續嗎？`);
     if(!ok) return;
   }
+  // 填寫人：卡片上本來就有填的就保留，沒有的話沿用那張訂單紀錄上的（誰最初填的），不要被清成空白。
   state[machine] = {
     customer:r.customer, totalBoxes:r.totalBoxes||'', currentBox:r.currentBox||'',
-    startTime:'', actualEnd:'', remark:'', jobId:jobId
+    startTime:'', actualEnd:'', remark:'', jobId:jobId,
+    filledBy: state[machine].filledBy || r.filledBy || ''
   };
-  await saveState(machine);
+  await saveState(machine, {writeFilledBy:true});
   await loadState();
   render();
 }
@@ -3071,6 +3084,7 @@ document.getElementById('records-switch').addEventListener('click', (e) => {
 
 // ---------- 版本紀錄 ----------
 const VERSION_LOG = [
+  {v:'v19.2', date:'2026/10/05', d:'修正簡化版填好的「填寫人」，在完整版操作後會變成空白的問題（後端 .gs 有異動，需要重新部署）。找到兩個原因：(1) 完整版按「接續此訂單」時，重建卡片資料漏帶了填寫人；(2) 更根本的原因是完整版沒有填寫人欄位，但每次存檔都會把「它記憶體裡的整列資料」寫回試算表，如果完整版是早就開著的舊畫面（手機分頁放在背景再切回來特別常見），記憶體裡的填寫人還是空的，就會把簡化版剛填好的名字蓋成空白。修正方式：完整版平常存檔時完全不碰填寫人（後端遇到請求裡沒帶的欄位會保持試算表原本的內容），只有「清空卡片」「完成訂單」這種真的要清掉它的操作才會明確清除；「接續此訂單」會保留名字；完整版讀取資料時，填寫人永遠以伺服器為準；另外手機分頁從背景切回來的當下會立刻更新一次資料，減少拿舊資料操作的機會'},
   {v:'v19.1', date:'2026/10/05', d:'兩項修正：(1) 簡化版（單機台填報）不該出現的「卡住的訂單」區塊又跑出來了——原本只在啟動時把它藏起來，但畫面每次重畫時這個區塊會自己重新打開，把隱藏蓋掉，現在改成在重畫的地方就擋住，簡化版永遠不會顯示；(2) 完整版「卡住的訂單」每一筆新增「結案」按鈕：有些訂單其實早就做完了，卻因為中途換卡片重新輸入、沒有按「接續此訂單」，後面的箱數記在另一個訂單序號底下，前面那筆就變成孤兒一直卡在清單裡。按「結案」只會把那張訂單最新一筆紀錄的「狀態」改成已完成，已經記錄的箱數完全不會變動，按之前會先跳出確認'},
   {v:'v19.0', date:'2026/10/05', d:'密碼保護與通行鑰匙（後端 .gs 大改，需要重新部署）：(1) 管理者密碼——在 Apps Script 設定 ADMIN_PASSWORD 之後，完整版第一次打開要輸入密碼（這台裝置會記住），沒有密碼的人讀不到、也寫不進任何資料；(2) 簡化版填報連結改成帶「通行鑰匙」——每個連結綁定一台機台跟開放日期，驗證是在伺服器上做的，改手機日期、改網址上的機台名稱、直接送請求都繞不過去，過了開放日自動失效，管理者也能隨時按「作廢」讓它立刻失效；(3) 簡化版只會從伺服器拿到自己那一台的資料（其他機台、異常、支援的資料完全不會送到操作人員的裝置上），也只能寫入自己那一台；(4) 設定 API 網址旁邊新增「管理者設定」：選機台跟開放日期按「產生連結」就會得到專屬網址與 QR Code（可複製、可下載），下方列出所有連結的狀態（有效中／尚未開始／已過期／已作廢）可以作廢或刪除；(5) 讀取資料改用 POST，密碼與鑰匙不再放在網址裡；(6) 過期、作廢、尚未開放、鑰匙不對時，簡化版畫面會直接說明原因。舊版沒帶鑰匙的簡化版連結，在密碼保護啟用後會失效，需要用管理者設定重新產生新連結。上線順序：先部署新後端、再上傳新網頁、最後才設定 ADMIN_PASSWORD'},
   {v:'v18.1', date:'2026/10/02', d:'簡化版單機台填報網址新增時效性：後面可以再加 &from=2026-10-08&to=2026-10-08 這種參數，限制這個連結只有特定日期（或一段期間）能輸入資料，單日就把 from、to 設一樣；不帶這兩個參數就跟原本一樣沒有時間限制。不在開放期間內打開連結，會看到清楚的提示訊息（寫明這個連結開放的日期），不會顯示卡片、也不能輸入任何資料。這是看裝置本身的日期判斷，不是連到伺服器驗證，如果有人手動調裝置日期理論上能繞過去，一般使用情況下足夠擋住非開放日期的誤觸，不是滴水不漏的鎖'},
@@ -5091,6 +5105,11 @@ document.getElementById('dash-export-word').addEventListener('click', exportDash
 document.getElementById('dash-export-pdf').addEventListener('click', exportDashboardPdf);
 
 applySimpleModeLayout();
+// 手機把分頁放到背景再切回來時，畫面上的資料常常已經過期（背景分頁的自動更新會被暫停），
+// 這時候馬上操作就容易拿舊資料去覆蓋新資料，所以切回來的當下立刻更新一次。
+document.addEventListener('visibilitychange', () => {
+  if(!document.hidden) loadState();
+});
 tickClock();
 setInterval(tickClock, 1000);
 setInterval(() => {
