@@ -3,6 +3,16 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<script id="theme-init">
+(function(){
+  var t = null;
+  try{ t = localStorage.getItem('monitor-board-theme'); }catch(e){}
+  if(t !== 'light' && t !== 'dark'){
+    t = (window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches) ? 'light' : 'dark';
+  }
+  document.documentElement.setAttribute('data-theme', t);
+})();
+</script>
 <title>產線即時監看板</title>
 <meta name="robots" content="noindex, nofollow, noarchive">
 <meta name="googlebot" content="noindex, nofollow">
@@ -33,11 +43,62 @@
     --m-erbao:#3f9088;
     --m-sanbao:#d5654a;
     --m-sibao:#7b8ce0;
+    --amber:#e8a33d; --amber-rgb:232,163,61;
+    --red:#d5654a; --red-rgb:213,101,74;
+    --green:#4caf6d; --green-rgb:76,175,109;
+    --blue:#4a90d9; --blue-rgb:74,144,217;
+    --stripe:#262c34;
+    --overlay:rgba(0,0,0,0.6);
+    --shadow-lg:0 24px 64px rgba(0,0,0,0.55);
+    --shadow-md:0 8px 24px rgba(0,0,0,0.4);
+    color-scheme:dark;
     --radius:10px;
     --font-display:'Arial Narrow', 'Segoe UI', 'PingFang TC', 'Microsoft JhengHei', sans-serif;
     --font-mono:'Consolas', 'Menlo', 'Monaco', 'Noto Sans Mono CJK TC', monospace;
     font-family:var(--font-mono);
   }
+  /* ===== 淺色主題：只覆蓋顏色變數，版面完全不動。
+     琥珀、綠、紅、藍這幾個強調色在白底上要調深一點，不然會太淡看不清楚。===== */
+  :root[data-theme="light"]{
+    color-scheme:light;
+    --bg-page:#f3f4f6;
+    --bg-panel:#ffffff;
+    --bg-field:#f0f2f5;
+    --border:#dde1e7;
+    --border-strong:#c3cad3;
+    --text-primary:#1c2026;
+    --text-secondary:#555e6b;
+    --text-muted:#727b87;
+    --status-idle:#9aa2ad;
+    --status-run:#23804a;
+    --status-done:#2f6fb8;
+    --m-daibao:#a8680a;
+    --m-erbao:#27726b;
+    --m-sanbao:#c4472d;
+    --m-sibao:#4f59c0;
+    --amber:#a8680a; --amber-rgb:168,104,10;
+    --red:#c4472d; --red-rgb:196,71,45;
+    --green:#23804a; --green-rgb:35,128,74;
+    --blue:#2f6fb8; --blue-rgb:47,111,184;
+    --stripe:#e3e6eb;
+    --overlay:rgba(20,24,30,0.45);
+    --shadow-lg:0 24px 64px rgba(20,24,30,0.22);
+    --shadow-md:0 8px 24px rgba(20,24,30,0.16);
+  }
+  /* 深淺色切換鈕（放在版本號旁邊） */
+  .theme-toggle{
+    display:inline-flex; align-items:center; gap:2px; padding:2px; flex-shrink:0;
+    background:var(--bg-field); border:1px solid var(--border-strong); border-radius:999px; cursor:pointer;
+  }
+  .theme-toggle:hover{border-color:var(--status-run);}
+  .theme-toggle span{
+    width:26px; height:22px; display:flex; align-items:center; justify-content:center;
+    border-radius:999px; font-size:13px; line-height:1; opacity:0.5;
+    transition:background .2s, opacity .2s;
+  }
+  :root[data-theme="dark"] .theme-toggle .tt-moon{opacity:1; background:var(--border-strong);}
+  :root[data-theme="light"] .theme-toggle .tt-sun{opacity:1; background:#ffffff; box-shadow:0 1px 3px rgba(20,24,30,0.25);}
+
   *{box-sizing:border-box;}
   html, body{margin:0; padding:0;}
   body{
@@ -93,7 +154,7 @@
     display:none;
     position:fixed;
     inset:0;
-    background:rgba(0,0,0,0.6);
+    background:var(--overlay);
     z-index:100;
     align-items:center;
     justify-content:center;
@@ -109,7 +170,7 @@
     max-height:82vh;
     display:flex;
     flex-direction:column;
-    box-shadow:0 24px 64px rgba(0,0,0,0.55);
+    box-shadow:var(--shadow-lg);
   }
   .version-modal.wide{max-width:920px;}
   .dash-controls{display:flex; flex-wrap:wrap; gap:14px; align-items:center; margin-bottom:12px;}
@@ -150,11 +211,11 @@
   .dash-card .dc-total-label{font-size:10px; color:var(--text-muted); margin-bottom:8px;}
   .dash-card .dc-sub{display:flex; justify-content:space-between; font-size:11px; color:var(--text-secondary); padding-top:6px; border-top:1px solid var(--border);}
   .dash-table-wrap .level{font-size:10.5px; padding:2px 8px; border-radius:999px; font-weight:600;}
-  .level-high{background:rgba(213,101,74,0.18); color:#d5654a;}
-  .level-mid{background:rgba(232,163,61,0.18); color:#e8a33d;}
-  .level-normal{background:rgba(76,175,109,0.18); color:#4caf6d;}
-  .dash-insight{background:rgba(232,163,61,0.08); border:1px solid rgba(232,163,61,0.3); border-radius:8px; padding:10px 14px; font-size:11.5px; color:var(--text-secondary); line-height:1.7; margin-top:10px;}
-  .dash-insight b{color:#e8a33d;}
+  .level-high{background:rgba(var(--red-rgb),0.18); color:var(--red);}
+  .level-mid{background:rgba(var(--amber-rgb),0.18); color:var(--amber);}
+  .level-normal{background:rgba(var(--green-rgb),0.18); color:var(--green);}
+  .dash-insight{background:rgba(var(--amber-rgb),0.08); border:1px solid rgba(var(--amber-rgb),0.3); border-radius:8px; padding:10px 14px; font-size:11.5px; color:var(--text-secondary); line-height:1.7; margin-top:10px;}
+  .dash-insight b{color:var(--amber);}
   .version-modal-head{
     display:flex;
     align-items:center;
@@ -178,7 +239,7 @@
     padding:6px 10px;
     border-radius:8px;
   }
-  .modal-close-x:hover{background:var(--bg-field); color:#d5654a;}
+  .modal-close-x:hover{background:var(--bg-field); color:var(--red);}
   .version-modal-body{
     padding:8px 20px 20px;
     overflow-y:auto;
@@ -226,7 +287,7 @@
     font-size:13px;
   }
   .pending-row:last-child{border-bottom:none;}
-  .pending-row.eta-warn{background:rgba(213,101,74,0.08); margin:0 -4px; padding-left:8px; padding-right:8px; border-radius:6px;}
+  .pending-row.eta-warn{background:rgba(var(--red-rgb),0.08); margin:0 -4px; padding-left:8px; padding-right:8px; border-radius:6px;}
   .eta-box{flex-shrink:0; text-align:right; white-space:nowrap;}
   .eta-label{font-size:10.5px; color:var(--text-muted);}
   .pending-row.eta-warn .eta-label{color:var(--m-sanbao);}
@@ -460,9 +521,9 @@
     background:var(--bg-field); color:var(--text-secondary); letter-spacing:0.5px;
   }
   .status .dot{width:7px;height:7px;border-radius:50%; background:var(--status-idle); flex-shrink:0;}
-  .status.run .dot{background:var(--status-run); box-shadow:0 0 0 3px rgba(76,175,109,0.18);}
+  .status.run .dot{background:var(--status-run); box-shadow:0 0 0 3px rgba(var(--green-rgb),0.18);}
   .status.run{color:var(--status-run);}
-  .status.done .dot{background:var(--status-done); box-shadow:0 0 0 3px rgba(74,144,217,0.18);}
+  .status.done .dot{background:var(--status-done); box-shadow:0 0 0 3px rgba(var(--blue-rgb),0.18);}
   .status.done{color:var(--status-done);}
 
   .field-row{display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:8px;}
@@ -496,7 +557,7 @@
   .admin-hint{font-size:11px; color:var(--text-muted); line-height:1.6; margin:8px 0 0;}
   .admin-lock-status{font-size:12px; margin-bottom:10px; line-height:1.6;}
   .admin-lock-status.ok{color:var(--status-run);}
-  .admin-lock-status.warn{color:#e8a33d;}
+  .admin-lock-status.warn{color:var(--amber);}
   .admin-result{
     display:flex; gap:16px; align-items:center; flex-wrap:wrap; margin-top:14px;
     background:var(--bg-page); border:1px solid var(--border); border-radius:8px; padding:14px;
@@ -517,7 +578,7 @@
   .key-row .kperiod{flex:1; min-width:110px; color:var(--text-primary);}
   .key-row .kstate{width:64px; font-size:12px;}
   .key-row .kstate.active{color:var(--status-run);}
-  .key-row .kstate.pending{color:#e8a33d;}
+  .key-row .kstate.pending{color:var(--amber);}
   .key-row .kstate.expired, .key-row .kstate.revoked{color:var(--text-muted);}
   .key-row .kbtn{
     background:none; border:1px solid var(--border-strong); color:var(--text-secondary);
@@ -533,16 +594,16 @@
   .gauge-wrap{margin:14px 0 12px;}
   .gauge-label{display:flex; justify-content:space-between; font-size:11px; color:var(--text-secondary); margin-bottom:5px;}
   .gauge-label .pct{color:var(--text-primary); font-weight:600;}
-  .qty-warning{color:#d5654a; font-weight:700; font-size:11.5px; margin-top:6px;}
-  .qty-overflow{color:#d5654a; font-weight:700;}
+  .qty-warning{color:var(--red); font-weight:700; font-size:11.5px; margin-top:6px;}
+  .qty-overflow{color:var(--red); font-weight:700;}
   .resume-hint{
     display:none;
     align-items:center;
     justify-content:space-between;
     flex-wrap:wrap;
     gap:8px;
-    background:rgba(76,175,109,0.10);
-    border:1px solid rgba(76,175,109,0.35);
+    background:rgba(var(--green-rgb),0.10);
+    border:1px solid rgba(var(--green-rgb),0.35);
     border-radius:8px;
     padding:8px 12px;
     margin:-4px 0 8px;
@@ -555,7 +616,8 @@
     background:none; border:none; color:var(--status-run); opacity:0.75;
     font-size:14px; border-radius:6px; cursor:pointer;
   }
-  .resume-hint .resume-hint-close:hover{opacity:1; background:rgba(76,175,109,0.18);}
+  .resume-hint .resume-hint-close:hover{opacity:1; background:rgba(var(--green-rgb),0.18);}
+  :root[data-theme="light"] .resume-hint .resume-hint-close{opacity:1;}
   .resume-hint.multi{flex-direction:column; align-items:stretch;}
   .resume-hint .resume-hint-text{color:var(--status-run);}
   .resume-hint button{
@@ -577,7 +639,7 @@
   .resume-hint-row + .resume-hint-row{
     margin-top:6px;
     padding-top:6px;
-    border-top:1px dashed rgba(76,175,109,0.35);
+    border-top:1px dashed rgba(var(--green-rgb),0.35);
   }
   .qty-pending{
     display:flex;
@@ -585,16 +647,16 @@
     justify-content:space-between;
     flex-wrap:wrap;
     gap:6px;
-    background:rgba(232,163,61,0.10);
-    border:1px solid rgba(232,163,61,0.35);
+    background:rgba(var(--amber-rgb),0.10);
+    border:1px solid rgba(var(--amber-rgb),0.35);
     border-radius:8px;
     padding:9px 12px;
   }
-  .qty-pending-num{font-size:15px; font-weight:700; color:#e8a33d;}
+  .qty-pending-num{font-size:15px; font-weight:700; color:var(--amber);}
   .qty-pending-note{font-size:10.5px; color:var(--text-muted);}
   .gauge-track{
     position:relative; height:16px;
-    background:repeating-linear-gradient(135deg, var(--bg-field), var(--bg-field) 6px, #262c34 6px, #262c34 12px);
+    background:repeating-linear-gradient(135deg, var(--bg-field), var(--bg-field) 6px, var(--stripe) 6px, var(--stripe) 12px);
     border:1px solid var(--border); border-radius:4px; overflow:hidden;
   }
   .gauge-fill{position:absolute; top:0; left:0; bottom:0; background:var(--accent); transition:width 0.3s ease;}
@@ -624,7 +686,7 @@
   .details-badge{
     font-size:11px;
     color:var(--m-daibao);
-    background:rgba(232,163,61,0.12);
+    background:rgba(var(--amber-rgb),0.12);
     padding:2px 8px;
     border-radius:999px;
   }
@@ -641,7 +703,7 @@
     background:none; border:none; color:var(--text-muted);
     font-size:10.5px; font-family:var(--font-mono); cursor:pointer; padding:2px 4px; text-decoration:underline;
   }
-  .clear-btn:hover{color:#d5654a;}
+  .clear-btn:hover{color:var(--red);}
   .done-btn{
     background:var(--bg-field); border:1px solid var(--border-strong); color:var(--text-primary);
     font-family:var(--font-mono); font-size:11px; padding:6px 10px; border-radius:6px; cursor:pointer;
@@ -704,7 +766,7 @@
   .restriction-row .redit-event{flex:1.4; min-width:120px;}
   .restriction-row .redit-machine{flex-shrink:0; width:70px;}
   .cust-warn{
-    margin-top:6px; background:rgba(213,101,74,0.12); border:1px solid var(--m-sanbao);
+    margin-top:6px; background:rgba(var(--red-rgb),0.12); border:1px solid var(--m-sanbao);
     border-radius:6px; padding:7px 10px; display:flex; gap:7px; align-items:flex-start;
     color:var(--m-sanbao); font-size:11.5px; line-height:1.5;
   }
@@ -725,7 +787,7 @@
     max-width:calc(100vw - 32px);
     padding:6px;
     z-index:20;
-    box-shadow:0 8px 24px rgba(0,0,0,0.4);
+    box-shadow:var(--shadow-md);
   }
   .menu-list.open{display:block;}
   .menu-list button{
@@ -757,8 +819,8 @@
   .viewer-close{background:none; border:none; color:var(--text-muted); font-size:11px; cursor:pointer; text-decoration:underline;}
   .date-tabs{display:flex; flex-wrap:wrap; gap:6px; margin-bottom:12px;}
   .data-notice{
-    background:rgba(232,163,61,0.08);
-    border:1px solid rgba(232,163,61,0.35);
+    background:rgba(var(--amber-rgb),0.08);
+    border:1px solid rgba(var(--amber-rgb),0.35);
     border-radius:8px;
     padding:10px 14px;
     margin-bottom:16px;
@@ -766,7 +828,7 @@
   .data-notice p{
     margin:2px 0;
     font-size:11.5px;
-    color:#e8a33d;
+    color:var(--amber);
     line-height:1.6;
   }
   .date-tab{
@@ -793,12 +855,12 @@
   .viewer-stats.show{display:flex; flex-wrap:wrap;}
   .viewer-stats .stats-muted{color:var(--text-muted); font-size:10.5px;}
   .viewer-stats b{font-size:15px; color:var(--text-primary);}
-  .viewer-stats b.stats-accent{color:#e8a33d;}
+  .viewer-stats b.stats-accent{color:var(--amber);}
   .viewer-stats .stats-dup-warn{color:var(--m-sanbao); font-weight:700; font-size:12.5px;}
-  .remark-filter-btn.active{border-color:#e8a33d; color:#e8a33d;}
-  table.viewer-table tr.remark-row{background:rgba(232,163,61,0.10);}
+  .remark-filter-btn.active{border-color:var(--amber); color:var(--amber);}
+  table.viewer-table tr.remark-row{background:rgba(var(--amber-rgb),0.10);}
   table.viewer-table .remark-icon{margin-right:5px;}
-  table.viewer-table tr.dup-row{background:rgba(213,101,74,0.16);}
+  table.viewer-table tr.dup-row{background:rgba(var(--red-rgb),0.16);}
   table.viewer-table .dup-icon{margin-right:5px; color:var(--m-sanbao); cursor:help;}
   .date-tab:hover{border-color:var(--text-secondary);}
   .viewer-table-wrap{overflow-x:auto;}
@@ -811,7 +873,7 @@
     text-align:left; padding:6px 8px; border-bottom:1px solid var(--border); white-space:nowrap;
   }
   table.viewer-table th{color:var(--text-muted); font-weight:500; font-size:10.5px;}
-  table.viewer-table tr.new-row{background:rgba(76,175,109,0.12);}
+  table.viewer-table tr.new-row{background:rgba(var(--green-rgb),0.12);}
   .viewer-empty{color:var(--text-muted); font-size:11.5px; padding:6px 2px;}
   table.viewer-table td button{
     background:var(--bg-field);
@@ -825,7 +887,7 @@
   }
   table.viewer-table td button:hover{border-color:var(--status-run); color:var(--status-run);}
   table.viewer-table td[data-act="del"], table.viewer-table td button[data-act="del"]{}
-  table.viewer-table button[data-act="del"]:hover{border-color:#d5654a; color:#d5654a;}
+  table.viewer-table button[data-act="del"]:hover{border-color:var(--red); color:var(--red);}
   table.viewer-table td select, table.viewer-table td input{
     background:var(--bg-field);
     border:1px solid var(--border);
@@ -845,7 +907,7 @@
 
 <div class="wrap">
   <div class="topbar">
-    <h1>產線即時監看板 <button class="version-badge" id="version-badge">v19.4</button></h1>
+    <h1>產線即時監看板 <button class="version-badge" id="version-badge">v20.0</button><button class="theme-toggle" id="theme-toggle" type="button" aria-label="切換深色／淺色" title="切換深色／淺色"><span class="tt-moon">🌙</span><span class="tt-sun">☀️</span></button></h1>
     <div class="topbar-right">
       <button class="export-btn" id="settings-btn">設定 API 網址</button>
       <button class="export-btn" id="admin-btn">管理者設定</button>
@@ -1362,8 +1424,8 @@ function simpleModeDateRangeLabel(){
 function applySimpleModeLayout(){
   if(!SIMPLE_MODE_MACHINE) return;
   document.title = `${SIMPLE_MODE_MACHINE}機台填報`;
-  const versionText = document.getElementById('version-badge').textContent;
-  document.querySelector('.topbar h1').innerHTML = `${SIMPLE_MODE_MACHINE} 機台填報 <button class="version-badge" id="version-badge">${versionText}</button>`;
+  // 只換標題的文字，不整個重建：版本號按鈕、深淺色切換鈕都留在原本的位置、按鈕的功能也不會被蓋掉。
+  document.querySelector('.topbar h1').firstChild.textContent = `${SIMPLE_MODE_MACHINE} 機台填報 `;
   // 簡化版不顯示：跨機台的總覽數字、進行中訂單（會看到其他機台的狀態）、分頁籤（異常/統計/紀錄/支援都跟單機台填報無關）、
   // 匯出功能（這是管理者彙整全部機台資料用的，不是操作人員的工作）。
   // 「設定 API 網址」保留，因為每台裝置第一次使用時還是需要設定一次，跟平常的完整版一樣。
@@ -3141,6 +3203,7 @@ document.getElementById('records-switch').addEventListener('click', (e) => {
 
 // ---------- 版本紀錄 ----------
 const VERSION_LOG = [
+  {v:'v20.0', date:'2026/10/06', d:'新增深色／淺色切換：版本號旁邊多了一個 🌙☀️ 切換鈕，完整版與簡化版都有。預設跟著裝置本身的深淺色設定（手機或電腦的外觀模式），按過切換鈕之後這台裝置就會記住選擇，下次打開不用再切；每台裝置各自記住、互不影響。如果沒有手動選過，裝置的深淺色設定改變時（例如手機晚上自動切成深色），畫面也會跟著變。整個網頁都會變，包含統計圖表、各種彈窗、提示框、下拉選單。淺色底上琥珀、綠、紅這幾個強調色會自動調深一點，不然太淡看不清楚。匯出的 Word／PDF 報表固定維持原本的配色，不受影響。順便修正：簡化版原本會把版本號按鈕重建而失去點擊功能，現在可以正常點開版本紀錄'},
   {v:'v19.4', date:'2026/10/06', d:'修正簡化版明明沒有未完成的訂單，卻一直跳出綠色「偵測到未完成的訂單，要接續嗎？」的問題（後端 .gs 有異動，需要重新部署）。原因：訂單常常會換機台接力做完（用「接續此訂單」，沿用同一個訂單序號），但簡化版只拿得到自己這台的紀錄，如果訂單在這台做了一部分、後來在別台做完，完成的那筆紀錄在別台，簡化版看不到，就誤以為還停在這台沒做完（完整版有全部機台的資料，所以不會誤判）。現在伺服器會針對「這台碰過的訂單」，額外告訴簡化版它在別台的最新狀態、以及是否正掛在別台的卡片上，兩者都不含客戶名稱與機台名稱，不會洩漏其他機台的內容。另外兩項調整：(1) 提示框右上角新增 ✕ 可以關閉，關閉後同一個客戶名稱就不再跳出（換客戶、清空卡片、完成訂單之後才會重新提示，重新整理頁面不會又跳出來）；(2) 卡片只要已經填了「目前第幾箱」（開始作業了），就不再顯示這個提示，因為這時再問要不要接續只會干擾'},
   {v:'v19.3', date:'2026/10/06', d:'兩項版面調整（純前端）：(1) 機台異常紀錄的「異常類型」下拉選單，「分料盤落料傾斜」七個字被截掉看不到完整，改成這個欄位佔 2 個欄位寬度（手機上本來就是整行寬，不受影響）；(2) 不能跑名單的新增表單改成每個欄位各自一行（客戶關鍵字、事件／原因、不能跑的機台、新增限制按鈕），輸入框可以拉得比較寬'},
   {v:'v19.2', date:'2026/10/05', d:'修正簡化版填好的「填寫人」，在完整版操作後會變成空白的問題（後端 .gs 有異動，需要重新部署）。找到兩個原因：(1) 完整版按「接續此訂單」時，重建卡片資料漏帶了填寫人；(2) 更根本的原因是完整版沒有填寫人欄位，但每次存檔都會把「它記憶體裡的整列資料」寫回試算表，如果完整版是早就開著的舊畫面（手機分頁放在背景再切回來特別常見），記憶體裡的填寫人還是空的，就會把簡化版剛填好的名字蓋成空白。修正方式：完整版平常存檔時完全不碰填寫人（後端遇到請求裡沒帶的欄位會保持試算表原本的內容），只有「清空卡片」「完成訂單」這種真的要清掉它的操作才會明確清除；「接續此訂單」會保留名字；完整版讀取資料時，填寫人永遠以伺服器為準；另外手機分頁從背景切回來的當下會立刻更新一次資料，減少拿舊資料操作的機會'},
@@ -4269,10 +4332,13 @@ function exportRestrictionsCsv(){
 initRestrictionForm();
 
 // ---------- 統計儀表板 ----------
-const MACHINE_COLORS = {'大寶':'#e8a33d','二寶':'#3f9088','三寶':'#d5654a','四寶':'#7b8ce0'};
+// 匯出報表（Word／PDF）用的機台顏色，固定這一組，不管畫面現在是深色還是淺色，報表都長一樣。
+const EXPORT_MACHINE_COLORS = {'大寶':'#e8a33d','二寶':'#3f9088','三寶':'#d5654a','四寶':'#7b8ce0'};
+// 畫面上用的機台顏色：會跟著深淺色主題更新（淺色底上要用深一點的顏色才看得清楚）。
+const MACHINE_COLORS = Object.assign({}, EXPORT_MACHINE_COLORS);
 const AVAILABLE_HOURS_PER_DAY = 7.5; // 標準班表下的可作業時數，僅在當天完全沒有時間紀錄時當備用分母；一般情況下可作業時數是依當天實際窗口動態計算的
-const CHART_TEXT_COLOR = '#9099a6';
-const CHART_GRID_COLOR = '#2b313a';
+let CHART_TEXT_COLOR = '#9099a6';
+let CHART_GRID_COLOR = '#2b313a';
 
 let dashRange = {start:null, end:null, label:'近7天'};
 let dashMachineFilter = null;
@@ -4805,7 +4871,7 @@ function renderDashboard(){
   // 每天的長條高度就是達成率本身（不是箱數），達標(≥100%)顯示綠色、沒達標顯示橘色，
   // 搭配100%參考線，滑過長條會顯示精確的百分比，不用像箱數圖表那樣自己心算比對目標。
   if(chartAchievement) chartAchievement.destroy();
-  const achieveColors = achievementTrend.rates.map(r => r >= 100 ? '#3fb86a' : '#e8a33d');
+  const achieveColors = achievementTrend.rates.map(r => r >= 100 ? themeColor('--status-run') : themeColor('--amber'));
   chartAchievement = new Chart(document.getElementById('dash-chart-achievement'), {
     data:{ labels: achievementTrend.labels, datasets:[
       { type:'bar', label:'達成率(%)', data: achievementTrend.rates, backgroundColor: achieveColors, borderRadius:4, order:2 },
@@ -4917,7 +4983,17 @@ function renderChartForExport(config, width, height){
   return img;
 }
 
+// 報表要用固定的顏色，不跟著畫面的深淺色主題走：建立報表的當下先把機台顏色換成固定那組，建完立刻還原。
 function buildDashReportHtml(){
+  const savedColors = Object.assign({}, MACHINE_COLORS);
+  Object.assign(MACHINE_COLORS, EXPORT_MACHINE_COLORS);
+  try{
+    return buildDashReportHtmlInner();
+  }finally{
+    Object.assign(MACHINE_COLORS, savedColors);
+  }
+}
+function buildDashReportHtmlInner(){
   const {logs, abns, scans} = getDashRecords();
   const uptimeStats = computeUptimeStats(logs);
   const abnStats = computeAbnormalStats(abns, scans, logs);
@@ -5163,6 +5239,63 @@ document.getElementById('dash-export-excel').addEventListener('click', exportDas
 document.getElementById('dash-export-word').addEventListener('click', exportDashboardWord);
 document.getElementById('dash-export-pdf').addEventListener('click', exportDashboardPdf);
 
+// ---------- 深色／淺色主題 ----------
+// 預設跟著裝置本身的設定（手機或電腦的深色／淺色模式）；使用者按過切換鈕之後，這台裝置就記住選擇。
+// 每台裝置各自記住，不會互相影響。進頁面時最早的套用在 <head> 的 theme-init，避免畫面先閃一下深色。
+const THEME_KEY = 'monitor-board-theme';
+function themeColor(name){
+  return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+}
+function getSavedTheme(){
+  try{
+    const t = localStorage.getItem(THEME_KEY);
+    return (t === 'light' || t === 'dark') ? t : null;
+  }catch(e){ return null; }
+}
+function getSystemTheme(){
+  return (window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches) ? 'light' : 'dark';
+}
+function getCurrentTheme(){
+  return document.documentElement.getAttribute('data-theme') === 'light' ? 'light' : 'dark';
+}
+// 圖表的顏色是在「建立圖表的當下」決定的，不是 CSS，所以主題換了要把這幾個顏色更新，再重畫圖表。
+function syncThemeColors(){
+  MACHINE_COLORS['大寶'] = themeColor('--m-daibao');
+  MACHINE_COLORS['二寶'] = themeColor('--m-erbao');
+  MACHINE_COLORS['三寶'] = themeColor('--m-sanbao');
+  MACHINE_COLORS['四寶'] = themeColor('--m-sibao');
+  CHART_TEXT_COLOR = themeColor('--text-secondary');
+  CHART_GRID_COLOR = themeColor('--border');
+}
+function applyTheme(theme){
+  document.documentElement.setAttribute('data-theme', theme);
+  const meta = document.querySelector('meta[name="theme-color"]');
+  if(meta) meta.setAttribute('content', theme === 'light' ? '#f3f4f6' : '#14171c');
+  const btn = document.getElementById('theme-toggle');
+  if(btn){
+    btn.setAttribute('aria-pressed', theme === 'light' ? 'true' : 'false');
+    btn.title = theme === 'light' ? '目前是淺色，點一下切換成深色' : '目前是深色，點一下切換成淺色';
+  }
+  syncThemeColors();
+  const stats = document.getElementById('tab-stats');
+  if(stats && stats.style.display !== 'none') renderDashboard();
+  const adminOverlay = document.getElementById('admin-overlay');
+  if(adminOverlay && adminOverlay.classList.contains('open')) renderAdminKeyList();
+}
+function toggleTheme(){
+  const next = getCurrentTheme() === 'light' ? 'dark' : 'light';
+  try{ localStorage.setItem(THEME_KEY, next); }catch(e){}
+  applyTheme(next);
+}
+document.getElementById('theme-toggle').addEventListener('click', toggleTheme);
+// 沒有手動選過的話，裝置本身的深淺色設定改變時（例如手機到了晚上自動切深色），畫面跟著變。
+if(window.matchMedia){
+  const mq = window.matchMedia('(prefers-color-scheme: light)');
+  const onSystemThemeChange = () => { if(!getSavedTheme()) applyTheme(getSystemTheme()); };
+  if(mq.addEventListener) mq.addEventListener('change', onSystemThemeChange);
+  else if(mq.addListener) mq.addListener(onSystemThemeChange);
+}
+applyTheme(getCurrentTheme());
 applySimpleModeLayout();
 // 手機把分頁放到背景再切回來時，畫面上的資料常常已經過期（背景分頁的自動更新會被暫停），
 // 這時候馬上操作就容易拿舊資料去覆蓋新資料，所以切回來的當下立刻更新一次。
