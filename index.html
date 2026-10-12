@@ -963,7 +963,7 @@
 
 <div class="wrap">
   <div class="topbar">
-    <h1>產線即時監看板 <button class="version-badge" id="version-badge">v20.10</button><button class="theme-toggle" id="theme-toggle" type="button" aria-label="切換深色／淺色" title="切換深色／淺色"><span class="tt-moon">🌙</span><span class="tt-sun">☀️</span></button></h1>
+    <h1>產線即時監看板 <button class="version-badge" id="version-badge">v20.11</button><button class="theme-toggle" id="theme-toggle" type="button" aria-label="切換深色／淺色" title="切換深色／淺色"><span class="tt-moon">🌙</span><span class="tt-sun">☀️</span></button></h1>
     <div class="topbar-right">
       <button class="export-btn" id="settings-btn">設定 API 網址</button>
       <button class="export-btn" id="admin-btn">管理者設定</button>
@@ -2087,6 +2087,16 @@ function render(){
       }
       if(changed) saveState(m.key);
     }
+    cardCommitters[m.key] = commitCardInputs;
+    // 打字當下就（稍等一下）自動存：不用等到輸入框失去焦點才存。
+    // 以前要「點別處／按完成」才會觸發存檔，打完時間直接把頁面滑掉或關閉，內容就沒存到。
+    let typingTimer = null;
+    card.querySelectorAll('.time-input, [data-k="customer"], [data-k="remark"]').forEach(inp => {
+      inp.addEventListener('input', () => {
+        clearTimeout(typingTimer);
+        typingTimer = setTimeout(commitCardInputs, 700);
+      });
+    });
 
     function syncTimesFromCard(){
       const sYear = card.querySelector('[data-part="s-year"]').value;
@@ -2738,6 +2748,12 @@ function updateSuggestionLists(){
 // 讀取失敗（網路慢、Google 暫時沒回應）時如果直接顯示「空白卡片」，操作員一選結束時間，
 // 就會拿空白的開始時間組成整筆資料存回試算表，把原本填好的開始時間蓋掉。
 let stateEverLoaded = false;
+// 每張卡片「把畫面上還沒存進去的輸入內容收進來並存檔」的函式，離開頁面（切到背景、關閉）時全部先跑一次。
+const cardCommitters = {};
+function commitAllCards(){
+  if(!stateEverLoaded) return;
+  Object.keys(cardCommitters).forEach(k => { try{ cardCommitters[k](); }catch(e){} });
+}
 let showingCache = false;
 // 簡化版把「上次成功讀到的資料」存在這台手機裡，下次開頁面先馬上顯示（唯讀），背景再讀最新的；
 // 最新資料到了才開放填寫，避免拿舊資料去覆蓋新資料。
@@ -3733,6 +3749,7 @@ document.getElementById('records-switch').addEventListener('click', (e) => {
 
 // ---------- 版本紀錄 ----------
 const VERSION_LOG = [
+  {v:'v20.11', date:'2026/10/12', d:'修正手機上輸入完時間後，把頁面滑掉、關閉再重新打開，輸入好的時間就不見的問題（純前端修改，不需要重新部署 .gs）。原因：時間是輸入框，以前要等輸入框「失去焦點」才會存檔，打完直接把頁面滑掉或關閉就沒存到。現在打字停下來約 0.7 秒就會自動存（時間、客戶名稱、備註都一樣），另外頁面切到背景或關閉的當下，也會先把畫面上所有還沒存的內容送出一次'},
   {v:'v20.10', date:'2026/10/12', d:'修正手機上點進已填好的時間想修改時，數字鍵盤一跳出來就馬上收起來（閃退）的問題（純前端修改，不需要重新部署 .gs）。原因是 v20.8 為了「輸入完時間直接滑動頁面也能把內容收進去」，加了「頁面一捲動就讓輸入框失去焦點」的設計；但點進輸入框、鍵盤升起時，手機會自動把頁面捲動一點，也被當成捲動，鍵盤就被自己收掉了。現在改成只有手指真的在畫面上滑動時，才讓輸入框失去焦點'},
   {v:'v20.9', date:'2026/10/12', d:'「不能跑名單」的紅色警示（例如「智邦 因為XY軸位移不能在二寶運作」）右邊新增 ✕ 關閉按鈕（純前端修改，不需要重新部署 .gs）。按下後，同一台機台、同一個客戶名稱就不再跳出；改了客戶名稱、清空卡片或完成訂單後，會重新提示。關閉只是不再顯示警示，不影響不能跑名單本身的設定'},
   {v:'v20.8', date:'2026/10/12', d:'修正手機上填好開始時間後，上下滑動頁面時間又「跳掉」的問題（純前端修改，不需要重新部署 .gs）。找到兩個原因：(1) 存檔請求原本是每改一個欄位就同時送一個，手機網路不穩或 Google 冷啟動時，舊的請求可能比新的更晚抵達，試算表最後留下的是舊資料，過一陣子自動更新就把畫面洗回舊的樣子；現在改成排隊、一次只送一筆，而且送的永遠是最新的畫面資料，同步失敗時還會每 4 秒自動重送，在確定存成功前，自動更新也不會拿試算表的舊資料覆蓋畫面。(2) 輸入時間後沒有點別處就直接滑動頁面，輸入框沒有失去焦點、內容沒被收進去，之後畫面重畫就消失；現在一開始滑動就會自動確認輸入'},
@@ -5842,8 +5859,10 @@ if(showingCache) render();
 // 手機把分頁放到背景再切回來時，畫面上的資料常常已經過期（背景分頁的自動更新會被暫停），
 // 這時候馬上操作就容易拿舊資料去覆蓋新資料，所以切回來的當下立刻更新一次。
 document.addEventListener('visibilitychange', () => {
-  if(!document.hidden) loadState();
+  if(document.hidden) commitAllCards();
+  else loadState();
 });
+window.addEventListener('pagehide', commitAllCards);
 tickClock();
 setInterval(tickClock, 1000);
 setInterval(() => {
