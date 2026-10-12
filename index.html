@@ -740,6 +740,17 @@
     font-family:var(--font-mono); font-size:11px; padding:6px 10px; border-radius:6px; cursor:pointer;
   }
   .done-btn:hover{border-color:var(--status-run); color:var(--status-run);}
+  .foot-actions{display:flex; gap:10px; margin-left:auto; align-items:flex-start; flex-wrap:wrap;}
+  .foot-action{display:flex; flex-direction:column; gap:4px; align-items:stretch; max-width:200px;}
+  .foot-action .done-btn{font-size:13px; padding:9px 12px; font-weight:600;}
+  .foot-action .btn-daily{border-color:var(--blue); color:var(--blue);}
+  .foot-action .btn-done{border-color:var(--green); color:var(--green);}
+  .foot-action .btn-daily:hover:not(:disabled){background:rgba(var(--blue-rgb),.14);}
+  .foot-action .btn-done:hover:not(:disabled){background:rgba(var(--green-rgb),.14);}
+  .foot-action .done-btn:disabled{opacity:.4; cursor:not-allowed; border-style:dashed;}
+  .foot-hint{font-size:11px; line-height:1.4; color:var(--text-secondary);}
+  .foot-hint.warn{color:var(--amber);}
+  .foot-hint .clear-btn{font-size:11px; padding:0; display:block; margin-top:2px;}
 
   .log-panel{
     background:var(--bg-panel);
@@ -931,14 +942,22 @@
     min-width:70px;
   }
   table.viewer-table .edit-datetime{display:flex; gap:4px;}
-  table.viewer-table .edit-datetime select{min-width:52px; width:auto;}
+  /* 編輯列的日期時間一定維持同一列（不換行）：年月日欄位寬度固定夠放得下文字，整張表太寬時靠表格外層左右捲動 */
+  table.viewer-table .edit-datetime{flex-wrap:nowrap; align-items:center;}
+  table.viewer-table .edit-datetime > *{flex:none;}
+  table.viewer-table .edit-datetime select{width:auto; padding-left:4px; padding-right:2px;}
+  table.viewer-table .edit-datetime select[data-edit-part="year"]{min-width:78px;}
+  table.viewer-table .edit-datetime select[data-edit-part="month"]{min-width:66px;}
+  table.viewer-table .edit-datetime select[data-edit-part="day"]{min-width:66px;}
+  table.viewer-table .edit-datetime .time-input-wrap{width:auto; flex:none;}
+  table.viewer-table .edit-datetime .time-input{min-width:62px; width:62px;}
 </style>
 </head>
 <body>
 
 <div class="wrap">
   <div class="topbar">
-    <h1>產線即時監看板 <button class="version-badge" id="version-badge">v20.3</button><button class="theme-toggle" id="theme-toggle" type="button" aria-label="切換深色／淺色" title="切換深色／淺色"><span class="tt-moon">🌙</span><span class="tt-sun">☀️</span></button></h1>
+    <h1>產線即時監看板 <button class="version-badge" id="version-badge">v20.5</button><button class="theme-toggle" id="theme-toggle" type="button" aria-label="切換深色／淺色" title="切換深色／淺色"><span class="tt-moon">🌙</span><span class="tt-sun">☀️</span></button></h1>
     <div class="topbar-right">
       <button class="export-btn" id="settings-btn">設定 API 網址</button>
       <button class="export-btn" id="admin-btn">管理者設定</button>
@@ -1756,6 +1775,35 @@ function nowComposite(){
   return buildComposite(now.getFullYear(), now.getMonth()+1, now.getDate(), `${hh}:${mm}`);
 }
 
+// 兩個存檔按鈕的狀態：箱數還沒做滿 → 只能「記錄今日進度」；箱數已做滿 → 只能「確定完成」，避免點錯。
+// 總箱數填錯但實際已做完時，可以按「箱數不對？仍要標示完成」暫時開啟完成按鈕。
+const forceDone = {};
+function computeFootState(machineKey){
+  const d = state[machineKey];
+  const total = parseFloat(d.totalBoxes);
+  const curRaw = String(d.currentBox == null ? '' : d.currentBox).trim();
+  const cur = parseFloat(curRaw);
+  const known = total > 0 && curRaw !== '' && !isNaN(cur);
+  const r = {dailyDisabled:false, doneDisabled:false, doneWarn:false,
+    dailyHint:'今天先收工、這張訂單還沒做完時，按這個（明天可以接著做）',
+    doneHint:'這張訂單全部做完時，按這個'};
+  if(!known) return r;
+  if(cur >= total){
+    delete forceDone[machineKey];
+    r.dailyDisabled = true;
+    r.dailyHint = '箱數已經做滿，請按右邊「確定完成」';
+    r.doneHint = '箱數已做滿，可以按這個結案';
+  } else if(forceDone[machineKey]){
+    r.doneWarn = true;
+    r.doneHint = `⚠ 箱數還沒做滿（差 ${total - cur} 箱），已開啟強制完成，請確認是不是總箱數填錯了`;
+  } else {
+    r.doneDisabled = true;
+    r.doneWarn = true;
+    r.doneHint = `還差 ${total - cur} 箱才能完成<button type="button" class="clear-btn" data-force-done="${machineKey}">箱數不對？仍要標示完成</button>`;
+  }
+  return r;
+}
+
 function render(){
   const grid = document.getElementById('grid');
   grid.innerHTML = '';
@@ -1817,6 +1865,7 @@ function render(){
       ? findIncompleteJobs().filter(r => r.customer === d.customer)
       : [];
 
+    const footState = computeFootState(m.key);
     const card = document.createElement('div');
     card.className = 'card';
     card.style.setProperty('--accent', m.accent);
@@ -1940,9 +1989,15 @@ function render(){
       </div>
       ` : ''}
       <div class="card-foot">
-        <div style="display:flex; gap:8px; margin-left:auto;">
-          <button class="done-btn" data-daily="${m.key}" ${savingLock[m.key] ? 'disabled' : ''}>${savingLock[m.key] ? '儲存中…' : '記錄今日進度'}</button>
-          <button class="done-btn" data-done="${m.key}" ${savingLock[m.key] ? 'disabled' : ''}>${savingLock[m.key] ? '儲存中…' : '確定完成並加入紀錄'}</button>
+        <div class="foot-actions">
+          <div class="foot-action">
+            <button class="done-btn btn-daily" data-daily="${m.key}" ${(savingLock[m.key] || footState.dailyDisabled) ? 'disabled' : ''}>${savingLock[m.key] ? '儲存中…' : '記錄今日進度'}</button>
+            <div class="foot-hint">${footState.dailyHint}</div>
+          </div>
+          <div class="foot-action">
+            <button class="done-btn btn-done" data-done="${m.key}" ${(savingLock[m.key] || footState.doneDisabled) ? 'disabled' : ''}>${savingLock[m.key] ? '儲存中…' : '確定完成並加入紀錄'}</button>
+            <div class="foot-hint${footState.doneWarn ? ' warn' : ''}">${footState.doneHint}</div>
+          </div>
         </div>
       </div>
     `;
@@ -2070,6 +2125,13 @@ function render(){
       }
     });
 
+    const forceBtn = card.querySelector('[data-force-done]');
+    if(forceBtn) forceBtn.addEventListener('click', () => {
+      if(!confirm('目前箱數還沒到總箱數。\n\n如果是「總箱數填錯了」或「這張訂單其實已經做完」，才需要這樣做。確定要開啟「確定完成」按鈕嗎？')) return;
+      forceDone[m.key] = true;
+      render();
+    });
+
     card.querySelector('[data-done]').addEventListener('click', async () => {
       // 已經有一個存檔動作在進行中，忽略這次點擊，避免因為畫面還沒更新而重複送出。
       if(savingLock[m.key]) return;
@@ -2078,7 +2140,10 @@ function render(){
       if(missingDone.length){ alertMissingFields(missingDone); return; }
       // 這個按鈕會把訂單結案、清空整張卡片，後果比「記錄今日進度」大很多，
       // 手機操作容易手滑點到，先跳出確認視窗給一次反悔的機會。
-      if(!confirm(`確定要標記「${dd.customer}」已完成嗎？\n\n這個動作會把這張訂單加入機台產能記錄，並清空這張卡片目前的資料。`)){
+      const totalN = parseFloat(dd.totalBoxes), curN = parseFloat(dd.currentBox);
+      const gap = totalN - curN;
+      const progressLine = `這張訂單總箱數 ${dd.totalBoxes}，目前已做 ${dd.currentBox} 箱` + (gap > 0 ? `（還差 ${gap} 箱）` : '') + '。';
+      if(!confirm(`確定「${dd.customer}」全部做完了嗎？\n\n${progressLine}\n\n按「確定」會把這張訂單加入產能記錄，並清空這張卡片。\n如果只是今天先收工、明天還要接著做，請按「取消」，改按「記錄今日進度」。`)){
         return;
       }
       savingLock[m.key] = true;
@@ -2104,6 +2169,7 @@ function render(){
 
         state[m.key] = { customer:'', totalBoxes:'', currentBox:'', startTime:'', actualEnd:'', remark:'', jobId:'', filledBy:'' };
         delete crossDayToggle[m.key];
+        delete forceDone[m.key];
         clearResumeHintDismiss(m.key);
         await saveState(m.key, {writeFilledBy:true});
         const syncHint = document.getElementById('save-hint').textContent;
@@ -3561,6 +3627,8 @@ document.getElementById('records-switch').addEventListener('click', (e) => {
 
 // ---------- 版本紀錄 ----------
 const VERSION_LOG = [
+  {v:'v20.5', date:'2026/10/12', d:'「記錄今日進度」與「確定完成並加入紀錄」兩個按鈕更好分辨（純前端修改，不需要重新部署 .gs）：(1) 兩個按鈕改成不同顏色（藍／綠），各自下方有一行說明：今天先收工、訂單還沒做完 → 記錄今日進度；整張訂單全部做完 → 確定完成。(2) 依箱數自動只亮一個：目前箱數還沒到總箱數時，「確定完成」變灰並顯示「還差 N 箱才能完成」；箱數已做滿時，「記錄今日進度」變灰並提示改按「確定完成」。總箱數填錯但實際已做完時，可按灰色按鈕下方的「箱數不對？仍要標示完成」（會再確認一次）暫時開啟。(3) 按「確定完成」時的確認視窗，改成顯示總箱數、目前箱數與還差幾箱，並提醒「只是今天先收工請按取消，改按記錄今日進度」'},
+  {v:'v20.4', date:'2026/10/12', d:'修正「紀錄」分頁編輯時，開始／結束時間的年、月、日下拉選單文字被截斷（只顯示「202」「10月」被卡住）的問題：年月日欄位加寬到放得下完整文字，日期＋時間＋「現在」按鈕仍維持同一列、不會換成兩列，整列太寬時改用表格左右捲動（純前端修改，不需要重新部署 .gs）'},
   {v:'v20.3', date:'2026/10/12', d:'操作員反映的兩項改善（後端 .gs 有異動，需要重新部署）：(1) 時間改成「輸入」：開始／結束時間點開是數字鍵盤，輸入 935 或 0935 就自動變成 09:35，可以精準到 1 分鐘，24 小時都能填（不再限制 08:30～22:00、每 10 分鐘一格），旁邊多一顆「現在」按鈕，一按就填入目前時間；格式不對會標紅框，儲存時也會擋下。查看紀錄的編輯列同樣改成輸入。(2) 加快開啟速度：簡化版第一次讀取更有耐心（單次最多等 40 秒、失敗自動重試 3 次）；開頁面時先顯示這台手機上次存下來的資料（唯讀，頂端有提示），最新資料讀到後才開放填寫；後端簡化版只回傳該機台最近 14 天的紀錄加上每張訂單的最新一筆，並只讀紀錄表最後 1500 列，另外加 60 秒快取（任何寫入都會立刻清掉快取，不會看到舊資料）'},
   {v:'v20.2', date:'2026/10/12', d:'修正簡化版「原本填好的開始時間，再開頁面填結束時間時不見了」：原因是重新開啟頁面時，如果第一次讀取試算表剛好失敗或太慢（手機網路不穩、Google 暫時沒回應），畫面會顯示一張「空白卡片」，這時選結束時間，系統會拿空白的開始時間組成整筆資料存回去，把原本的開始時間蓋掉。現在還沒成功讀到試算表資料前，不會顯示可填寫的卡片，改顯示「資料讀取中…」並自動重試（也有「重新讀取」按鈕），讀到資料後才能填寫。純前端修改，不需要重新部署 .gs'},
   {v:'v20.1', date:'2026/10/12', d:'三項調整（後端 .gs 有異動，需要重新部署）：(1) 按「記錄今日進度」或「確定完成並加入紀錄」之後，畫面會先跳出全螢幕「儲存中…請勿重複按」的視窗擋住畫面，存好後改成「儲存成功」，按「知道了」才關閉；儲存失敗時不會再誤清空卡片，並且明確告知這筆沒有存進去。避免操作員以為沒存成功而重複按、產生重複紀錄。(2) 儲存前必須填寫：客戶名稱、總箱數、目前箱數、日期、開始時間、結束時間，缺哪項會列出來，補齊才能存（結束時間不再自動補成當下時間）。(3) 簡化版下方新增「這台機台今天已儲存的紀錄」，只看得到自己這台、當天的資料，只能編輯、不能刪除；伺服器端也同步限制：鑰匙只能修改自己機台、當天寫入的產能記錄，不能刪除、不能改成別台，過了當天就只剩管理者能改'},
