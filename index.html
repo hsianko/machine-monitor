@@ -808,6 +808,11 @@
   .restriction-row .redit-cust{flex:1; min-width:100px;}
   .restriction-row .redit-event{flex:1.4; min-width:120px;}
   .restriction-row .redit-machine{flex-shrink:0; width:70px;}
+  .cust-warn .cust-warn-close{
+    flex:none; background:none; border:none; color:inherit; cursor:pointer; font-size:14px; line-height:1;
+    padding:2px 6px; border-radius:4px; opacity:.85;
+  }
+  .cust-warn .cust-warn-close:hover{opacity:1; background:rgba(var(--red-rgb),0.2);}
   .cust-warn{
     margin-top:6px; background:rgba(var(--red-rgb),0.12); border:1px solid var(--m-sanbao);
     border-radius:6px; padding:7px 10px; display:flex; gap:7px; align-items:flex-start;
@@ -958,7 +963,7 @@
 
 <div class="wrap">
   <div class="topbar">
-    <h1>產線即時監看板 <button class="version-badge" id="version-badge">v20.8</button><button class="theme-toggle" id="theme-toggle" type="button" aria-label="切換深色／淺色" title="切換深色／淺色"><span class="tt-moon">🌙</span><span class="tt-sun">☀️</span></button></h1>
+    <h1>產線即時監看板 <button class="version-badge" id="version-badge">v20.10</button><button class="theme-toggle" id="theme-toggle" type="button" aria-label="切換深色／淺色" title="切換深色／淺色"><span class="tt-moon">🌙</span><span class="tt-sun">☀️</span></button></h1>
     <div class="topbar-right">
       <button class="export-btn" id="settings-btn">設定 API 網址</button>
       <button class="export-btn" id="admin-btn">管理者設定</button>
@@ -1660,14 +1665,22 @@ function timeInputHtml(attrName, attrVal, value){
   const v = normalizeTime(value);
   return `<span class="time-input-wrap"><input type="text" class="time-input" inputmode="numeric" autocomplete="off" maxlength="5" placeholder="例 0935" ${attrName}="${attrVal}" value="${escapeHtml(v || '')}"><button type="button" class="time-now-btn" data-now-for="${attrVal}">現在</button></span>`;
 }
-// 手機上輸入完時間後直接上下滑動，輸入框沒有失去焦點、系統也就沒收到「填好了」的通知，
-// 之後頁面一重畫，打的內容就消失了。所以一開始滑動就先讓輸入框失去焦點（等於按下完成），內容立刻收進去。
-let scrollBlurTimer = null;
-window.addEventListener('scroll', () => {
+// 手機上輸入完時間後「用手指上下滑動頁面」，輸入框沒有失去焦點、系統也就沒收到「填好了」的通知，
+// 之後頁面一重畫，打的內容就消失了。所以偵測到手指真的在滑動時，才讓輸入框失去焦點（等於按下完成），內容立刻收進去。
+// 注意：不能用 scroll 事件判斷——點進輸入框、鍵盤升起時，手機會自動把頁面捲動一點，那也會觸發 scroll，
+// 結果鍵盤才剛跳出來就被收起來（閃退）。touchmove 只有手指真的在滑才會觸發。
+let touchStartY = null;
+document.addEventListener('touchstart', (e) => {
+  touchStartY = e.touches && e.touches.length ? e.touches[0].clientY : null;
+}, {passive:true});
+document.addEventListener('touchmove', (e) => {
   const ae = document.activeElement;
-  if(ae && ae.classList && ae.classList.contains('time-input')){
-    clearTimeout(scrollBlurTimer);
-    scrollBlurTimer = setTimeout(() => { if(document.activeElement === ae) ae.blur(); }, 150);
+  if(!(ae && ae.classList && ae.classList.contains('time-input'))) return;
+  if(touchStartY === null || !e.touches || !e.touches.length) return;
+  if(Math.abs(e.touches[0].clientY - touchStartY) > 12){
+    ae.blur();
+    // 保險：確定「填好了」的通知有送出（重複送出沒有副作用）
+    ae.dispatchEvent(new Event('change', {bubbles:true}));
   }
 }, {passive:true});
 
@@ -2026,10 +2039,14 @@ function render(){
     if(custInput && custWarnEl){
       const updateCustWarn = () => {
         const match = checkCustomerRestriction(m.key, custInput.value);
-        if(match){
+        if(match && !isRestrictionWarnDismissed(m.key, custInput.value)){
           custWarnEl.style.display = '';
           const machineLabel = match['機台'] === '全部' ? '任何機台' : match['機台'];
-          custWarnEl.innerHTML = `<span>⚠</span><span>${escapeHtml(match['客戶關鍵字'])} 因為「${escapeHtml(match['事件']||'')}」不能在${escapeHtml(machineLabel)}運作，換一台機台或確認後再繼續</span>`;
+          custWarnEl.innerHTML = `<span>⚠</span><span style="flex:1;">${escapeHtml(match['客戶關鍵字'])} 因為「${escapeHtml(match['事件']||'')}」不能在${escapeHtml(machineLabel)}運作，換一台機台或確認後再繼續</span><button type="button" class="cust-warn-close" title="不再提示這個客戶" aria-label="關閉警示">✕</button>`;
+          custWarnEl.querySelector('.cust-warn-close').addEventListener('click', () => {
+            dismissRestrictionWarn(m.key, custInput.value);
+            custWarnEl.style.display = 'none';
+          });
         } else {
           custWarnEl.style.display = 'none';
         }
@@ -2949,7 +2966,24 @@ function dismissResumeHint(machine, customer){
   all[machine] = customer;
   try{ sessionStorage.setItem(HINT_DISMISS_KEY, JSON.stringify(all)); }catch(e){}
 }
+// 「不能跑名單」警示的關閉紀錄：同一台機台、同一個客戶名稱按過 ✕ 就不再跳出；改了客戶名稱、清空或完成訂單後會重新提示。
+const RESTRICT_DISMISS_KEY = 'monitor-board-dismissed-restrict-warns';
+function loadDismissedRestrict(){
+  try{ return JSON.parse(sessionStorage.getItem(RESTRICT_DISMISS_KEY) || '{}'); }catch(e){ return {}; }
+}
+function isRestrictionWarnDismissed(machine, customer){
+  const v = loadDismissedRestrict()[machine];
+  return !!customer && v === String(customer).trim();
+}
+function dismissRestrictionWarn(machine, customer){
+  const all = loadDismissedRestrict();
+  all[machine] = String(customer).trim();
+  try{ sessionStorage.setItem(RESTRICT_DISMISS_KEY, JSON.stringify(all)); }catch(e){}
+}
 function clearResumeHintDismiss(machine){
+  const rall = loadDismissedRestrict();
+  delete rall[machine];
+  try{ sessionStorage.setItem(RESTRICT_DISMISS_KEY, JSON.stringify(rall)); }catch(e){}
   const all = loadDismissedHints();
   delete all[machine];
   try{ sessionStorage.setItem(HINT_DISMISS_KEY, JSON.stringify(all)); }catch(e){}
@@ -3699,6 +3733,8 @@ document.getElementById('records-switch').addEventListener('click', (e) => {
 
 // ---------- 版本紀錄 ----------
 const VERSION_LOG = [
+  {v:'v20.10', date:'2026/10/12', d:'修正手機上點進已填好的時間想修改時，數字鍵盤一跳出來就馬上收起來（閃退）的問題（純前端修改，不需要重新部署 .gs）。原因是 v20.8 為了「輸入完時間直接滑動頁面也能把內容收進去」，加了「頁面一捲動就讓輸入框失去焦點」的設計；但點進輸入框、鍵盤升起時，手機會自動把頁面捲動一點，也被當成捲動，鍵盤就被自己收掉了。現在改成只有手指真的在畫面上滑動時，才讓輸入框失去焦點'},
+  {v:'v20.9', date:'2026/10/12', d:'「不能跑名單」的紅色警示（例如「智邦 因為XY軸位移不能在二寶運作」）右邊新增 ✕ 關閉按鈕（純前端修改，不需要重新部署 .gs）。按下後，同一台機台、同一個客戶名稱就不再跳出；改了客戶名稱、清空卡片或完成訂單後，會重新提示。關閉只是不再顯示警示，不影響不能跑名單本身的設定'},
   {v:'v20.8', date:'2026/10/12', d:'修正手機上填好開始時間後，上下滑動頁面時間又「跳掉」的問題（純前端修改，不需要重新部署 .gs）。找到兩個原因：(1) 存檔請求原本是每改一個欄位就同時送一個，手機網路不穩或 Google 冷啟動時，舊的請求可能比新的更晚抵達，試算表最後留下的是舊資料，過一陣子自動更新就把畫面洗回舊的樣子；現在改成排隊、一次只送一筆，而且送的永遠是最新的畫面資料，同步失敗時還會每 4 秒自動重送，在確定存成功前，自動更新也不會拿試算表的舊資料覆蓋畫面。(2) 輸入時間後沒有點別處就直接滑動頁面，輸入框沒有失去焦點、內容沒被收進去，之後畫面重畫就消失；現在一開始滑動就會自動確認輸入'},
   {v:'v20.7', date:'2026/10/12', d:'修正「結束時間明明已經填了，按儲存卻說還沒填」的問題（純前端修改，不需要重新部署 .gs）：iPhone 的 Safari 點按鈕時，剛打字的輸入框不會先失去焦點，系統就來不及收到「這格填好了」的通知，儲存時讀到的還是舊的空白。現在按下「記錄今日進度」或「確定完成並加入紀錄」的當下，會先把畫面上所有欄位（客戶名稱、時間、日期、備註…）的內容直接讀進來再檢查與儲存，不再依賴輸入框失去焦點的通知'},
   {v:'v20.6', date:'2026/10/12', d:'「記錄今日進度」與「確定完成並加入紀錄」兩個按鈕改成一樣大小（左右均分、高度一致）並維持同一列，說明文字各自放在按鈕正下方（純前端修改，不需要重新部署 .gs）'},
