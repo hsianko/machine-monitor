@@ -740,14 +740,15 @@
     font-family:var(--font-mono); font-size:11px; padding:6px 10px; border-radius:6px; cursor:pointer;
   }
   .done-btn:hover{border-color:var(--status-run); color:var(--status-run);}
-  .foot-actions{display:flex; gap:10px; margin-left:auto; align-items:flex-start; flex-wrap:wrap;}
-  .foot-action{display:flex; flex-direction:column; gap:4px; align-items:stretch; max-width:200px;}
-  .foot-action .done-btn{font-size:13px; padding:9px 12px; font-weight:600;}
-  .foot-action .btn-daily{border-color:var(--blue); color:var(--blue);}
-  .foot-action .btn-done{border-color:var(--green); color:var(--green);}
-  .foot-action .btn-daily:hover:not(:disabled){background:rgba(var(--blue-rgb),.14);}
-  .foot-action .btn-done:hover:not(:disabled){background:rgba(var(--green-rgb),.14);}
-  .foot-action .done-btn:disabled{opacity:.4; cursor:not-allowed; border-style:dashed;}
+  /* 兩個按鈕固定同一列、一樣大小（兩欄均分、同一列高度一致），說明文字各自放在按鈕正下方 */
+  .foot-actions{display:grid; grid-template-columns:1fr 1fr; column-gap:10px; row-gap:4px; width:100%;}
+  .foot-actions .done-btn{width:100%; min-width:0; font-size:13px; padding:10px 6px; font-weight:600; line-height:1.3;
+    display:flex; align-items:center; justify-content:center; text-align:center; white-space:normal; word-break:keep-all;}
+  .foot-actions .btn-daily{border-color:var(--blue); color:var(--blue);}
+  .foot-actions .btn-done{border-color:var(--green); color:var(--green);}
+  .foot-actions .btn-daily:hover:not(:disabled){background:rgba(var(--blue-rgb),.14);}
+  .foot-actions .btn-done:hover:not(:disabled){background:rgba(var(--green-rgb),.14);}
+  .foot-actions .done-btn:disabled{opacity:.4; cursor:not-allowed; border-style:dashed;}
   .foot-hint{font-size:11px; line-height:1.4; color:var(--text-secondary);}
   .foot-hint.warn{color:var(--amber);}
   .foot-hint .clear-btn{font-size:11px; padding:0; display:block; margin-top:2px;}
@@ -957,7 +958,7 @@
 
 <div class="wrap">
   <div class="topbar">
-    <h1>產線即時監看板 <button class="version-badge" id="version-badge">v20.5</button><button class="theme-toggle" id="theme-toggle" type="button" aria-label="切換深色／淺色" title="切換深色／淺色"><span class="tt-moon">🌙</span><span class="tt-sun">☀️</span></button></h1>
+    <h1>產線即時監看板 <button class="version-badge" id="version-badge">v20.6</button><button class="theme-toggle" id="theme-toggle" type="button" aria-label="切換深色／淺色" title="切換深色／淺色"><span class="tt-moon">🌙</span><span class="tt-sun">☀️</span></button></h1>
     <div class="topbar-right">
       <button class="export-btn" id="settings-btn">設定 API 網址</button>
       <button class="export-btn" id="admin-btn">管理者設定</button>
@@ -1990,14 +1991,10 @@ function render(){
       ` : ''}
       <div class="card-foot">
         <div class="foot-actions">
-          <div class="foot-action">
-            <button class="done-btn btn-daily" data-daily="${m.key}" ${(savingLock[m.key] || footState.dailyDisabled) ? 'disabled' : ''}>${savingLock[m.key] ? '儲存中…' : '記錄今日進度'}</button>
-            <div class="foot-hint">${footState.dailyHint}</div>
-          </div>
-          <div class="foot-action">
-            <button class="done-btn btn-done" data-done="${m.key}" ${(savingLock[m.key] || footState.doneDisabled) ? 'disabled' : ''}>${savingLock[m.key] ? '儲存中…' : '確定完成並加入紀錄'}</button>
-            <div class="foot-hint${footState.doneWarn ? ' warn' : ''}">${footState.doneHint}</div>
-          </div>
+          <button class="done-btn btn-daily" data-daily="${m.key}" ${(savingLock[m.key] || footState.dailyDisabled) ? 'disabled' : ''}>${savingLock[m.key] ? '儲存中…' : '記錄今日進度'}</button>
+          <button class="done-btn btn-done" data-done="${m.key}" ${(savingLock[m.key] || footState.doneDisabled) ? 'disabled' : ''}>${savingLock[m.key] ? '儲存中…' : '確定完成並加入紀錄'}</button>
+          <div class="foot-hint">${footState.dailyHint}</div>
+          <div class="foot-hint${footState.doneWarn ? ' warn' : ''}">${footState.doneHint}</div>
         </div>
       </div>
     `;
@@ -3627,6 +3624,7 @@ document.getElementById('records-switch').addEventListener('click', (e) => {
 
 // ---------- 版本紀錄 ----------
 const VERSION_LOG = [
+  {v:'v20.6', date:'2026/10/12', d:'「記錄今日進度」與「確定完成並加入紀錄」兩個按鈕改成一樣大小（左右均分、高度一致）並維持同一列，說明文字各自放在按鈕正下方（純前端修改，不需要重新部署 .gs）'},
   {v:'v20.5', date:'2026/10/12', d:'「記錄今日進度」與「確定完成並加入紀錄」兩個按鈕更好分辨（純前端修改，不需要重新部署 .gs）：(1) 兩個按鈕改成不同顏色（藍／綠），各自下方有一行說明：今天先收工、訂單還沒做完 → 記錄今日進度；整張訂單全部做完 → 確定完成。(2) 依箱數自動只亮一個：目前箱數還沒到總箱數時，「確定完成」變灰並顯示「還差 N 箱才能完成」；箱數已做滿時，「記錄今日進度」變灰並提示改按「確定完成」。總箱數填錯但實際已做完時，可按灰色按鈕下方的「箱數不對？仍要標示完成」（會再確認一次）暫時開啟。(3) 按「確定完成」時的確認視窗，改成顯示總箱數、目前箱數與還差幾箱，並提醒「只是今天先收工請按取消，改按記錄今日進度」'},
   {v:'v20.4', date:'2026/10/12', d:'修正「紀錄」分頁編輯時，開始／結束時間的年、月、日下拉選單文字被截斷（只顯示「202」「10月」被卡住）的問題：年月日欄位加寬到放得下完整文字，日期＋時間＋「現在」按鈕仍維持同一列、不會換成兩列，整列太寬時改用表格左右捲動（純前端修改，不需要重新部署 .gs）'},
   {v:'v20.3', date:'2026/10/12', d:'操作員反映的兩項改善（後端 .gs 有異動，需要重新部署）：(1) 時間改成「輸入」：開始／結束時間點開是數字鍵盤，輸入 935 或 0935 就自動變成 09:35，可以精準到 1 分鐘，24 小時都能填（不再限制 08:30～22:00、每 10 分鐘一格），旁邊多一顆「現在」按鈕，一按就填入目前時間；格式不對會標紅框，儲存時也會擋下。查看紀錄的編輯列同樣改成輸入。(2) 加快開啟速度：簡化版第一次讀取更有耐心（單次最多等 40 秒、失敗自動重試 3 次）；開頁面時先顯示這台手機上次存下來的資料（唯讀，頂端有提示），最新資料讀到後才開放填寫；後端簡化版只回傳該機台最近 14 天的紀錄加上每張訂單的最新一筆，並只讀紀錄表最後 1500 列，另外加 60 秒快取（任何寫入都會立刻清掉快取，不會看到舊資料）'},
