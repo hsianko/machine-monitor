@@ -179,6 +179,17 @@
     background:var(--green); color:#fff; border:none; border-radius:10px;
     font-size:18px; font-weight:700; padding:12px 40px; cursor:pointer; min-width:160px;
   }
+  .time-input-wrap{display:flex; gap:6px; align-items:center; width:100%;}
+  .time-input{flex:1; min-width:0; width:100%; text-align:center; font-size:16px; letter-spacing:1px;}
+  .time-input.time-invalid{border-color:var(--red) !important; box-shadow:0 0 0 1px var(--red);}
+  .time-now-btn{flex:none; padding:8px 10px; font-size:13px; border-radius:8px; cursor:pointer;
+    background:var(--bg-field); color:var(--text-primary); border:1px solid var(--border-strong);}
+  table.viewer-table .time-input{min-width:64px; width:72px; flex:none; font-size:13px;}
+  table.viewer-table .time-now-btn{padding:4px 6px; font-size:11px;}
+  .cache-banner{display:none; margin:0 0 12px; padding:10px 12px; border-radius:10px; font-size:13px;
+    background:rgba(var(--amber-rgb),.12); border:1px solid var(--amber); color:var(--text-primary);}
+  .cache-banner button{margin-left:8px; padding:4px 10px;}
+  #grid.cache-locked{pointer-events:none; opacity:.55;}
   .simple-log-section{margin-top:24px;}
   .simple-log-empty{color:var(--text-muted); font-size:13px; padding:12px 0;}
   .version-modal{
@@ -927,7 +938,7 @@
 
 <div class="wrap">
   <div class="topbar">
-    <h1>產線即時監看板 <button class="version-badge" id="version-badge">v20.2</button><button class="theme-toggle" id="theme-toggle" type="button" aria-label="切換深色／淺色" title="切換深色／淺色"><span class="tt-moon">🌙</span><span class="tt-sun">☀️</span></button></h1>
+    <h1>產線即時監看板 <button class="version-badge" id="version-badge">v20.3</button><button class="theme-toggle" id="theme-toggle" type="button" aria-label="切換深色／淺色" title="切換深色／淺色"><span class="tt-moon">🌙</span><span class="tt-sun">☀️</span></button></h1>
     <div class="topbar-right">
       <button class="export-btn" id="settings-btn">設定 API 網址</button>
       <button class="export-btn" id="admin-btn">管理者設定</button>
@@ -986,6 +997,7 @@
   </div>
 
   <div class="tab-content" id="tab-board">
+    <div class="cache-banner" id="cache-banner"></div>
     <div class="grid" id="grid"></div>
     <div id="simple-log-section" class="simple-log-section" style="display:none;">
       <div class="section-title" id="simple-log-title">今日已儲存的紀錄</div>
@@ -1596,6 +1608,55 @@ function boxOptions(selected){
   return out;
 }
 
+// 時間改成「輸入」：點開是數字鍵盤，輸入 935 或 0935 都會變成 09:35，可以精準到 1 分鐘、24 小時都能填。
+// 回傳 'HH:MM'；空白回傳 ''；格式不對回傳 null。
+function normalizeTime(str){
+  let v = String(str == null ? '' : str).normalize('NFKC').trim().replace(/[：.\s]/g, ':');
+  if(!v) return '';
+  let h, m;
+  if(v.indexOf(':') !== -1){
+    const parts = v.split(':').filter(x => x !== '');
+    if(parts.length !== 2 || !/^\d{1,2}$/.test(parts[0]) || !/^\d{1,2}$/.test(parts[1])) return null;
+    h = parseInt(parts[0],10); m = parseInt(parts[1],10);
+  } else {
+    if(!/^\d{1,4}$/.test(v)) return null;
+    if(v.length <= 2){ h = parseInt(v,10); m = 0; }
+    else { h = parseInt(v.slice(0,-2),10); m = parseInt(v.slice(-2),10); }
+  }
+  if(h > 23 || m > 59) return null;
+  return String(h).padStart(2,'0') + ':' + String(m).padStart(2,'0');
+}
+function readTimeVal(el){
+  if(!el) return '';
+  const n = normalizeTime(el.value);
+  el.classList.toggle('time-invalid', n === null);
+  return n === null ? '' : n;
+}
+function nowHM(){
+  const d = new Date();
+  return String(d.getHours()).padStart(2,'0') + ':' + String(d.getMinutes()).padStart(2,'0');
+}
+function timeInputHtml(attrName, attrVal, value){
+  const v = normalizeTime(value);
+  return `<span class="time-input-wrap"><input type="text" class="time-input" inputmode="numeric" autocomplete="off" maxlength="5" placeholder="例 0935" ${attrName}="${attrVal}" value="${escapeHtml(v || '')}"><button type="button" class="time-now-btn" data-now-for="${attrVal}">現在</button></span>`;
+}
+// 輸入時自動補冒號（935 → 9:35），不用自己打「:」
+document.addEventListener('input', (e) => {
+  const el = e.target;
+  if(!el || !el.classList || !el.classList.contains('time-input')) return;
+  const digits = el.value.replace(/\D/g,'').slice(0,4);
+  el.value = digits.length > 2 ? digits.slice(0,-2) + ':' + digits.slice(-2) : digits;
+});
+document.addEventListener('click', (e) => {
+  const btn = e.target.closest && e.target.closest('.time-now-btn');
+  if(!btn) return;
+  const scope = btn.closest('.field, td, .edit-datetime') || btn.parentElement;
+  const inp = btn.parentElement.querySelector('.time-input');
+  if(!inp) return;
+  inp.value = nowHM();
+  inp.dispatchEvent(new Event('change', {bubbles:true}));
+});
+
 function timeOptions(selected){
   let out = '<option value="">--:--</option>';
   const sel = String(selected||'');
@@ -1713,7 +1774,7 @@ function render(){
     </div>`;
     return;
   }
-  if(API_URL && !stateEverLoaded){
+  if(API_URL && !stateEverLoaded && !showingCache){
     const hintText = document.getElementById('save-hint').textContent;
     grid.innerHTML = `<div class="simple-blocked">
       <div class="simple-blocked-title">資料讀取中…</div>
@@ -1834,11 +1895,11 @@ function render(){
         <div class="field-row">
           <div class="field">
             <label>開始時間</label>
-            <select data-part="s-time">${timeOptions(sp.time)}</select>
+            ${timeInputHtml("data-part","s-time",sp.time)}
           </div>
           <div class="field">
             <label>結束時間</label>
-            <select data-part="e-time">${timeOptions(ep.time)}</select>
+            ${timeInputHtml("data-part","e-time",ep.time)}
           </div>
         </div>
       </div>
@@ -1927,8 +1988,8 @@ function render(){
       const sYear = card.querySelector('[data-part="s-year"]').value;
       const sMonth = card.querySelector('[data-part="s-month"]').value;
       const sDay = card.querySelector('[data-part="s-day"]').value;
-      const sTime = card.querySelector('[data-part="s-time"]').value;
-      const eTime = card.querySelector('[data-part="e-time"]').value;
+      const sTime = readTimeVal(card.querySelector('[data-part="s-time"]'));
+      const eTime = readTimeVal(card.querySelector('[data-part="e-time"]'));
       const eYearSel = card.querySelector('[data-part="e-year"]');
       const eMonthSel = card.querySelector('[data-part="e-month"]');
       const eDaySel = card.querySelector('[data-part="e-day"]');
@@ -1938,6 +1999,10 @@ function render(){
       state[m.key].startTime = buildComposite(sYear, sMonth, sDay, sTime);
       state[m.key].actualEnd = buildComposite(eYear, eMonth, eDay, eTime);
       saveState(m.key);
+      // 時間是輸入框：剛輸入完馬上整張重畫，會把正要點的下一個輸入框洗掉（手機上特別明顯），
+      // 所以如果游標已經跑到別的輸入框／選單，先不重畫，等那邊也輸入完再一起更新。
+      const ae = document.activeElement;
+      if(ae && ae !== document.body && (ae.tagName === 'INPUT' || ae.tagName === 'SELECT') && document.getElementById('grid').contains(ae)) return;
       render();
     }
     card.querySelectorAll('[data-part="s-year"], [data-part="s-month"], [data-part="s-day"], [data-part="s-time"], [data-part="e-time"], [data-part="e-year"], [data-part="e-month"], [data-part="e-day"]').forEach(sel => {
@@ -1951,8 +2016,8 @@ function render(){
         const sYear = card.querySelector('[data-part="s-year"]').value;
         const sMonth = card.querySelector('[data-part="s-month"]').value;
         const sDay = card.querySelector('[data-part="s-day"]').value;
-        const sTime = card.querySelector('[data-part="s-time"]').value;
-        const eTime = card.querySelector('[data-part="e-time"]').value;
+        const sTime = readTimeVal(card.querySelector('[data-part="s-time"]'));
+        const eTime = readTimeVal(card.querySelector('[data-part="e-time"]'));
         state[m.key].startTime = buildComposite(sYear, sMonth, sDay, sTime);
         state[m.key].actualEnd = buildComposite(sYear, sMonth, sDay, eTime);
         saveState(m.key);
@@ -2112,7 +2177,23 @@ function render(){
   renderRunningList();
   renderOverview();
   renderPendingDetails();
+  grid.classList.toggle('cache-locked', !!(API_URL && !stateEverLoaded && showingCache));
+  updateCacheBanner();
   renderSimpleLog();
+}
+
+function updateCacheBanner(){
+  const b = document.getElementById('cache-banner');
+  if(!b) return;
+  if(API_URL && !stateEverLoaded && showingCache){
+    b.style.display = 'block';
+    const hintText = document.getElementById('save-hint').textContent;
+    b.innerHTML = `目前顯示的是這台手機上次存下來的資料，正在讀取最新資料，讀完才能填寫（約幾秒鐘）。<button type="button" id="cache-reload-btn">重新讀取</button>` +
+      (/失敗|逾時/.test(hintText) ? `<br><span style="color:var(--text-muted)">${escapeHtml(hintText)}</span>` : '');
+    document.getElementById('cache-reload-btn').addEventListener('click', () => loadState());
+  } else {
+    b.style.display = 'none';
+  }
 }
 
 // 每台機台一天的目標箱數（固定值，跟實際有沒有缺料、有沒有開工無關，是拿來對照實際跟計畫的落差）。
@@ -2322,21 +2403,48 @@ async function apiPostOnce(payload){
 }
 
 // 讀取資料改用 POST（原本是 GET）：密碼跟鑰匙不能放在網址裡，不然會留在瀏覽器歷史紀錄跟伺服器紀錄。
-async function apiLoad(){
-  const res = await fetch(API_URL, {
-    method:'POST',
-    headers:{'Content-Type':'text/plain;charset=utf-8'},
-    body: JSON.stringify({action:'load', auth: buildAuth()})
-  });
-  const text = await res.text();
-  let json;
+async function apiLoadOnce(){
+  // Google Apps Script 久沒人用會「冷啟動」，要等好幾秒；給 40 秒的耐心，超過才算失敗，不要太早放棄。
+  const ctrl = (typeof AbortController !== 'undefined') ? new AbortController() : null;
+  const timer = ctrl ? setTimeout(() => ctrl.abort(), 40000) : null;
   try{
-    json = JSON.parse(text);
-  }catch(parseErr){
-    throw new Error('伺服器回應不是有效資料，請確認 API 網址與部署權限是否為「任何人」');
+    const res = await fetch(API_URL, {
+      method:'POST',
+      headers:{'Content-Type':'text/plain;charset=utf-8'},
+      body: JSON.stringify({action:'load', auth: buildAuth()}),
+      signal: ctrl ? ctrl.signal : undefined
+    });
+    const text = await res.text();
+    let json;
+    try{
+      json = JSON.parse(text);
+    }catch(parseErr){
+      throw new Error('伺服器回應不是有效資料，請確認 API 網址與部署權限是否為「任何人」');
+    }
+    if(json.error){ throw makeApiError(json); }
+    return json;
+  }catch(err){
+    if(err && err.name === 'AbortError') throw new Error('等待伺服器回應逾時');
+    throw err;
+  }finally{
+    if(timer) clearTimeout(timer);
   }
-  if(json.error){ throw makeApiError(json); }
-  return json;
+}
+// 讀取失敗（網路不穩、剛好冷啟動、回應不完整）時自動重試，最多 3 次，每次多等一下。
+async function apiLoad(){
+  let lastErr;
+  for(let attempt = 0; attempt < 3; attempt++){
+    try{
+      return await apiLoadOnce();
+    }catch(err){
+      lastErr = err;
+      const msg = String(err.message||err);
+      const retryable = !err.code && ((err instanceof TypeError) || /Load failed|Failed to fetch|NetworkError|逾時|伺服器回應不是有效資料/i.test(msg));
+      if(!retryable || attempt === 2) throw err;
+      await sleep(1500 * (attempt + 1));
+    }
+  }
+  throw lastErr;
 }
 
 // 網路偶爾會斷斷續續（尤其是手機切換 WiFi/行動網路時），
@@ -2475,6 +2583,35 @@ function updateSuggestionLists(){
 // 讀取失敗（網路慢、Google 暫時沒回應）時如果直接顯示「空白卡片」，操作員一選結束時間，
 // 就會拿空白的開始時間組成整筆資料存回試算表，把原本填好的開始時間蓋掉。
 let stateEverLoaded = false;
+let showingCache = false;
+// 簡化版把「上次成功讀到的資料」存在這台手機裡，下次開頁面先馬上顯示（唯讀），背景再讀最新的；
+// 最新資料到了才開放填寫，避免拿舊資料去覆蓋新資料。
+const CACHE_KEY = SIMPLE_MODE_MACHINE ? ('monitor-board-cache-' + SIMPLE_MODE_MACHINE) : '';
+function saveLoadCache(json){
+  if(!CACHE_KEY) return;
+  try{ localStorage.setItem(CACHE_KEY, JSON.stringify({t:Date.now(), json})); }catch(e){}
+}
+function clearLoadCache(){
+  if(!CACHE_KEY) return;
+  try{ localStorage.removeItem(CACHE_KEY); }catch(e){}
+}
+function bootFromCache(){
+  if(!CACHE_KEY || !API_URL) return;
+  try{
+    const raw = localStorage.getItem(CACHE_KEY);
+    if(!raw) return;
+    const c = JSON.parse(raw);
+    const json = c && c.json;
+    if(!json || !json.state || !json.state[SIMPLE_MODE_MACHINE]) return;
+    state[SIMPLE_MODE_MACHINE] = Object.assign(state[SIMPLE_MODE_MACHINE], fromChinese(STATE_MAP, json.state[SIMPLE_MODE_MACHINE]));
+    if(json.log) completedLog = json.log.map(r => fromChinese(LOG_MAP, r));
+    serverActiveJobIds = new Set(json.activeJobIds || []);
+    jobOverrides = {};
+    (json.jobOverrides || []).forEach(o => { jobOverrides[o.jobId] = o; });
+    if(json.restrictions) restrictionsLog = json.restrictions;
+    showingCache = true;
+  }catch(e){ showingCache = false; }
+}
 let loadRetryTimer = null;
 async function loadState(){
   const hint = document.getElementById('save-hint');
@@ -2495,6 +2632,8 @@ async function loadState(){
     (json.jobOverrides || []).forEach(o => { jobOverrides[o.jobId] = o; });
     if(json.state){
       stateEverLoaded = true;
+      showingCache = false;
+      saveLoadCache(json);
       MACHINES.forEach(m => {
         const stillDirty = dirtyUntil[m.key] && Date.now() < dirtyUntil[m.key];
         if(stillDirty){
@@ -2532,6 +2671,8 @@ async function loadState(){
     }
     if(err.code === 'auth_key'){
       SIMPLE_AUTH_ERROR = err.message;
+      clearLoadCache();
+      showingCache = false;
       hint.textContent = '無法使用這個連結：' + err.message;
       render();
       return;
@@ -2994,6 +3135,14 @@ function cleanDisplayTime(v){
   return s;
 }
 
+function invalidTimeInRow(tr){
+  let bad = false;
+  tr.querySelectorAll('[data-edit-part="time"]').forEach(el => {
+    if(normalizeTime(el.value) === null){ bad = true; el.classList.add('time-invalid'); }
+  });
+  return bad;
+}
+
 function fieldControlHtml(cfg, key, value){
   const ft = cfg.fieldTypes[key];
   if(ft && ft.type === 'select'){
@@ -3007,7 +3156,7 @@ function fieldControlHtml(cfg, key, value){
       <select data-edit-part="year">${yearOptionsHtml(p.year)}</select>
       <select data-edit-part="month">${monthOptionsHtml(p.month)}</select>
       <select data-edit-part="day">${dayOptionsHtml(p.day)}</select>
-      <select data-edit-part="time">${timeOptions(p.time)}</select>
+      ${timeInputHtml("data-edit-part","time",p.time)}
     </div>`;
   }
   if(ft && ft.type === 'date'){
@@ -3182,7 +3331,7 @@ async function handleSaveEdit(view, idx){
     const key = el.dataset.editKey;
     const parts = el.querySelectorAll('[data-edit-part]');
     if(parts.length){
-      const get = p => { const found = el.querySelector(`[data-edit-part="${p}"]`); return found ? found.value : ''; };
+      const get = p => { const found = el.querySelector(`[data-edit-part="${p}"]`); return found ? (p === 'time' ? (normalizeTime(found.value) || '') : found.value) : ''; };
       const ft = cfg.fieldTypes[key];
       newValues[key] = (ft && ft.type === 'date')
         ? (get('year') && get('month') && get('day') ? buildDateOnly(get('year'), get('month'), get('day')) : '')
@@ -3191,6 +3340,7 @@ async function handleSaveEdit(view, idx){
       newValues[key] = el.value;
     }
   });
+  if(invalidTimeInRow(tr)){ alert('時間格式不正確，請輸入例如 0935（24 小時制）。'); return; }
   if(!API_URL){ alert('尚未設定 API 網址，無法儲存修改。'); return; }
 
   // 補明細存檔前的提醒：如果照這筆的異常類型，應該要有的欄位還是空的，先跳出提醒，
@@ -3238,7 +3388,7 @@ function renderSimpleLog(){
   const wrap = document.getElementById('simple-log-body');
   const sec = document.getElementById('simple-log-section');
   if(!wrap || !sec) return;
-  if(SIMPLE_AUTH_ERROR || !isSimpleModeDateAllowed() || (API_URL && !stateEverLoaded)){ sec.style.display = 'none'; return; }
+  if(SIMPLE_AUTH_ERROR || !isSimpleModeDateAllowed() || (API_URL && !stateEverLoaded && !showingCache)){ sec.style.display = 'none'; return; }
   sec.style.display = '';
   if(simpleEditRow !== null) return;
   const today = todayYMDLocal();
@@ -3277,12 +3427,13 @@ async function handleSimpleSave(i){
   tr.querySelectorAll('[data-edit-key]').forEach(el => {
     const key = el.dataset.editKey;
     if(el.querySelector('[data-edit-part]')){
-      const get = p => { const f = el.querySelector(`[data-edit-part="${p}"]`); return f ? f.value : ''; };
+      const get = p => { const f = el.querySelector(`[data-edit-part="${p}"]`); return f ? (p === 'time' ? (normalizeTime(f.value) || '') : f.value) : ''; };
       nv[key] = buildComposite(get('year'), get('month'), get('day'), get('time'));
     } else {
       nv[key] = el.value;
     }
   });
+  if(invalidTimeInRow(tr)){ alert('時間格式不正確，請輸入例如 0935（24 小時制）。'); return; }
   nv.machine = SIMPLE_MODE_MACHINE;
   const sp = parseComposite(nv.startTime), ep = parseComposite(nv.actualEnd);
   const missing = [];
@@ -3316,6 +3467,7 @@ document.getElementById('simple-log-body').addEventListener('click', (e) => {
   const btn = e.target.closest('[data-sact]');
   if(!btn) return;
   const i = Number(btn.dataset.sidx);
+  if(!stateEverLoaded) return;
   if(btn.dataset.sact === 'edit'){ if(simpleEditRow === null) renderSimpleEditRow(i); }
   else if(btn.dataset.sact === 'cancel'){ simpleEditRow = null; renderSimpleLog(); }
   else if(btn.dataset.sact === 'save'){ handleSimpleSave(i); }
@@ -3409,6 +3561,7 @@ document.getElementById('records-switch').addEventListener('click', (e) => {
 
 // ---------- 版本紀錄 ----------
 const VERSION_LOG = [
+  {v:'v20.3', date:'2026/10/12', d:'操作員反映的兩項改善（後端 .gs 有異動，需要重新部署）：(1) 時間改成「輸入」：開始／結束時間點開是數字鍵盤，輸入 935 或 0935 就自動變成 09:35，可以精準到 1 分鐘，24 小時都能填（不再限制 08:30～22:00、每 10 分鐘一格），旁邊多一顆「現在」按鈕，一按就填入目前時間；格式不對會標紅框，儲存時也會擋下。查看紀錄的編輯列同樣改成輸入。(2) 加快開啟速度：簡化版第一次讀取更有耐心（單次最多等 40 秒、失敗自動重試 3 次）；開頁面時先顯示這台手機上次存下來的資料（唯讀，頂端有提示），最新資料讀到後才開放填寫；後端簡化版只回傳該機台最近 14 天的紀錄加上每張訂單的最新一筆，並只讀紀錄表最後 1500 列，另外加 60 秒快取（任何寫入都會立刻清掉快取，不會看到舊資料）'},
   {v:'v20.2', date:'2026/10/12', d:'修正簡化版「原本填好的開始時間，再開頁面填結束時間時不見了」：原因是重新開啟頁面時，如果第一次讀取試算表剛好失敗或太慢（手機網路不穩、Google 暫時沒回應），畫面會顯示一張「空白卡片」，這時選結束時間，系統會拿空白的開始時間組成整筆資料存回去，把原本的開始時間蓋掉。現在還沒成功讀到試算表資料前，不會顯示可填寫的卡片，改顯示「資料讀取中…」並自動重試（也有「重新讀取」按鈕），讀到資料後才能填寫。純前端修改，不需要重新部署 .gs'},
   {v:'v20.1', date:'2026/10/12', d:'三項調整（後端 .gs 有異動，需要重新部署）：(1) 按「記錄今日進度」或「確定完成並加入紀錄」之後，畫面會先跳出全螢幕「儲存中…請勿重複按」的視窗擋住畫面，存好後改成「儲存成功」，按「知道了」才關閉；儲存失敗時不會再誤清空卡片，並且明確告知這筆沒有存進去。避免操作員以為沒存成功而重複按、產生重複紀錄。(2) 儲存前必須填寫：客戶名稱、總箱數、目前箱數、日期、開始時間、結束時間，缺哪項會列出來，補齊才能存（結束時間不再自動補成當下時間）。(3) 簡化版下方新增「這台機台今天已儲存的紀錄」，只看得到自己這台、當天的資料，只能編輯、不能刪除；伺服器端也同步限制：鑰匙只能修改自己機台、當天寫入的產能記錄，不能刪除、不能改成別台，過了當天就只剩管理者能改'},
   {v:'v20.0', date:'2026/10/06', d:'新增深色／淺色切換：版本號旁邊多了一個 🌙☀️ 切換鈕，完整版與簡化版都有。預設跟著裝置本身的深淺色設定（手機或電腦的外觀模式），按過切換鈕之後這台裝置就會記住選擇，下次打開不用再切；每台裝置各自記住、互不影響。如果沒有手動選過，裝置的深淺色設定改變時（例如手機晚上自動切成深色），畫面也會跟著變。整個網頁都會變，包含統計圖表、各種彈窗、提示框、下拉選單。淺色底上琥珀、綠、紅這幾個強調色會自動調深一點，不然太淡看不清楚。匯出的 Word／PDF 報表固定維持原本的配色，不受影響。順便修正：簡化版原本會把版本號按鈕重建而失去點擊功能，現在可以正常點開版本紀錄'},
@@ -5505,6 +5658,8 @@ if(window.matchMedia){
 }
 applyTheme(getCurrentTheme());
 applySimpleModeLayout();
+bootFromCache();
+if(showingCache) render();
 // 手機把分頁放到背景再切回來時，畫面上的資料常常已經過期（背景分頁的自動更新會被暫停），
 // 這時候馬上操作就容易拿舊資料去覆蓋新資料，所以切回來的當下立刻更新一次。
 document.addEventListener('visibilitychange', () => {
