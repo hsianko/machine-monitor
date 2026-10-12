@@ -927,7 +927,7 @@
 
 <div class="wrap">
   <div class="topbar">
-    <h1>產線即時監看板 <button class="version-badge" id="version-badge">v20.1</button><button class="theme-toggle" id="theme-toggle" type="button" aria-label="切換深色／淺色" title="切換深色／淺色"><span class="tt-moon">🌙</span><span class="tt-sun">☀️</span></button></h1>
+    <h1>產線即時監看板 <button class="version-badge" id="version-badge">v20.2</button><button class="theme-toggle" id="theme-toggle" type="button" aria-label="切換深色／淺色" title="切換深色／淺色"><span class="tt-moon">🌙</span><span class="tt-sun">☀️</span></button></h1>
     <div class="topbar-right">
       <button class="export-btn" id="settings-btn">設定 API 網址</button>
       <button class="export-btn" id="admin-btn">管理者設定</button>
@@ -1713,6 +1713,16 @@ function render(){
     </div>`;
     return;
   }
+  if(API_URL && !stateEverLoaded){
+    const hintText = document.getElementById('save-hint').textContent;
+    grid.innerHTML = `<div class="simple-blocked">
+      <div class="simple-blocked-title">資料讀取中…</div>
+      <div class="simple-blocked-text">還沒有從試算表讀到資料，為了避免把已填好的內容蓋掉，讀取完成前不能填寫。系統會自動重試，也可以按下面的按鈕。<br>${escapeHtml(hintText||'')}</div>
+      <button type="button" id="reload-state-btn" style="margin-top:12px;padding:10px 24px;">重新讀取</button>
+    </div>`;
+    document.getElementById('reload-state-btn').addEventListener('click', () => loadState());
+    return;
+  }
   const todayY = new Date().getFullYear();
   const todayM = new Date().getMonth()+1;
   const todayD = new Date().getDate();
@@ -2461,6 +2471,11 @@ function updateSuggestionLists(){
   remarkList.innerHTML = Array.from(remarkSet).map(r => `<option value="${escapeHtml(r)}">`).join('');
 }
 
+// 第一次成功讀到試算表資料之前，不能顯示可以填寫的卡片：
+// 讀取失敗（網路慢、Google 暫時沒回應）時如果直接顯示「空白卡片」，操作員一選結束時間，
+// 就會拿空白的開始時間組成整筆資料存回試算表，把原本填好的開始時間蓋掉。
+let stateEverLoaded = false;
+let loadRetryTimer = null;
 async function loadState(){
   const hint = document.getElementById('save-hint');
   if(!API_URL){
@@ -2479,6 +2494,7 @@ async function loadState(){
     jobOverrides = {};
     (json.jobOverrides || []).forEach(o => { jobOverrides[o.jobId] = o; });
     if(json.state){
+      stateEverLoaded = true;
       MACHINES.forEach(m => {
         const stillDirty = dirtyUntil[m.key] && Date.now() < dirtyUntil[m.key];
         if(stillDirty){
@@ -2528,6 +2544,9 @@ async function loadState(){
       hint.textContent = '讀取失敗（後端執行時出錯，稍後會自動重試）：' + msg;
     } else {
       hint.textContent = '讀取失敗，請檢查網路或 API 網址：' + msg;
+    }
+    if(!stateEverLoaded && !loadRetryTimer){
+      loadRetryTimer = setTimeout(() => { loadRetryTimer = null; loadState(); }, 3000);
     }
   }
   render();
@@ -3219,7 +3238,7 @@ function renderSimpleLog(){
   const wrap = document.getElementById('simple-log-body');
   const sec = document.getElementById('simple-log-section');
   if(!wrap || !sec) return;
-  if(SIMPLE_AUTH_ERROR || !isSimpleModeDateAllowed()){ sec.style.display = 'none'; return; }
+  if(SIMPLE_AUTH_ERROR || !isSimpleModeDateAllowed() || (API_URL && !stateEverLoaded)){ sec.style.display = 'none'; return; }
   sec.style.display = '';
   if(simpleEditRow !== null) return;
   const today = todayYMDLocal();
@@ -3390,6 +3409,7 @@ document.getElementById('records-switch').addEventListener('click', (e) => {
 
 // ---------- 版本紀錄 ----------
 const VERSION_LOG = [
+  {v:'v20.2', date:'2026/10/12', d:'修正簡化版「原本填好的開始時間，再開頁面填結束時間時不見了」：原因是重新開啟頁面時，如果第一次讀取試算表剛好失敗或太慢（手機網路不穩、Google 暫時沒回應），畫面會顯示一張「空白卡片」，這時選結束時間，系統會拿空白的開始時間組成整筆資料存回去，把原本的開始時間蓋掉。現在還沒成功讀到試算表資料前，不會顯示可填寫的卡片，改顯示「資料讀取中…」並自動重試（也有「重新讀取」按鈕），讀到資料後才能填寫。純前端修改，不需要重新部署 .gs'},
   {v:'v20.1', date:'2026/10/12', d:'三項調整（後端 .gs 有異動，需要重新部署）：(1) 按「記錄今日進度」或「確定完成並加入紀錄」之後，畫面會先跳出全螢幕「儲存中…請勿重複按」的視窗擋住畫面，存好後改成「儲存成功」，按「知道了」才關閉；儲存失敗時不會再誤清空卡片，並且明確告知這筆沒有存進去。避免操作員以為沒存成功而重複按、產生重複紀錄。(2) 儲存前必須填寫：客戶名稱、總箱數、目前箱數、日期、開始時間、結束時間，缺哪項會列出來，補齊才能存（結束時間不再自動補成當下時間）。(3) 簡化版下方新增「這台機台今天已儲存的紀錄」，只看得到自己這台、當天的資料，只能編輯、不能刪除；伺服器端也同步限制：鑰匙只能修改自己機台、當天寫入的產能記錄，不能刪除、不能改成別台，過了當天就只剩管理者能改'},
   {v:'v20.0', date:'2026/10/06', d:'新增深色／淺色切換：版本號旁邊多了一個 🌙☀️ 切換鈕，完整版與簡化版都有。預設跟著裝置本身的深淺色設定（手機或電腦的外觀模式），按過切換鈕之後這台裝置就會記住選擇，下次打開不用再切；每台裝置各自記住、互不影響。如果沒有手動選過，裝置的深淺色設定改變時（例如手機晚上自動切成深色），畫面也會跟著變。整個網頁都會變，包含統計圖表、各種彈窗、提示框、下拉選單。淺色底上琥珀、綠、紅這幾個強調色會自動調深一點，不然太淡看不清楚。匯出的 Word／PDF 報表固定維持原本的配色，不受影響。順便修正：簡化版原本會把版本號按鈕重建而失去點擊功能，現在可以正常點開版本紀錄'},
   {v:'v19.4', date:'2026/10/06', d:'修正簡化版明明沒有未完成的訂單，卻一直跳出綠色「偵測到未完成的訂單，要接續嗎？」的問題（後端 .gs 有異動，需要重新部署）。原因：訂單常常會換機台接力做完（用「接續此訂單」，沿用同一個訂單序號），但簡化版只拿得到自己這台的紀錄，如果訂單在這台做了一部分、後來在別台做完，完成的那筆紀錄在別台，簡化版看不到，就誤以為還停在這台沒做完（完整版有全部機台的資料，所以不會誤判）。現在伺服器會針對「這台碰過的訂單」，額外告訴簡化版它在別台的最新狀態、以及是否正掛在別台的卡片上，兩者都不含客戶名稱與機台名稱，不會洩漏其他機台的內容。另外兩項調整：(1) 提示框右上角新增 ✕ 可以關閉，關閉後同一個客戶名稱就不再跳出（換客戶、清空卡片、完成訂單之後才會重新提示，重新整理頁面不會又跳出來）；(2) 卡片只要已經填了「目前第幾箱」（開始作業了），就不再顯示這個提示，因為這時再問要不要接續只會干擾'},
