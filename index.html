@@ -958,7 +958,7 @@
 
 <div class="wrap">
   <div class="topbar">
-    <h1>產線即時監看板 <button class="version-badge" id="version-badge">v20.6</button><button class="theme-toggle" id="theme-toggle" type="button" aria-label="切換深色／淺色" title="切換深色／淺色"><span class="tt-moon">🌙</span><span class="tt-sun">☀️</span></button></h1>
+    <h1>產線即時監看板 <button class="version-badge" id="version-badge">v20.7</button><button class="theme-toggle" id="theme-toggle" type="button" aria-label="切換深色／淺色" title="切換深色／淺色"><span class="tt-moon">🌙</span><span class="tt-sun">☀️</span></button></h1>
     <div class="topbar-right">
       <button class="export-btn" id="settings-btn">設定 API 網址</button>
       <button class="export-btn" id="admin-btn">管理者設定</button>
@@ -2036,6 +2036,30 @@ function render(){
 
     // 日期只需要選一次（預設就是今天），開始/結束時間各自只留時間選單；
     // 不管是改日期、改開始時間、還是改結束時間，都用同一套邏輯重新組合成完整的日期時間存進去。
+    // 按下儲存按鈕的當下，先把畫面上「還沒觸發 change 事件」的輸入內容收進 state。
+    // iPhone 的 Safari 點按鈕時，不會讓剛打字的輸入框先失去焦點，所以 change 事件常常來不及發生，
+    // 結果畫面上明明填了時間（或客戶名稱），儲存時系統卻以為是空白。
+    function commitCardInputs(){
+      let changed = false;
+      card.querySelectorAll('[data-k]').forEach(inp => {
+        const k = inp.dataset.k;
+        if(k && state[m.key][k] !== undefined && String(state[m.key][k]) !== String(inp.value)){
+          state[m.key][k] = inp.value; changed = true;
+        }
+      });
+      const sY = card.querySelector('[data-part="s-year"]'), sM = card.querySelector('[data-part="s-month"]'), sD = card.querySelector('[data-part="s-day"]');
+      if(sY && sM && sD){
+        const eY = card.querySelector('[data-part="e-year"]'), eM = card.querySelector('[data-part="e-month"]'), eD = card.querySelector('[data-part="e-day"]');
+        const sT = readTimeVal(card.querySelector('[data-part="s-time"]')), eT = readTimeVal(card.querySelector('[data-part="e-time"]'));
+        const st = buildComposite(sY.value, sM.value, sD.value, sT);
+        const et = buildComposite(eY ? eY.value : sY.value, eM ? eM.value : sM.value, eD ? eD.value : sD.value, eT);
+        if(st !== state[m.key].startTime || et !== state[m.key].actualEnd){
+          state[m.key].startTime = st; state[m.key].actualEnd = et; changed = true;
+        }
+      }
+      if(changed) saveState(m.key);
+    }
+
     function syncTimesFromCard(){
       const sYear = card.querySelector('[data-part="s-year"]').value;
       const sMonth = card.querySelector('[data-part="s-month"]').value;
@@ -2132,6 +2156,7 @@ function render(){
     card.querySelector('[data-done]').addEventListener('click', async () => {
       // 已經有一個存檔動作在進行中，忽略這次點擊，避免因為畫面還沒更新而重複送出。
       if(savingLock[m.key]) return;
+      commitCardInputs();
       const dd = state[m.key];
       const missingDone = missingRecordFields(m.key);
       if(missingDone.length){ alertMissingFields(missingDone); return; }
@@ -2189,6 +2214,7 @@ function render(){
     card.querySelector('[data-daily]').addEventListener('click', async () => {
       // 已經有一個存檔動作在進行中，忽略這次點擊，避免因為畫面還沒更新而重複送出。
       if(savingLock[m.key]) return;
+      commitCardInputs();
       const dd = state[m.key];
       const missingDaily = missingRecordFields(m.key);
       if(missingDaily.length){ alertMissingFields(missingDaily); return; }
@@ -3624,6 +3650,7 @@ document.getElementById('records-switch').addEventListener('click', (e) => {
 
 // ---------- 版本紀錄 ----------
 const VERSION_LOG = [
+  {v:'v20.7', date:'2026/10/12', d:'修正「結束時間明明已經填了，按儲存卻說還沒填」的問題（純前端修改，不需要重新部署 .gs）：iPhone 的 Safari 點按鈕時，剛打字的輸入框不會先失去焦點，系統就來不及收到「這格填好了」的通知，儲存時讀到的還是舊的空白。現在按下「記錄今日進度」或「確定完成並加入紀錄」的當下，會先把畫面上所有欄位（客戶名稱、時間、日期、備註…）的內容直接讀進來再檢查與儲存，不再依賴輸入框失去焦點的通知'},
   {v:'v20.6', date:'2026/10/12', d:'「記錄今日進度」與「確定完成並加入紀錄」兩個按鈕改成一樣大小（左右均分、高度一致）並維持同一列，說明文字各自放在按鈕正下方（純前端修改，不需要重新部署 .gs）'},
   {v:'v20.5', date:'2026/10/12', d:'「記錄今日進度」與「確定完成並加入紀錄」兩個按鈕更好分辨（純前端修改，不需要重新部署 .gs）：(1) 兩個按鈕改成不同顏色（藍／綠），各自下方有一行說明：今天先收工、訂單還沒做完 → 記錄今日進度；整張訂單全部做完 → 確定完成。(2) 依箱數自動只亮一個：目前箱數還沒到總箱數時，「確定完成」變灰並顯示「還差 N 箱才能完成」；箱數已做滿時，「記錄今日進度」變灰並提示改按「確定完成」。總箱數填錯但實際已做完時，可按灰色按鈕下方的「箱數不對？仍要標示完成」（會再確認一次）暫時開啟。(3) 按「確定完成」時的確認視窗，改成顯示總箱數、目前箱數與還差幾箱，並提醒「只是今天先收工請按取消，改按記錄今日進度」'},
   {v:'v20.4', date:'2026/10/12', d:'修正「紀錄」分頁編輯時，開始／結束時間的年、月、日下拉選單文字被截斷（只顯示「202」「10月」被卡住）的問題：年月日欄位加寬到放得下完整文字，日期＋時間＋「現在」按鈕仍維持同一列、不會換成兩列，整列太寬時改用表格左右捲動（純前端修改，不需要重新部署 .gs）'},
