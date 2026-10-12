@@ -958,7 +958,7 @@
 
 <div class="wrap">
   <div class="topbar">
-    <h1>產線即時監看板 <button class="version-badge" id="version-badge">v20.7</button><button class="theme-toggle" id="theme-toggle" type="button" aria-label="切換深色／淺色" title="切換深色／淺色"><span class="tt-moon">🌙</span><span class="tt-sun">☀️</span></button></h1>
+    <h1>產線即時監看板 <button class="version-badge" id="version-badge">v20.8</button><button class="theme-toggle" id="theme-toggle" type="button" aria-label="切換深色／淺色" title="切換深色／淺色"><span class="tt-moon">🌙</span><span class="tt-sun">☀️</span></button></h1>
     <div class="topbar-right">
       <button class="export-btn" id="settings-btn">設定 API 網址</button>
       <button class="export-btn" id="admin-btn">管理者設定</button>
@@ -1660,6 +1660,17 @@ function timeInputHtml(attrName, attrVal, value){
   const v = normalizeTime(value);
   return `<span class="time-input-wrap"><input type="text" class="time-input" inputmode="numeric" autocomplete="off" maxlength="5" placeholder="例 0935" ${attrName}="${attrVal}" value="${escapeHtml(v || '')}"><button type="button" class="time-now-btn" data-now-for="${attrVal}">現在</button></span>`;
 }
+// 手機上輸入完時間後直接上下滑動，輸入框沒有失去焦點、系統也就沒收到「填好了」的通知，
+// 之後頁面一重畫，打的內容就消失了。所以一開始滑動就先讓輸入框失去焦點（等於按下完成），內容立刻收進去。
+let scrollBlurTimer = null;
+window.addEventListener('scroll', () => {
+  const ae = document.activeElement;
+  if(ae && ae.classList && ae.classList.contains('time-input')){
+    clearTimeout(scrollBlurTimer);
+    scrollBlurTimer = setTimeout(() => { if(document.activeElement === ae) ae.blur(); }, 150);
+  }
+}, {passive:true});
+
 // 輸入時自動補冒號（935 → 9:35），不用自己打「:」
 document.addEventListener('input', (e) => {
   const el = e.target;
@@ -2580,22 +2591,60 @@ function fromChinese(map, obj){
 let dirtyUntil = {};
 const DIRTY_GRACE_MS = 25000;
 
+// 存檔一律「排隊、一次只送一筆」，而且每次送的都是「送出當下最新的畫面資料」：
+// 以前每改一個欄位就同時送出一個存檔請求，手機網路不穩或 Google 冷啟動時，
+// 較舊的請求可能比較新的請求更晚抵達，試算表最後留下的是舊資料，過一陣子自動更新就把畫面「洗回」舊的樣子（時間跳掉）。
+// 另外：還沒確定存成功之前（含失敗重試中），不讓自動更新拿試算表的舊資料覆蓋畫面。
+const saveInFlight = {};
+const savePendingAgain = {};
+const savePendingFilledBy = {};
+const saveUnsaved = {};
+const saveRetryTimer = {};
 async function saveState(machine, opts){
   const hint = document.getElementById('save-hint');
   dirtyUntil[machine] = Date.now() + DIRTY_GRACE_MS;
   if(!API_URL){ hint.textContent = '尚未設定 API 網址，資料暫時只存在畫面上'; return; }
-  try{
-    const data = toChinese(STATE_MAP, state[machine]);
-    // 完整版沒有「填寫人」欄位，平常存檔時完全不碰它（後端遇到沒帶的欄位會保持原樣）。
-    // 不然完整版記憶體裡如果是舊資料（例如手機切回來的舊分頁），整列寫回去就會把簡化版剛填好的名字蓋成空白。
-    // 只有「清空卡片」「完成訂單」「接續訂單」這種真的要改動它的操作，才會明確帶上來（writeFilledBy）。
-    // 簡化版本身就有這個欄位可以輸入，一律照常帶。
-    if(!SIMPLE_MODE_MACHINE && !(opts && opts.writeFilledBy)) delete data['填寫人'];
-    await apiPost({action:'saveState', machine: machine, data});
-    hint.textContent = '已同步至試算表 · ' + fmtClock();
-  }catch(err){
-    hint.textContent = '同步失敗，請檢查網路或 API 網址：' + err;
+  saveUnsaved[machine] = true;
+  if(opts && opts.writeFilledBy) savePendingFilledBy[machine] = true;
+  if(saveInFlight[machine]){
+    savePendingAgain[machine] = true;
+    return saveInFlight[machine];
   }
+  saveInFlight[machine] = (async () => {
+    try{
+      do{
+        savePendingAgain[machine] = false;
+        const writeFilledBy = !!savePendingFilledBy[machine];
+        savePendingFilledBy[machine] = false;
+        const data = toChinese(STATE_MAP, state[machine]);
+        // 完整版沒有「填寫人」欄位，平常存檔時完全不碰它（後端遇到沒帶的欄位會保持原樣）。
+        // 不然完整版記憶體裡如果是舊資料（例如手機切回來的舊分頁），整列寫回去就會把簡化版剛填好的名字蓋成空白。
+        // 只有「清空卡片」「完成訂單」「接續訂單」這種真的要改動它的操作，才會明確帶上來（writeFilledBy）。
+        // 簡化版本身就有這個欄位可以輸入，一律照常帶。
+        if(!SIMPLE_MODE_MACHINE && !writeFilledBy) delete data['填寫人'];
+        try{
+          await apiPost({action:'saveState', machine: machine, data});
+        }catch(err){
+          if(writeFilledBy) savePendingFilledBy[machine] = true;
+          throw err;
+        }
+        hint.textContent = '已同步至試算表 · ' + fmtClock();
+      }while(savePendingAgain[machine]);
+      saveUnsaved[machine] = false;
+    }catch(err){
+      hint.textContent = '同步失敗，請檢查網路或 API 網址：' + err;
+      if(err && err.code){
+        // 驗證類錯誤（連結過期、作廢）重試也不會成功，不再重送
+        saveUnsaved[machine] = false;
+      } else if(!saveRetryTimer[machine]){
+        // 網路問題：幾秒後自動再送一次最新的畫面資料，直到成功為止
+        saveRetryTimer[machine] = setTimeout(() => { saveRetryTimer[machine] = null; saveState(machine); }, 4000);
+      }
+    }finally{
+      saveInFlight[machine] = null;
+    }
+  })();
+  return saveInFlight[machine];
 }
 
 // 儲存前必填欄位檢查：客戶名稱、總箱數、目前箱數、日期、開始時間、結束時間。
@@ -2724,7 +2773,7 @@ async function loadState(){
       showingCache = false;
       saveLoadCache(json);
       MACHINES.forEach(m => {
-        const stillDirty = dirtyUntil[m.key] && Date.now() < dirtyUntil[m.key];
+        const stillDirty = (dirtyUntil[m.key] && Date.now() < dirtyUntil[m.key]) || saveUnsaved[m.key] || saveInFlight[m.key];
         if(stillDirty){
           // 最近才本機修改過，先不要用伺服器資料覆蓋。
           // 但完整版沒有填寫人欄位、使用者不可能在本機改它，所以永遠以伺服器為準（簡化版填的名字才不會被舊資料擋住）。
@@ -3650,6 +3699,7 @@ document.getElementById('records-switch').addEventListener('click', (e) => {
 
 // ---------- 版本紀錄 ----------
 const VERSION_LOG = [
+  {v:'v20.8', date:'2026/10/12', d:'修正手機上填好開始時間後，上下滑動頁面時間又「跳掉」的問題（純前端修改，不需要重新部署 .gs）。找到兩個原因：(1) 存檔請求原本是每改一個欄位就同時送一個，手機網路不穩或 Google 冷啟動時，舊的請求可能比新的更晚抵達，試算表最後留下的是舊資料，過一陣子自動更新就把畫面洗回舊的樣子；現在改成排隊、一次只送一筆，而且送的永遠是最新的畫面資料，同步失敗時還會每 4 秒自動重送，在確定存成功前，自動更新也不會拿試算表的舊資料覆蓋畫面。(2) 輸入時間後沒有點別處就直接滑動頁面，輸入框沒有失去焦點、內容沒被收進去，之後畫面重畫就消失；現在一開始滑動就會自動確認輸入'},
   {v:'v20.7', date:'2026/10/12', d:'修正「結束時間明明已經填了，按儲存卻說還沒填」的問題（純前端修改，不需要重新部署 .gs）：iPhone 的 Safari 點按鈕時，剛打字的輸入框不會先失去焦點，系統就來不及收到「這格填好了」的通知，儲存時讀到的還是舊的空白。現在按下「記錄今日進度」或「確定完成並加入紀錄」的當下，會先把畫面上所有欄位（客戶名稱、時間、日期、備註…）的內容直接讀進來再檢查與儲存，不再依賴輸入框失去焦點的通知'},
   {v:'v20.6', date:'2026/10/12', d:'「記錄今日進度」與「確定完成並加入紀錄」兩個按鈕改成一樣大小（左右均分、高度一致）並維持同一列，說明文字各自放在按鈕正下方（純前端修改，不需要重新部署 .gs）'},
   {v:'v20.5', date:'2026/10/12', d:'「記錄今日進度」與「確定完成並加入紀錄」兩個按鈕更好分辨（純前端修改，不需要重新部署 .gs）：(1) 兩個按鈕改成不同顏色（藍／綠），各自下方有一行說明：今天先收工、訂單還沒做完 → 記錄今日進度；整張訂單全部做完 → 確定完成。(2) 依箱數自動只亮一個：目前箱數還沒到總箱數時，「確定完成」變灰並顯示「還差 N 箱才能完成」；箱數已做滿時，「記錄今日進度」變灰並提示改按「確定完成」。總箱數填錯但實際已做完時，可按灰色按鈕下方的「箱數不對？仍要標示完成」（會再確認一次）暫時開啟。(3) 按「確定完成」時的確認視窗，改成顯示總箱數、目前箱數與還差幾箱，並提醒「只是今天先收工請按取消，改按記錄今日進度」'},
