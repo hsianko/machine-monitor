@@ -161,6 +161,26 @@
     padding:24px;
   }
   .modal-overlay.open{display:flex;}
+  .save-overlay{
+    display:none; position:fixed; inset:0; z-index:300;
+    background:var(--overlay); align-items:center; justify-content:center; padding:24px;
+  }
+  .save-overlay.open{display:flex;}
+  .save-overlay-box{
+    background:var(--bg-panel); border:2px solid var(--green); border-radius:16px;
+    width:100%; max-width:380px; padding:32px 24px 24px; text-align:center; box-shadow:var(--shadow-lg);
+  }
+  .save-overlay-box.busy{border-color:var(--amber);}
+  .save-overlay-icon{font-size:64px; line-height:1; color:var(--green); margin-bottom:12px;}
+  .save-overlay-box.busy .save-overlay-icon{color:var(--amber);}
+  .save-overlay-title{font-size:26px; font-weight:700; color:var(--text-primary); margin-bottom:8px;}
+  .save-overlay-text{font-size:14px; color:var(--text-secondary); line-height:1.6; margin-bottom:20px; white-space:pre-line;}
+  .save-overlay-btn{
+    background:var(--green); color:#fff; border:none; border-radius:10px;
+    font-size:18px; font-weight:700; padding:12px 40px; cursor:pointer; min-width:160px;
+  }
+  .simple-log-section{margin-top:24px;}
+  .simple-log-empty{color:var(--text-muted); font-size:13px; padding:12px 0;}
   .version-modal{
     background:var(--bg-panel);
     border:1px solid var(--border-strong);
@@ -907,7 +927,7 @@
 
 <div class="wrap">
   <div class="topbar">
-    <h1>產線即時監看板 <button class="version-badge" id="version-badge">v20.0</button><button class="theme-toggle" id="theme-toggle" type="button" aria-label="切換深色／淺色" title="切換深色／淺色"><span class="tt-moon">🌙</span><span class="tt-sun">☀️</span></button></h1>
+    <h1>產線即時監看板 <button class="version-badge" id="version-badge">v20.1</button><button class="theme-toggle" id="theme-toggle" type="button" aria-label="切換深色／淺色" title="切換深色／淺色"><span class="tt-moon">🌙</span><span class="tt-sun">☀️</span></button></h1>
     <div class="topbar-right">
       <button class="export-btn" id="settings-btn">設定 API 網址</button>
       <button class="export-btn" id="admin-btn">管理者設定</button>
@@ -967,6 +987,10 @@
 
   <div class="tab-content" id="tab-board">
     <div class="grid" id="grid"></div>
+    <div id="simple-log-section" class="simple-log-section" style="display:none;">
+      <div class="section-title" id="simple-log-title">今日已儲存的紀錄</div>
+      <div class="viewer-table-wrap" id="simple-log-body"></div>
+    </div>
     <div id="pending-section" style="display:none;">
       <div class="section-title">卡住的訂單</div>
       <div class="pending-board" id="pending-board"></div>
@@ -1194,6 +1218,15 @@
       <div class="date-tabs" id="viewer-remark-filter"></div>
       <div class="viewer-stats" id="viewer-stats"></div>
       <div class="viewer-table-wrap" id="viewer-body"></div>
+    </div>
+  </div>
+
+  <div class="save-overlay" id="save-overlay" role="alertdialog" aria-live="assertive">
+    <div class="save-overlay-box" id="save-overlay-box">
+      <div class="save-overlay-icon" id="save-overlay-icon">✓</div>
+      <div class="save-overlay-title" id="save-overlay-title">儲存成功</div>
+      <div class="save-overlay-text" id="save-overlay-text"></div>
+      <button class="save-overlay-btn" id="save-overlay-btn" type="button">知道了</button>
     </div>
   </div>
 
@@ -1435,6 +1468,9 @@ function applySimpleModeLayout(){
   });
   document.querySelectorAll('.export-date-picker').forEach(el => { el.style.display = 'none'; });
   // 第一次讀取完成之前先顯示「載入中」，避免驗證沒過的人看到一瞬間的空白卡片
+  const slog = document.getElementById('simple-log-section');
+  if(slog) slog.style.display = '';
+  document.getElementById('simple-log-title').textContent = `${SIMPLE_MODE_MACHINE} 今日已儲存的紀錄`;
   document.getElementById('grid').innerHTML = '<div class="simple-blocked"><div class="simple-blocked-text">載入中…</div></div>';
 }
 
@@ -1945,12 +1981,16 @@ function render(){
         remark: reason.trim() || '今日無作業', pct:''
       };
       try{
-        await saveLog(record);
+        showSaveBusy();
+        const okNoop = await saveLog(record);
+        if(!okNoop) return;
         await loadState();
         focusTodayInLog();
         renderViewer('log', true, true);
         render();
+        showSaveSuccess(`${m.key} 今天無作業，已記錄。`);
       }catch(err){
+        hideSaveOverlay();
         alert('標記失敗：' + err);
       }
     });
@@ -1959,10 +1999,8 @@ function render(){
       // 已經有一個存檔動作在進行中，忽略這次點擊，避免因為畫面還沒更新而重複送出。
       if(savingLock[m.key]) return;
       const dd = state[m.key];
-      if(!dd.customer || !dd.totalBoxes){
-        alert('請先填寫客戶名稱與總箱數，再標記完成。');
-        return;
-      }
+      const missingDone = missingRecordFields(m.key);
+      if(missingDone.length){ alertMissingFields(missingDone); return; }
       // 這個按鈕會把訂單結案、清空整張卡片，後果比「記錄今日進度」大很多，
       // 手機操作容易手滑點到，先跳出確認視窗給一次反悔的機會。
       if(!confirm(`確定要標記「${dd.customer}」已完成嗎？\n\n這個動作會把這張訂單加入機台產能記錄，並清空這張卡片目前的資料。`)){
@@ -1973,10 +2011,11 @@ function render(){
       const dailyBtn = card.querySelector('[data-daily]');
       doneBtn.disabled = true; doneBtn.textContent = '儲存中…';
       dailyBtn.disabled = true; dailyBtn.textContent = '儲存中…';
+      showSaveBusy('正在儲存，請稍候，不要重複按。');
+      let doneCustomer = dd.customer;
 
       try{
-        const endHasTime = parseComposite(dd.actualEnd).time;
-        const finishTime = endHasTime ? dd.actualEnd : nowComposite();
+        const finishTime = dd.actualEnd;
         const jobId = ensureJobId(m.key);
         const dayBoxes = computeDailyDelta(m.key, dd.customer, dd.totalBoxes, parseFloat(dd.currentBox) || 0, jobId);
         const record = {
@@ -1985,12 +2024,8 @@ function render(){
           filledBy:dd.filledBy||''
         };
 
-        try{
-          await saveLog(record);
-        }catch(err){
-          alert('建立完成紀錄失敗：' + err);
-          return;
-        }
+        const okDone = await saveLog(record);
+        if(!okDone) return;
 
         state[m.key] = { customer:'', totalBoxes:'', currentBox:'', startTime:'', actualEnd:'', remark:'', jobId:'', filledBy:'' };
         delete crossDayToggle[m.key];
@@ -2003,6 +2038,10 @@ function render(){
         await loadState();
         focusTodayInLog();
         renderViewer('log', true, true);
+        showSaveSuccess(`${m.key}・${doneCustomer}\n已完成並加入紀錄。`);
+      }catch(err){
+        hideSaveOverlay();
+        alert('建立完成紀錄失敗：' + err);
       }finally{
         savingLock[m.key] = false;
         render();
@@ -2013,21 +2052,19 @@ function render(){
       // 已經有一個存檔動作在進行中，忽略這次點擊，避免因為畫面還沒更新而重複送出。
       if(savingLock[m.key]) return;
       const dd = state[m.key];
-      if(!dd.customer){
-        alert('請先填寫客戶名稱，再記錄今日進度。');
-        return;
-      }
+      const missingDaily = missingRecordFields(m.key);
+      if(missingDaily.length){ alertMissingFields(missingDaily); return; }
       if(!API_URL){ alert('尚未設定 API 網址，請先點右上角「設定 API 網址」。'); return; }
       savingLock[m.key] = true;
       const doneBtn = card.querySelector('[data-done]');
       const dailyBtn = card.querySelector('[data-daily]');
       doneBtn.disabled = true; doneBtn.textContent = '儲存中…';
       dailyBtn.disabled = true; dailyBtn.textContent = '儲存中…';
+      showSaveBusy('正在儲存，請稍候，不要重複按。');
 
       try{
         const cur = parseFloat(dd.currentBox) || 0;
-        const endHasTime = parseComposite(dd.actualEnd).time;
-        const finishTime = endHasTime ? dd.actualEnd : nowComposite();
+        const finishTime = dd.actualEnd;
         const jobId = ensureJobId(m.key);
         const dayBoxes = computeDailyDelta(m.key, dd.customer, dd.totalBoxes, cur, jobId);
         const record = {
@@ -2035,7 +2072,8 @@ function render(){
           dayBoxes, startTime:dd.startTime, actualEnd:finishTime, remark:dd.remark, pct:computePct(m.key), jobId, status:'進行中',
           filledBy:dd.filledBy||''
         };
-        await saveLog(record);
+        const okDaily = await saveLog(record);
+        if(!okDaily) return;
         // 這張訂單還沒做完，只清開始／結束時間，客戶、箱數、訂單序號都留著，方便明天接續。
         state[m.key].startTime = '';
         state[m.key].actualEnd = '';
@@ -2048,7 +2086,9 @@ function render(){
         await loadState();
         focusTodayInLog();
         renderViewer('log', true, true);
+        showSaveSuccess(`${m.key}・${dd.customer}\n今日進度已記錄。`);
       }catch(err){
+        hideSaveOverlay();
         alert('記錄今日進度失敗：' + err);
       }finally{
         savingLock[m.key] = false;
@@ -2062,6 +2102,7 @@ function render(){
   renderRunningList();
   renderOverview();
   renderPendingDetails();
+  renderSimpleLog();
 }
 
 // 每台機台一天的目標箱數（固定值，跟實際有沒有缺料、有沒有開工無關，是拿來對照實際跟計畫的落差）。
@@ -2350,10 +2391,56 @@ async function saveState(machine, opts){
   }
 }
 
+// 儲存前必填欄位檢查：客戶名稱、總箱數、目前箱數、日期、開始時間、結束時間。
+// 回傳缺少的欄位名稱清單（空陣列代表都有填）。
+function missingRecordFields(machineKey){
+  const dd = state[machineKey];
+  const sp = parseComposite(dd.startTime);
+  const ep = parseComposite(dd.actualEnd);
+  const missing = [];
+  if(!String(dd.customer||'').trim()) missing.push('客戶名稱');
+  if(dd.totalBoxes === '' || dd.totalBoxes == null) missing.push('總箱數');
+  if(dd.currentBox === '' || dd.currentBox == null) missing.push('目前箱數');
+  if(!(sp.year && sp.month && sp.day) || !(ep.year && ep.month && ep.day)) missing.push('日期');
+  if(!sp.time) missing.push('開始時間');
+  if(!ep.time) missing.push('結束時間');
+  return missing;
+}
+function alertMissingFields(missing){
+  alert('以下欄位還沒填寫，請補齊後再儲存：\n\n・' + missing.join('\n・'));
+}
+
+// 全螢幕提醒視窗：儲存途中顯示「儲存中，請勿重複按」（擋住畫面避免連按），完成後顯示「儲存成功」。
+let saveOverlayTimer = null;
+function showSaveBusy(text){
+  clearTimeout(saveOverlayTimer);
+  document.getElementById('save-overlay-box').classList.add('busy');
+  document.getElementById('save-overlay-icon').textContent = '⏳';
+  document.getElementById('save-overlay-title').textContent = '儲存中…';
+  document.getElementById('save-overlay-text').textContent = text || '請稍候，不要重複按。';
+  document.getElementById('save-overlay-btn').style.display = 'none';
+  document.getElementById('save-overlay').classList.add('open');
+}
+function showSaveSuccess(text, title){
+  clearTimeout(saveOverlayTimer);
+  document.getElementById('save-overlay-box').classList.remove('busy');
+  document.getElementById('save-overlay-icon').textContent = '✓';
+  document.getElementById('save-overlay-title').textContent = title || '儲存成功';
+  document.getElementById('save-overlay-text').textContent = text || '';
+  const btn = document.getElementById('save-overlay-btn');
+  btn.style.display = '';
+  document.getElementById('save-overlay').classList.add('open');
+}
+function hideSaveOverlay(){
+  clearTimeout(saveOverlayTimer);
+  document.getElementById('save-overlay').classList.remove('open');
+}
+document.getElementById('save-overlay-btn').addEventListener('click', hideSaveOverlay);
+
 async function saveLog(record){
-  if(!API_URL){ alert('尚未設定 API 網址，無法把這筆紀錄存到試算表。'); return; }
-  try{ await apiPost({action:'appendLog', data: toChinese(LOG_MAP, record)}); }
-  catch(err){ alert('紀錄同步失敗：' + err); }
+  if(!API_URL){ alert('尚未設定 API 網址，無法把這筆紀錄存到試算表。'); return false; }
+  try{ await apiPost({action:'appendLog', data: toChinese(LOG_MAP, record)}); return true; }
+  catch(err){ hideSaveOverlay(); alert('紀錄同步失敗，這筆沒有存進去：' + err); return false; }
 }
 
 // 從歷史紀錄整理出「客戶名稱」「備註」曾經打過的內容，
@@ -3115,6 +3202,106 @@ async function handleSaveEdit(view, idx){
   }
 }
 
+// ===== 簡化版：這台機台「今天」已儲存的紀錄（只能編輯，不能刪除）=====
+const SIMPLE_LOG_KEYS = ['customer','totalBoxes','currentBox','dayBoxes','startTime','actualEnd','remark'];
+const SIMPLE_LOG_HEADS = ['客戶名稱','總箱數','完成箱數','當日箱數','開始時間','結束時間','備註'];
+let simpleLogRows = [];
+let simpleEditRow = null; // 正在編輯的試算表列號，編輯中不重畫，避免輪詢把輸入內容洗掉
+let simpleSaving = false;
+
+function todayYMDLocal(){
+  const d = new Date(), pad = n => String(n).padStart(2,'0');
+  return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
+}
+
+function renderSimpleLog(){
+  if(!SIMPLE_MODE_MACHINE) return;
+  const wrap = document.getElementById('simple-log-body');
+  const sec = document.getElementById('simple-log-section');
+  if(!wrap || !sec) return;
+  if(SIMPLE_AUTH_ERROR || !isSimpleModeDateAllowed()){ sec.style.display = 'none'; return; }
+  sec.style.display = '';
+  if(simpleEditRow !== null) return;
+  const today = todayYMDLocal();
+  simpleLogRows = completedLog
+    .filter(r => r.machine === SIMPLE_MODE_MACHINE && recordDateStr({dateKey:'loggedAt'}, r) === today)
+    .sort((a,b) => (b._row||0) - (a._row||0));
+  if(!simpleLogRows.length){
+    wrap.innerHTML = '<div class="simple-log-empty">今天還沒有儲存的紀錄。</div>';
+    return;
+  }
+  const head = SIMPLE_LOG_HEADS.map(h => `<th>${h}</th>`).join('') + '<th>操作</th>';
+  const rows = simpleLogRows.map((r, i) => {
+    const cells = SIMPLE_LOG_KEYS.map(k => `<td>${escapeHtml(cleanDisplayTime(r[k]))}</td>`).join('');
+    return `<tr data-sidx="${i}">${cells}<td><button data-sact="edit" data-sidx="${i}">編輯</button></td></tr>`;
+  }).join('');
+  wrap.innerHTML = `<table class="viewer-table"><thead><tr>${head}</tr></thead><tbody>${rows}</tbody></table>`;
+}
+
+function renderSimpleEditRow(i){
+  const r = simpleLogRows[i];
+  const tr = document.querySelector(`#simple-log-body tr[data-sidx="${i}"]`);
+  if(!tr) return;
+  simpleEditRow = r._row;
+  const cfg = VIEW_CONFIG.log;
+  const cells = SIMPLE_LOG_KEYS.map(k => `<td>${fieldControlHtml(cfg, k, r[k])}</td>`).join('');
+  tr.innerHTML = `${cells}<td><button data-sact="save" data-sidx="${i}">儲存</button> <button data-sact="cancel" data-sidx="${i}">取消</button></td>`;
+}
+
+async function handleSimpleSave(i){
+  if(simpleSaving) return;
+  const r = simpleLogRows[i];
+  const tr = document.querySelector(`#simple-log-body tr[data-sidx="${i}"]`);
+  if(!tr || !r) return;
+  const cfg = VIEW_CONFIG.log;
+  const nv = Object.assign({}, r);
+  tr.querySelectorAll('[data-edit-key]').forEach(el => {
+    const key = el.dataset.editKey;
+    if(el.querySelector('[data-edit-part]')){
+      const get = p => { const f = el.querySelector(`[data-edit-part="${p}"]`); return f ? f.value : ''; };
+      nv[key] = buildComposite(get('year'), get('month'), get('day'), get('time'));
+    } else {
+      nv[key] = el.value;
+    }
+  });
+  nv.machine = SIMPLE_MODE_MACHINE;
+  const sp = parseComposite(nv.startTime), ep = parseComposite(nv.actualEnd);
+  const missing = [];
+  if(!String(nv.customer||'').trim()) missing.push('客戶名稱');
+  if(String(nv.totalBoxes).trim() === '') missing.push('總箱數');
+  if(String(nv.currentBox).trim() === '') missing.push('完成箱數');
+  if(!(sp.year && sp.month && sp.day) || !(ep.year && ep.month && ep.day)) missing.push('日期');
+  if(!sp.time) missing.push('開始時間');
+  if(!ep.time) missing.push('結束時間');
+  if(missing.length){ alertMissingFields(missing); return; }
+  const total = parseFloat(nv.totalBoxes), cur = parseFloat(nv.currentBox);
+  if(total > 0 && !isNaN(cur)) nv.pct = Math.max(0, Math.min(100, Math.round(cur/total*100)));
+  if(!API_URL){ alert('尚未設定 API 網址，無法儲存修改。'); return; }
+  simpleSaving = true;
+  showSaveBusy('正在儲存修改，請稍候，不要重複按。');
+  try{
+    await apiPost({action:'updateRow', sheet:'Log', row:r._row, data: cfg.toApi(nv)});
+    simpleEditRow = null;
+    await loadState();
+    renderSimpleLog();
+    showSaveSuccess('修改已儲存。');
+  }catch(err){
+    hideSaveOverlay();
+    alert('儲存失敗：' + err);
+  }finally{
+    simpleSaving = false;
+  }
+}
+
+document.getElementById('simple-log-body').addEventListener('click', (e) => {
+  const btn = e.target.closest('[data-sact]');
+  if(!btn) return;
+  const i = Number(btn.dataset.sidx);
+  if(btn.dataset.sact === 'edit'){ if(simpleEditRow === null) renderSimpleEditRow(i); }
+  else if(btn.dataset.sact === 'cancel'){ simpleEditRow = null; renderSimpleLog(); }
+  else if(btn.dataset.sact === 'save'){ handleSimpleSave(i); }
+});
+
 async function handleDelete(view, idx){
   const cfg = VIEW_CONFIG[view];
   const r = currentViewRows[idx];
@@ -3203,6 +3390,7 @@ document.getElementById('records-switch').addEventListener('click', (e) => {
 
 // ---------- 版本紀錄 ----------
 const VERSION_LOG = [
+  {v:'v20.1', date:'2026/10/12', d:'三項調整（後端 .gs 有異動，需要重新部署）：(1) 按「記錄今日進度」或「確定完成並加入紀錄」之後，畫面會先跳出全螢幕「儲存中…請勿重複按」的視窗擋住畫面，存好後改成「儲存成功」，按「知道了」才關閉；儲存失敗時不會再誤清空卡片，並且明確告知這筆沒有存進去。避免操作員以為沒存成功而重複按、產生重複紀錄。(2) 儲存前必須填寫：客戶名稱、總箱數、目前箱數、日期、開始時間、結束時間，缺哪項會列出來，補齊才能存（結束時間不再自動補成當下時間）。(3) 簡化版下方新增「這台機台今天已儲存的紀錄」，只看得到自己這台、當天的資料，只能編輯、不能刪除；伺服器端也同步限制：鑰匙只能修改自己機台、當天寫入的產能記錄，不能刪除、不能改成別台，過了當天就只剩管理者能改'},
   {v:'v20.0', date:'2026/10/06', d:'新增深色／淺色切換：版本號旁邊多了一個 🌙☀️ 切換鈕，完整版與簡化版都有。預設跟著裝置本身的深淺色設定（手機或電腦的外觀模式），按過切換鈕之後這台裝置就會記住選擇，下次打開不用再切；每台裝置各自記住、互不影響。如果沒有手動選過，裝置的深淺色設定改變時（例如手機晚上自動切成深色），畫面也會跟著變。整個網頁都會變，包含統計圖表、各種彈窗、提示框、下拉選單。淺色底上琥珀、綠、紅這幾個強調色會自動調深一點，不然太淡看不清楚。匯出的 Word／PDF 報表固定維持原本的配色，不受影響。順便修正：簡化版原本會把版本號按鈕重建而失去點擊功能，現在可以正常點開版本紀錄'},
   {v:'v19.4', date:'2026/10/06', d:'修正簡化版明明沒有未完成的訂單，卻一直跳出綠色「偵測到未完成的訂單，要接續嗎？」的問題（後端 .gs 有異動，需要重新部署）。原因：訂單常常會換機台接力做完（用「接續此訂單」，沿用同一個訂單序號），但簡化版只拿得到自己這台的紀錄，如果訂單在這台做了一部分、後來在別台做完，完成的那筆紀錄在別台，簡化版看不到，就誤以為還停在這台沒做完（完整版有全部機台的資料，所以不會誤判）。現在伺服器會針對「這台碰過的訂單」，額外告訴簡化版它在別台的最新狀態、以及是否正掛在別台的卡片上，兩者都不含客戶名稱與機台名稱，不會洩漏其他機台的內容。另外兩項調整：(1) 提示框右上角新增 ✕ 可以關閉，關閉後同一個客戶名稱就不再跳出（換客戶、清空卡片、完成訂單之後才會重新提示，重新整理頁面不會又跳出來）；(2) 卡片只要已經填了「目前第幾箱」（開始作業了），就不再顯示這個提示，因為這時再問要不要接續只會干擾'},
   {v:'v19.3', date:'2026/10/06', d:'兩項版面調整（純前端）：(1) 機台異常紀錄的「異常類型」下拉選單，「分料盤落料傾斜」七個字被截掉看不到完整，改成這個欄位佔 2 個欄位寬度（手機上本來就是整行寬，不受影響）；(2) 不能跑名單的新增表單改成每個欄位各自一行（客戶關鍵字、事件／原因、不能跑的機台、新增限制按鈕），輸入框可以拉得比較寬'},
