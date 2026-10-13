@@ -190,6 +190,26 @@
     background:rgba(var(--amber-rgb),.12); border:1px solid var(--amber); color:var(--text-primary);}
   .cache-banner button{margin-left:8px; padding:4px 10px;}
   #grid.cache-locked{pointer-events:none; opacity:.55;}
+  .con-banner{margin:0 0 12px; padding:10px 12px; border-radius:10px; font-size:13px; line-height:1.6;
+    border:1px solid var(--border); background:var(--bg-panel); color:var(--text-secondary);}
+  .con-banner.bad{border-color:var(--red); background:rgba(var(--red-rgb),.10); color:var(--text-primary);}
+  .con-banner.ok{border-color:var(--green); background:rgba(var(--green-rgb),.08); color:var(--text-primary);}
+  .con-status{display:inline-block; padding:2px 8px; border-radius:10px; font-size:11px; font-weight:600; white-space:nowrap;}
+  .con-status.ok{background:rgba(var(--green-rgb),.16); color:var(--green);}
+  .con-status.bad{background:rgba(var(--red-rgb),.18); color:var(--red);}
+  .con-status.warn{background:rgba(var(--amber-rgb),.18); color:var(--amber);}
+  .con-status.muted{background:var(--bg-field); color:var(--text-muted);}
+  tr.con-low{background:rgba(var(--red-rgb),.10);}
+  table.viewer-table td.con-qty input{width:80px; min-width:70px;}
+  table.viewer-table td.con-qty select{width:auto; min-width:56px;}
+  .con-fields-list{display:flex; flex-wrap:wrap; gap:8px; margin-bottom:12px;}
+  .con-chip{display:inline-flex; align-items:center; gap:6px; padding:4px 6px 4px 10px; border-radius:14px; font-size:12px;
+    background:var(--bg-field); border:1px solid var(--border-strong); color:var(--text-primary);}
+  .con-chip button{background:none; border:none; color:var(--text-muted); cursor:pointer; font-size:13px; padding:0 4px;}
+  .con-chip button:hover{color:var(--red);}
+  .con-field-add{display:flex; flex-wrap:wrap; gap:8px; align-items:center;}
+  .con-field-add input, .con-field-add select{background:var(--bg-field); border:1px solid var(--border); border-radius:6px;
+    color:var(--text-primary); padding:7px 8px; font-size:13px;}
   .simple-log-section{margin-top:24px;}
   .simple-log-empty{color:var(--text-muted); font-size:13px; padding:12px 0;}
   .version-modal{
@@ -957,13 +977,21 @@
   table.viewer-table .edit-datetime select[data-edit-part="day"]{min-width:66px;}
   table.viewer-table .edit-datetime .time-input-wrap{width:auto; flex:none;}
   table.viewer-table .edit-datetime .time-input{min-width:62px; width:62px;}
+
+@media (max-width:600px){
+  #con-stock th:nth-child(3),#con-stock td:nth-child(3),#con-stock th:nth-child(5),#con-stock td:nth-child(5){display:none;}
+  #con-stock .viewer-table th,#con-stock .viewer-table td{padding:8px 4px;font-size:13px;}
+  #con-stock .con-asof{display:none;}
+  #con-stock button{padding:6px 8px;white-space:nowrap;}
+}
+#con-fields-list .stats-muted{font-size:13px;}
 </style>
 </head>
 <body>
 
 <div class="wrap">
   <div class="topbar">
-    <h1>產線即時監看板 <button class="version-badge" id="version-badge">v20.11</button><button class="theme-toggle" id="theme-toggle" type="button" aria-label="切換深色／淺色" title="切換深色／淺色"><span class="tt-moon">🌙</span><span class="tt-sun">☀️</span></button></h1>
+    <h1>產線即時監看板 <button class="version-badge" id="version-badge">v21.0</button><button class="theme-toggle" id="theme-toggle" type="button" aria-label="切換深色／淺色" title="切換深色／淺色"><span class="tt-moon">🌙</span><span class="tt-sun">☀️</span></button></h1>
     <div class="topbar-right">
       <button class="export-btn" id="settings-btn">設定 API 網址</button>
       <button class="export-btn" id="admin-btn">管理者設定</button>
@@ -1014,6 +1042,7 @@
     <button class="tab-btn" data-tab="stats">統計</button>
     <button class="tab-btn" data-tab="records">紀錄</button>
     <button class="tab-btn" data-tab="support">支援</button>
+    <button class="tab-btn" data-tab="consumable">耗材<span class="tab-badge" id="tab-con-badge" style="display:none;"></span></button>
   </div>
 
   <div class="data-notice">
@@ -1342,6 +1371,46 @@
     </div>
   </div>
 
+  <div class="tab-content" id="tab-consumable" style="display:none;">
+    <div class="section-title">叫貨提醒・目前庫存</div>
+    <div class="con-banner" id="con-banner"></div>
+    <div class="viewer-table-wrap" id="con-stock"></div>
+
+    <div class="section-title" style="margin-top:28px;">盤點登記</div>
+    <div class="log-panel">
+      <div class="field field-daterow" style="max-width:420px;">
+        <label>盤點日期</label>
+        <div class="time-row">
+          <select id="con-year" class="ymd-select ymd-year"></select>
+          <select id="con-month" class="ymd-select ymd-month"></select>
+          <select id="con-day" class="ymd-select ymd-day"></select>
+        </div>
+      </div>
+      <p class="log-hint" style="margin:10px 0;">只要填有盤點到的品項，沒填數量的品項不會儲存。選「箱」會自動依每箱入數換算成個數。</p>
+      <div class="viewer-table-wrap" id="con-count"></div>
+      <button class="log-submit" id="con-count-submit" type="button" style="margin-top:12px;">儲存盤點</button>
+      <button class="date-tab" id="con-history-btn" type="button" style="margin-top:12px; margin-left:8px;">查看／編輯歷史盤點紀錄</button>
+    </div>
+
+    <div class="section-title" style="margin-top:28px;">品項設定</div>
+    <div class="log-panel">
+      <div class="log-form" id="con-add-form"></div>
+      <div class="viewer-table-wrap" id="con-items" style="margin-top:14px;"></div>
+    </div>
+
+    <div class="section-title" style="margin-top:28px;">自訂欄位</div>
+    <div class="log-panel">
+      <p class="log-hint" style="margin:0 0 10px;">需要多記錄別的資訊（例如供應商、單價）時，可以自己新增欄位，新增後「品項設定」或「盤點登記」就會多出這個欄位。刪除欄位只是不再顯示，過去已經存的資料不會消失。</p>
+      <div id="con-fields-list" class="con-fields-list"></div>
+      <div class="con-field-add">
+        <input type="text" id="con-field-name" maxlength="20" placeholder="欄位名稱，例如：供應商">
+        <select id="con-field-target"><option value="品項設定">加在「品項設定」</option><option value="盤點紀錄">加在「盤點登記」</option></select>
+        <select id="con-field-type"><option value="文字">文字</option><option value="數字">數字</option></select>
+        <button class="date-tab" id="con-field-add-btn" type="button">＋新增欄位</button>
+      </div>
+    </div>
+  </div>
+
   <div class="save-hint" id="save-hint">載入中...</div>
 </div>
 
@@ -1532,6 +1601,9 @@ let scanLog = [];
 let supportLog = [];
 let supportConfig = [];
 let restrictionsLog = [];
+let consumableItems = [];
+let consumableLog = [];
+let consumableFields = [];
 
 // 判斷這個客戶名稱，在這台機台上，有沒有符合「不能跑名單」裡的限制——
 // 只要客戶名稱裡「包含」名單上的關鍵字就算符合（不用完全一樣），機台要對得上，或名單寫「全部」代表四台都算。
@@ -2822,6 +2894,12 @@ async function loadState(){
     if(json.support){ supportLog = json.support; }
     if(json.supportConfig){ supportConfig = json.supportConfig; }
     if(json.restrictions){ restrictionsLog = json.restrictions; }
+    if(json.consumableItems){
+      consumableItems = json.consumableItems;
+      consumableLog = json.consumableLog || [];
+      consumableFields = json.consumableFields || [];
+      renderConsumables();
+    }
     refreshSupportDropdowns();
     renderRestrictionList();
     if(document.getElementById('tab-support').style.display !== 'none'){ renderSupportStats(); }
@@ -3190,6 +3268,18 @@ const VIEW_CONFIG = {
     getData: () => scanLog,
     toApi: (obj) => obj
   },
+  consumable: {
+    title:'耗材盤點記錄',
+    sheet:'ConsumableLog',
+    get headers(){ return ['日期','品名','規格','數量','單位','備註'].concat(conCustomFields('盤點紀錄').map(f => f['欄位名稱'])); },
+    get keys(){ return ['日期','品名','規格','數量','單位','備註'].concat(conCustomFields('盤點紀錄').map(f => f['欄位名稱'])); },
+    fieldTypes:{'日期':{type:'date'}},
+    dateKey:'紀錄時間',
+    groupDateKey:'日期',
+    remarkKey:'備註',
+    getData: () => consumableLog,
+    toApi: (obj) => obj
+  },
   support: {
     title:'支援紀錄',
     sheet:'SupportRecords',
@@ -3494,7 +3584,8 @@ function renderRecordsSwitch(){
     {view:'log', label:'機台產能記錄'},
     {view:'abnormal', label:'機台異常記錄'},
     {view:'scan', label:'機台掃碼異常記錄'},
-    {view:'support', label:'支援紀錄'}
+    {view:'support', label:'支援紀錄'},
+    {view:'consumable', label:'耗材盤點記錄'}
   ];
   wrap.innerHTML = items.map(it => `<button class="date-tab${currentLogView===it.view?' active':''}" data-view="${it.view}">${it.label}</button>`).join('');
 }
@@ -3749,6 +3840,7 @@ document.getElementById('records-switch').addEventListener('click', (e) => {
 
 // ---------- 版本紀錄 ----------
 const VERSION_LOG = [
+  {v:'v21.0', date:'2026/10/13', d:'新增「耗材」分頁（標籤紙、碳帶等耗材盤點與叫貨提醒，只有完整版／管理者看得到，後端 .gs 有異動，需要重新部署）：(1) 叫貨提醒・目前庫存：每個品項顯示最近一次盤點的數量、安全庫存、狀態（正常／建議叫貨／已叫貨等到貨／尚未盤點），低於安全庫存的標紅，分頁標籤上也會顯示需叫貨的品項數；按「今天已叫貨」會記錄上次叫貨日（可填叫貨數量），叫貨日晚於最近盤點時，狀態會改成「已叫貨・等到貨」，不再重複提醒。(2) 盤點登記：選一次日期，一張表列出所有品項，只要填有盤點到的，一次儲存；選「箱」會依每箱入數自動換算成個數；同一天重複盤點同一品項會先提醒。(3) 品項設定：可自己新增、修改、刪除品項（品名、規格、單位、每箱入數、安全庫存、上次叫貨日、叫貨數量、備註）。(4) 自訂欄位：可自己新增欄位（文字或數字，加在品項設定或盤點登記），不用找人改程式。(5) 歷史盤點紀錄可在「紀錄」分頁的「耗材盤點記錄」查看、編輯、刪除。試算表會自動多出 ConsumableItems、ConsumableLog、ConsumableFields 三個分頁'},
   {v:'v20.11', date:'2026/10/12', d:'修正手機上輸入完時間後，把頁面滑掉、關閉再重新打開，輸入好的時間就不見的問題（純前端修改，不需要重新部署 .gs）。原因：時間是輸入框，以前要等輸入框「失去焦點」才會存檔，打完直接把頁面滑掉或關閉就沒存到。現在打字停下來約 0.7 秒就會自動存（時間、客戶名稱、備註都一樣），另外頁面切到背景或關閉的當下，也會先把畫面上所有還沒存的內容送出一次'},
   {v:'v20.10', date:'2026/10/12', d:'修正手機上點進已填好的時間想修改時，數字鍵盤一跳出來就馬上收起來（閃退）的問題（純前端修改，不需要重新部署 .gs）。原因是 v20.8 為了「輸入完時間直接滑動頁面也能把內容收進去」，加了「頁面一捲動就讓輸入框失去焦點」的設計；但點進輸入框、鍵盤升起時，手機會自動把頁面捲動一點，也被當成捲動，鍵盤就被自己收掉了。現在改成只有手指真的在畫面上滑動時，才讓輸入框失去焦點'},
   {v:'v20.9', date:'2026/10/12', d:'「不能跑名單」的紅色警示（例如「智邦 因為XY軸位移不能在二寶運作」）右邊新增 ✕ 關閉按鈕（純前端修改，不需要重新部署 .gs）。按下後，同一台機台、同一個客戶名稱就不再跳出；改了客戶名稱、清空卡片或完成訂單後，會重新提示。關閉只是不再顯示警示，不影響不能跑名單本身的設定'},
@@ -4271,8 +4363,373 @@ initAdminGenerator();
 
 
 // ---------- 分頁籤切換（看板／異常／統計／紀錄） ----------
+// ===================== 耗材盤點（標籤紙、碳帶…）=====================
+// 資料存在三個分頁：品項設定（ConsumableItems）、盤點紀錄（ConsumableLog）、自訂欄位清單（ConsumableFields）。
+// 只有完整版（管理者）看得到、填寫。簡化版沒有這個分頁。
+const CON_ITEM_COLS = ['品名','規格','單位','每箱入數','安全庫存','上次叫貨日','叫貨數量','備註'];
+const CON_ITEM_CFG = {fieldTypes:{'上次叫貨日':{type:'date'}}};
+let conEditItemRow = null;      // 正在編輯的品項（試算表列號），編輯中不重畫，避免洗掉輸入內容
+let conCountDraft = {};         // 盤點登記表上已經打了、還沒儲存的內容（自動更新畫面時不會被洗掉）
+let conSaving = false;
+
+function conCustomFields(target){ return consumableFields.filter(f => f['套用對象'] === target); }
+function conKey(name, spec){ return `${name}｜${spec}`; }
+function conItemKey(it){ return conKey(it['品名'], it['規格']); }
+function conLabel(it){ return [it['品名'], it['規格']].filter(Boolean).join(' '); }
+function conUnit(it){ return String(it['單位'] || '個'); }
+function conNum(v){ const n = parseFloat(v); return isNaN(n) ? null : n; }
+function conTodayDateOnly(){ const d = new Date(); return buildDateOnly(d.getFullYear(), d.getMonth()+1, d.getDate()); }
+function conYMD(dateOnly){
+  const p = parseDateOnly(dateOnly);
+  if(!(p.year && p.month && p.day)) return '';
+  return `${p.year}-${String(p.month).padStart(2,'0')}-${String(p.day).padStart(2,'0')}`;
+}
+function conFmtMD(dateOnly){
+  const p = parseDateOnly(dateOnly);
+  return (p.month && p.day) ? `${p.month}/${p.day}` : '';
+}
+
+// 某個品項最近一次盤點（依盤點日期、同一天看列號）
+function conLatestCount(it){
+  const key = conItemKey(it);
+  let best = null, bestDate = '';
+  consumableLog.forEach(r => {
+    if(conKey(r['品名'], r['規格']) !== key) return;
+    const d = recordDateStr({dateKey:'日期'}, r) || '';
+    if(!best || d > bestDate || (d === bestDate && (r._row||0) > (best._row||0))){ best = r; bestDate = d; }
+  });
+  return best ? {row:best, date:bestDate, qty:conNum(best['數量'])} : null;
+}
+
+// 狀態：正常／建議叫貨／已叫貨（叫貨日在最近一次盤點之後，視為還在等到貨）／尚未盤點／未設定安全量
+function conStatus(it){
+  const latest = conLatestCount(it);
+  const safety = conNum(it['安全庫存']);
+  const ordered = conYMD(it['上次叫貨日']);
+  if(!latest || latest.qty === null) return {cls:'muted', label:'尚未盤點', low:false, latest};
+  if(safety === null || safety <= 0) return {cls:'muted', label:'未設定安全量', low:false, latest};
+  if(latest.qty < safety){
+    if(ordered && ordered >= latest.date){
+      return {cls:'warn', label:`已叫貨 ${conFmtMD(it['上次叫貨日'])}・等到貨`, low:false, ordered:true, latest};
+    }
+    return {cls:'bad', label:`建議叫貨（缺 ${Math.round((safety - latest.qty)*100)/100}）`, low:true, latest};
+  }
+  return {cls:'ok', label:'正常', low:false, latest};
+}
+
+function conExtraCells(target, getVal){
+  return conCustomFields(target).map(f => `<td>${escapeHtml(getVal(f['欄位名稱']) == null ? '' : getVal(f['欄位名稱']))}</td>`).join('');
+}
+
+function updateConsumableBadge(){
+  const badge = document.getElementById('tab-con-badge');
+  if(!badge) return;
+  const n = consumableItems.filter(it => conStatus(it).low).length;
+  if(n > 0){ badge.textContent = n; badge.style.display = ''; } else { badge.style.display = 'none'; }
+}
+
+function renderConsumables(){
+  updateConsumableBadge();
+  const tab = document.getElementById('tab-consumable');
+  if(!tab || tab.style.display === 'none') return;
+  renderConStock();
+  renderConCount();
+  renderConAddForm();
+  renderConItems();
+  renderConFields();
+}
+
+function renderConStock(){
+  const wrap = document.getElementById('con-stock');
+  const banner = document.getElementById('con-banner');
+  if(!consumableItems.length){
+    banner.className = 'con-banner';
+    banner.textContent = '還沒有任何品項，請先到下方「品項設定」新增品項（例如：長碳帶 100*300M）。';
+    wrap.innerHTML = '';
+    return;
+  }
+  const stat = consumableItems.map(it => ({it, st: conStatus(it)}));
+  const lows = stat.filter(x => x.st.low);
+  if(lows.length){
+    banner.className = 'con-banner bad';
+    banner.innerHTML = `⚠ 有 <b>${lows.length}</b> 項低於安全庫存，建議叫貨：${lows.map(x => escapeHtml(conLabel(x.it))).join('、')}`;
+  } else {
+    banner.className = 'con-banner ok';
+    banner.textContent = '目前沒有需要叫貨的品項。';
+  }
+  const rows = stat.map(({it, st}) => {
+    const stockTxt = st.latest && st.latest.qty !== null ? `<b>${escapeHtml(String(st.latest.qty))}</b> ${escapeHtml(conUnit(it))}<span class="stats-muted con-asof"> (${escapeHtml(conFmtMD(buildDateOnly(...st.latest.date.split('-').map(Number))))} 盤點)</span>` : '—';
+    const safety = conNum(it['安全庫存']);
+    const ordTxt = it['上次叫貨日'] ? `${escapeHtml(cleanDisplayTime(it['上次叫貨日']))}${it['叫貨數量'] ? `（${escapeHtml(String(it['叫貨數量']))}）` : ''}` : '—';
+    return `<tr class="${st.low ? 'con-low' : ''}"><td>${escapeHtml(conLabel(it))}</td><td>${stockTxt}</td><td>${safety === null ? '—' : escapeHtml(String(safety))}</td><td><span class="con-status ${st.cls}">${escapeHtml(st.label)}</span></td><td>${ordTxt}</td><td><button data-con-ordered="${it._row}">已叫貨</button></td></tr>`;
+  }).join('');
+  wrap.innerHTML = `<table class="viewer-table"><thead><tr><th>品項</th><th>目前庫存</th><th>安全庫存</th><th>狀態</th><th>上次叫貨日</th><th>操作</th></tr></thead><tbody>${rows}</tbody></table>`;
+}
+
+// ---- 盤點登記 ----
+function renderConCount(){
+  const wrap = document.getElementById('con-count');
+  if(!consumableItems.length){ wrap.innerHTML = '<div class="viewer-empty">請先新增品項。</div>'; return; }
+  const custom = conCustomFields('盤點紀錄');
+  const head = '<tr><th>品項</th><th>上次盤點</th><th>本次數量</th><th>備註</th>' + custom.map(f => `<th>${escapeHtml(f['欄位名稱'])}</th>`).join('') + '</tr>';
+  const rows = consumableItems.map(it => {
+    const k = conItemKey(it);
+    const dr = conCountDraft[k] || {};
+    const latest = conLatestCount(it);
+    const per = conNum(it['每箱入數']);
+    const unitSel = (per && per > 0)
+      ? `<select data-con-unit="${escapeHtml(k)}"><option value="base"${dr.unit !== 'box' ? ' selected' : ''}>${escapeHtml(conUnit(it))}</option><option value="box"${dr.unit === 'box' ? ' selected' : ''}>箱（×${per}）</option></select>`
+      : `<span class="stats-muted">${escapeHtml(conUnit(it))}</span>`;
+    const extra = custom.map(f => {
+      const nm = f['欄位名稱'];
+      return `<td><input type="text" ${f['類型'] === '數字' ? 'inputmode="decimal"' : ''} data-con-extra="${escapeHtml(nm)}" data-con-key="${escapeHtml(k)}" value="${escapeHtml((dr.extra && dr.extra[nm]) || '')}"></td>`;
+    }).join('');
+    return `<tr><td>${escapeHtml(conLabel(it))}</td><td>${latest && latest.qty !== null ? escapeHtml(String(latest.qty)) + ' ' + escapeHtml(conUnit(it)) : '—'}</td>
+      <td class="con-qty"><input type="text" inputmode="decimal" data-con-qty="${escapeHtml(k)}" value="${escapeHtml(dr.qty || '')}" placeholder="數量"> ${unitSel}</td>
+      <td><input type="text" data-con-note="${escapeHtml(k)}" value="${escapeHtml(dr.note || '')}" placeholder="例：一串5個"></td>${extra}</tr>`;
+  }).join('');
+  wrap.innerHTML = `<table class="viewer-table"><thead>${head}</thead><tbody>${rows}</tbody></table>`;
+}
+document.getElementById('con-count').addEventListener('input', (e) => {
+  const el = e.target;
+  const k = el.dataset.conQty || el.dataset.conNote || el.dataset.conKey;
+  if(!k) return;
+  const dr = conCountDraft[k] = conCountDraft[k] || {};
+  if(el.dataset.conQty !== undefined) dr.qty = el.value;
+  else if(el.dataset.conNote !== undefined) dr.note = el.value;
+  else if(el.dataset.conExtra !== undefined){ dr.extra = dr.extra || {}; dr.extra[el.dataset.conExtra] = el.value; }
+});
+document.getElementById('con-count').addEventListener('change', (e) => {
+  const el = e.target;
+  if(el.dataset.conUnit === undefined) return;
+  const dr = conCountDraft[el.dataset.conUnit] = conCountDraft[el.dataset.conUnit] || {};
+  dr.unit = el.value;
+});
+
+async function saveConCount(){
+  if(conSaving) return;
+  const y = document.getElementById('con-year').value, m = document.getElementById('con-month').value, d = document.getElementById('con-day').value;
+  if(!(y && m && d)){ alert('請先選好盤點日期。'); return; }
+  const dateStr = buildDateOnly(y, m, d);
+  const custom = conCustomFields('盤點紀錄');
+  const out = [], bad = [], dup = [];
+  consumableItems.forEach(it => {
+    const k = conItemKey(it);
+    const dr = conCountDraft[k] || {};
+    const raw = String(dr.qty == null ? '' : dr.qty).trim();
+    if(raw === '') return;
+    const n = conNum(raw);
+    if(n === null || n < 0 || !/^\d+(\.\d+)?$/.test(raw)){ bad.push(conLabel(it)); return; }
+    const per = conNum(it['每箱入數']);
+    let qty = n, note = String(dr.note || '').trim();
+    if(dr.unit === 'box' && per > 0){
+      qty = Math.round(n * per * 100) / 100;
+      const boxNote = `（${n}箱×${per}）`;
+      note = note ? `${note} ${boxNote}` : boxNote;
+    }
+    const row = {'日期': dateStr, '品名': it['品名'], '規格': it['規格'], '數量': qty, '單位': conUnit(it), '備註': note};
+    custom.forEach(f => { row[f['欄位名稱']] = (dr.extra && dr.extra[f['欄位名稱']]) || ''; });
+    out.push(row);
+    const ymd = conYMD(dateStr);
+    if(consumableLog.some(r => conKey(r['品名'], r['規格']) === k && recordDateStr({dateKey:'日期'}, r) === ymd)) dup.push(conLabel(it));
+  });
+  if(bad.length){ alert('以下品項的數量格式不正確（請輸入 0 以上的數字）：\n\n・' + bad.join('\n・')); return; }
+  if(!out.length){ alert('還沒有填任何數量。'); return; }
+  if(!API_URL){ alert('尚未設定 API 網址。'); return; }
+  if(dup.length && !confirm(`這一天已經盤點過以下品項：\n\n・${dup.join('\n・')}\n\n確定要再新增一筆嗎？（如果是要修改，請到「查看／編輯歷史盤點紀錄」）`)) return;
+  conSaving = true;
+  document.getElementById('con-count-submit').disabled = true;
+  showSaveBusy('正在儲存盤點，請稍候，不要重複按。');
+  try{
+    await apiPost({action:'appendConsumableLogBatch', data: out});
+    conCountDraft = {};
+    await loadState();
+    renderConsumables();
+    showSaveSuccess(`已儲存 ${out.length} 筆盤點。`);
+  }catch(err){
+    hideSaveOverlay();
+    alert('儲存失敗：' + err);
+  }finally{
+    conSaving = false;
+    document.getElementById('con-count-submit').disabled = false;
+  }
+}
+document.getElementById('con-count-submit').addEventListener('click', saveConCount);
+document.getElementById('con-history-btn').addEventListener('click', () => { showTab('records'); renderViewer('consumable'); });
+
+// ---- 今天已叫貨 ----
+document.getElementById('con-stock').addEventListener('click', async (e) => {
+  const btn = e.target.closest('[data-con-ordered]');
+  if(!btn) return;
+  const row = Number(btn.dataset.conOrdered);
+  const it = consumableItems.find(x => x._row === row);
+  if(!it) return;
+  const qty = prompt(`「${conLabel(it)}」今天叫貨了嗎？\n可以填這次叫貨的數量（不填也可以），按確定後會記錄今天為「上次叫貨日」。`, '');
+  if(qty === null) return;
+  btn.disabled = true;
+  try{
+    await apiPost({action:'updateRow', sheet:'ConsumableItems', row, data:{'上次叫貨日': conTodayDateOnly(), '叫貨數量': qty.trim()}});
+    await loadState();
+    renderConsumables();
+  }catch(err){
+    alert('儲存失敗：' + err);
+    btn.disabled = false;
+  }
+});
+
+// ---- 品項設定 ----
+function renderConAddForm(){
+  const wrap = document.getElementById('con-add-form');
+  if(wrap.dataset.built === String(consumableFields.length) + '|' + conCustomFields('品項設定').map(f => f['欄位名稱']).join(',')) return;
+  wrap.dataset.built = String(consumableFields.length) + '|' + conCustomFields('品項設定').map(f => f['欄位名稱']).join(',');
+  const extra = conCustomFields('品項設定').map(f => `<div class="field"><label>${escapeHtml(f['欄位名稱'])}</label><input type="text" data-con-add="${escapeHtml(f['欄位名稱'])}"></div>`).join('');
+  wrap.innerHTML = `
+    <div class="field"><label>品名</label><input type="text" id="con-add-name" placeholder="例：長碳帶、標籤"></div>
+    <div class="field"><label>規格</label><input type="text" id="con-add-spec" placeholder="例：100*300M、70*45"></div>
+    <div class="field"><label>單位</label><input type="text" id="con-add-unit" value="個"></div>
+    <div class="field"><label>每箱入數（沒有可留空）</label><input type="text" inputmode="numeric" id="con-add-per"></div>
+    <div class="field"><label>安全庫存（低於就提醒叫貨）</label><input type="text" inputmode="numeric" id="con-add-safety"></div>
+    <div class="field"><label>備註</label><input type="text" id="con-add-note"></div>
+    ${extra}
+    <button class="log-submit" id="con-add-submit" type="button">＋新增品項</button>`;
+  document.getElementById('con-add-submit').addEventListener('click', addConItem);
+}
+async function addConItem(){
+  const name = document.getElementById('con-add-name').value.trim();
+  const spec = document.getElementById('con-add-spec').value.trim();
+  if(!name){ alert('請填寫品名。'); return; }
+  const per = document.getElementById('con-add-per').value.trim();
+  const safety = document.getElementById('con-add-safety').value.trim();
+  if((per && !/^\d+(\.\d+)?$/.test(per)) || (safety && !/^\d+(\.\d+)?$/.test(safety))){ alert('每箱入數、安全庫存請輸入數字。'); return; }
+  if(consumableItems.some(it => conKey(it['品名'], it['規格']) === conKey(name, spec))){ alert('已經有同樣品名與規格的品項了。'); return; }
+  const data = {'品名':name, '規格':spec, '單位': document.getElementById('con-add-unit').value.trim() || '個', '每箱入數':per, '安全庫存':safety, '備註': document.getElementById('con-add-note').value.trim()};
+  document.querySelectorAll('#con-add-form [data-con-add]').forEach(el => { data[el.dataset.conAdd] = el.value.trim(); });
+  const btn = document.getElementById('con-add-submit');
+  btn.disabled = true; btn.textContent = '新增中…';
+  try{
+    await apiPost({action:'appendConsumableItem', data});
+    await loadState();
+    ['con-add-name','con-add-spec','con-add-per','con-add-safety','con-add-note'].forEach(id => { document.getElementById(id).value = ''; });
+    document.querySelectorAll('#con-add-form [data-con-add]').forEach(el => { el.value = ''; });
+    renderConsumables();
+    showSaveSuccess(`已新增品項：${[name, spec].filter(Boolean).join(' ')}`);
+  }catch(err){
+    alert('新增失敗：' + err);
+  }finally{
+    btn.disabled = false; btn.textContent = '＋新增品項';
+  }
+}
+
+function renderConItems(){
+  if(conEditItemRow !== null) return;
+  const wrap = document.getElementById('con-items');
+  if(!consumableItems.length){ wrap.innerHTML = '<div class="viewer-empty">還沒有品項，請用上面的表單新增。</div>'; return; }
+  const custom = conCustomFields('品項設定');
+  const head = '<tr>' + CON_ITEM_COLS.map(c => `<th>${c}</th>`).join('') + custom.map(f => `<th>${escapeHtml(f['欄位名稱'])}</th>`).join('') + '<th>操作</th></tr>';
+  const rows = consumableItems.map(it => `<tr data-con-row="${it._row}">${CON_ITEM_COLS.map(c => `<td>${escapeHtml(cleanDisplayTime(it[c] == null ? '' : it[c]))}</td>`).join('')}${conExtraCells('品項設定', nm => it[nm])}<td><button data-con-edit="${it._row}">編輯</button> <button data-con-del="${it._row}">刪除</button></td></tr>`).join('');
+  wrap.innerHTML = `<table class="viewer-table"><thead>${head}</thead><tbody>${rows}</tbody></table>`;
+}
+document.getElementById('con-items').addEventListener('click', async (e) => {
+  const edit = e.target.closest('[data-con-edit]'), del = e.target.closest('[data-con-del]');
+  const save = e.target.closest('[data-con-save]'), cancel = e.target.closest('[data-con-cancel]');
+  if(edit){
+    if(conEditItemRow !== null) return;
+    const row = Number(edit.dataset.conEdit);
+    const it = consumableItems.find(x => x._row === row);
+    const tr = document.querySelector(`#con-items tr[data-con-row="${row}"]`);
+    if(!it || !tr) return;
+    conEditItemRow = row;
+    const custom = conCustomFields('品項設定');
+    const cells = CON_ITEM_COLS.concat(custom.map(f => f['欄位名稱'])).map(c => `<td>${fieldControlHtml(CON_ITEM_CFG, c, it[c])}</td>`).join('');
+    tr.innerHTML = `${cells}<td><button data-con-save="${row}">儲存</button> <button data-con-cancel="${row}">取消</button></td>`;
+  } else if(cancel){
+    conEditItemRow = null; renderConItems();
+  } else if(save){
+    const row = Number(save.dataset.conSave);
+    const tr = document.querySelector(`#con-items tr[data-con-row="${row}"]`);
+    const data = {};
+    tr.querySelectorAll('[data-edit-key]').forEach(el => {
+      const key = el.dataset.editKey;
+      if(el.querySelector('[data-edit-part]')){
+        const get = p => { const f = el.querySelector(`[data-edit-part="${p}"]`); return f ? f.value : ''; };
+        data[key] = (get('year') && get('month') && get('day')) ? buildDateOnly(get('year'), get('month'), get('day')) : '';
+      } else data[key] = el.value.trim();
+    });
+    if(!data['品名']){ alert('品名不能空白。'); return; }
+    if((data['每箱入數'] && !/^\d+(\.\d+)?$/.test(data['每箱入數'])) || (data['安全庫存'] && !/^\d+(\.\d+)?$/.test(data['安全庫存']))){ alert('每箱入數、安全庫存請輸入數字。'); return; }
+    if(consumableItems.some(x => x._row !== row && conKey(x['品名'], x['規格']) === conKey(data['品名'], data['規格']))){ alert('已經有同樣品名與規格的品項了。'); return; }
+    save.disabled = true; save.textContent = '儲存中…';
+    try{
+      await apiPost({action:'updateRow', sheet:'ConsumableItems', row, data});
+      conEditItemRow = null;
+      await loadState();
+      renderConsumables();
+      showSaveSuccess('品項設定已儲存。');
+    }catch(err){
+      alert('儲存失敗：' + err);
+      save.disabled = false; save.textContent = '儲存';
+    }
+  } else if(del){
+    const row = Number(del.dataset.conDel);
+    const it = consumableItems.find(x => x._row === row);
+    if(!it) return;
+    if(!confirm(`確定要刪除品項「${conLabel(it)}」嗎？\n\n過去已經存的盤點紀錄不會被刪除，只是這個品項不會再出現在盤點表跟叫貨提醒裡。`)) return;
+    try{
+      await apiPost({action:'deleteRow', sheet:'ConsumableItems', row});
+      await loadState();
+      renderConsumables();
+    }catch(err){ alert('刪除失敗：' + err); }
+  }
+});
+
+// ---- 自訂欄位 ----
+function renderConFields(){
+  const wrap = document.getElementById('con-fields-list');
+  if(!consumableFields.length){ wrap.innerHTML = '<span class="stats-muted">還沒有自訂欄位。</span>'; return; }
+  wrap.innerHTML = consumableFields.map(f => `<span class="con-chip">${escapeHtml(f['欄位名稱'])}<span class="stats-muted">（${escapeHtml(f['套用對象'])}・${escapeHtml(f['類型'])}）</span><button type="button" title="刪除這個欄位" data-con-field-del="${f._row}">✕</button></span>`).join('');
+}
+document.getElementById('con-fields-list').addEventListener('click', async (e) => {
+  const btn = e.target.closest('[data-con-field-del]');
+  if(!btn) return;
+  const row = Number(btn.dataset.conFieldDel);
+  const f = consumableFields.find(x => x._row === row);
+  if(!f) return;
+  if(!confirm(`確定要刪除欄位「${f['欄位名稱']}」嗎？\n\n畫面上不會再顯示這個欄位，但試算表裡已經存的資料不會消失。`)) return;
+  try{
+    await apiPost({action:'removeConsumableField', row});
+    await loadState();
+    renderConsumables();
+  }catch(err){ alert('刪除失敗：' + err); }
+});
+document.getElementById('con-field-add-btn').addEventListener('click', async () => {
+  const name = document.getElementById('con-field-name').value.trim();
+  if(!name){ alert('請填寫欄位名稱。'); return; }
+  const btn = document.getElementById('con-field-add-btn');
+  btn.disabled = true; btn.textContent = '新增中…';
+  try{
+    await apiPost({action:'addConsumableField', name, target: document.getElementById('con-field-target').value, fieldType: document.getElementById('con-field-type').value});
+    document.getElementById('con-field-name').value = '';
+    await loadState();
+    document.getElementById('con-add-form').dataset.built = '';
+    renderConsumables();
+    showSaveSuccess(`已新增欄位：${name}`);
+  }catch(err){
+    alert('新增失敗：' + err);
+  }finally{
+    btn.disabled = false; btn.textContent = '＋新增欄位';
+  }
+});
+
+(function initConDate(){
+  const d = new Date();
+  document.getElementById('con-year').innerHTML = yearOptionsHtml(d.getFullYear());
+  document.getElementById('con-month').innerHTML = monthOptionsHtml(d.getMonth()+1);
+  document.getElementById('con-day').innerHTML = dayOptionsHtml(d.getDate());
+})();
+
+
 function showTab(name){
-  const tabs = {board:'tab-board', abnormal:'tab-abnormal', stats:'tab-stats', records:'tab-records', support:'tab-support'};
+  const tabs = {board:'tab-board', abnormal:'tab-abnormal', stats:'tab-stats', records:'tab-records', support:'tab-support', consumable:'tab-consumable'};
   Object.keys(tabs).forEach(key => {
     const el = document.getElementById(tabs[key]);
     if(el) el.style.display = (key === name) ? '' : 'none';
@@ -4284,6 +4741,7 @@ function showTab(name){
   if(name === 'records' && !currentLogView){ renderViewer('log'); }
   if(name === 'abnormal'){ renderRestrictionList(); }
   if(name === 'support'){ renderSupportStats(); }
+  if(name === 'consumable'){ renderConsumables(); }
 }
 document.getElementById('tab-bar').addEventListener('click', (e) => {
   const btn = e.target.closest('[data-tab]');
