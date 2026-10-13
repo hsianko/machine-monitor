@@ -985,13 +985,20 @@
   #con-stock button{padding:6px 8px;white-space:nowrap;}
 }
 #con-fields-list .stats-muted{font-size:13px;}
+
+@media (max-width:600px){
+  .tab-bar{flex-wrap:nowrap; gap:4px; overflow-x:auto; scrollbar-width:none;}
+  .tab-bar::-webkit-scrollbar{display:none;}
+  .tab-btn{flex:1 1 auto; justify-content:center; white-space:nowrap; font-size:clamp(11px,3.3vw,13px); padding:9px clamp(4px,1.6vw,8px); gap:3px;}
+  .tab-badge{font-size:9px; padding:0 5px;}
+}
 </style>
 </head>
 <body>
 
 <div class="wrap">
   <div class="topbar">
-    <h1>產線即時監看板 <button class="version-badge" id="version-badge">v21.0</button><button class="theme-toggle" id="theme-toggle" type="button" aria-label="切換深色／淺色" title="切換深色／淺色"><span class="tt-moon">🌙</span><span class="tt-sun">☀️</span></button></h1>
+    <h1>產線即時監看板 <button class="version-badge" id="version-badge">v21.1</button><button class="theme-toggle" id="theme-toggle" type="button" aria-label="切換深色／淺色" title="切換深色／淺色"><span class="tt-moon">🌙</span><span class="tt-sun">☀️</span></button></h1>
     <div class="topbar-right">
       <button class="export-btn" id="settings-btn">設定 API 網址</button>
       <button class="export-btn" id="admin-btn">管理者設定</button>
@@ -3840,6 +3847,7 @@ document.getElementById('records-switch').addEventListener('click', (e) => {
 
 // ---------- 版本紀錄 ----------
 const VERSION_LOG = [
+  {v:'v21.1', date:'2026/10/13', d:'手機上的分頁列（看板・4台／異常／統計／紀錄／支援／耗材）改成固定排在同一列，文字完整顯示，不會被擠到第二行（純前端修改，不需要重新部署 .gs）。做法是依手機寬度自動微調文字大小與間距，不縮成單字、也不需要展開'},
   {v:'v21.0', date:'2026/10/13', d:'新增「耗材」分頁（標籤紙、碳帶等耗材盤點與叫貨提醒，只有完整版／管理者看得到，後端 .gs 有異動，需要重新部署）：(1) 叫貨提醒・目前庫存：每個品項顯示最近一次盤點的數量、安全庫存、狀態（正常／建議叫貨／已叫貨等到貨／尚未盤點），低於安全庫存的標紅，分頁標籤上也會顯示需叫貨的品項數；按「今天已叫貨」會記錄上次叫貨日（可填叫貨數量），叫貨日晚於最近盤點時，狀態會改成「已叫貨・等到貨」，不再重複提醒。(2) 盤點登記：選一次日期，一張表列出所有品項，只要填有盤點到的，一次儲存；選「箱」會依每箱入數自動換算成個數；同一天重複盤點同一品項會先提醒。(3) 品項設定：可自己新增、修改、刪除品項（品名、規格、單位、每箱入數、安全庫存、上次叫貨日、叫貨數量、備註）。(4) 自訂欄位：可自己新增欄位（文字或數字，加在品項設定或盤點登記），不用找人改程式。(5) 歷史盤點紀錄可在「紀錄」分頁的「耗材盤點記錄」查看、編輯、刪除。試算表會自動多出 ConsumableItems、ConsumableLog、ConsumableFields 三個分頁'},
   {v:'v20.11', date:'2026/10/12', d:'修正手機上輸入完時間後，把頁面滑掉、關閉再重新打開，輸入好的時間就不見的問題（純前端修改，不需要重新部署 .gs）。原因：時間是輸入框，以前要等輸入框「失去焦點」才會存檔，打完直接把頁面滑掉或關閉就沒存到。現在打字停下來約 0.7 秒就會自動存（時間、客戶名稱、備註都一樣），另外頁面切到背景或關閉的當下，也會先把畫面上所有還沒存的內容送出一次'},
   {v:'v20.10', date:'2026/10/12', d:'修正手機上點進已填好的時間想修改時，數字鍵盤一跳出來就馬上收起來（閃退）的問題（純前端修改，不需要重新部署 .gs）。原因是 v20.8 為了「輸入完時間直接滑動頁面也能把內容收進去」，加了「頁面一捲動就讓輸入框失去焦點」的設計；但點進輸入框、鍵盤升起時，手機會自動把頁面捲動一點，也被當成捲動，鍵盤就被自己收掉了。現在改成只有手指真的在畫面上滑動時，才讓輸入框失去焦點'},
