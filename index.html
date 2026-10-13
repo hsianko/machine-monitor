@@ -983,8 +983,16 @@
   #con-stock .viewer-table th,#con-stock .viewer-table td{padding:8px 4px;font-size:13px;}
   #con-stock .con-asof{display:none;}
   #con-stock button{padding:6px 8px;white-space:nowrap;}
+  #con-stock .con-actions button{display:block;margin:3px 0;width:100%;}
 }
 #con-fields-list .stats-muted{font-size:13px;}
+.con-qty input{width:84px;}
+.con-qty input.con-box{width:64px;}
+.con-calc{margin-top:4px;font-size:13px;color:var(--text-secondary);}
+.con-calc-bad{color:var(--red);}
+.con-hint{font-size:12px;margin-top:2px;max-width:200px;}
+.con-boxrow{margin-bottom:4px;}
+.con-calc{max-width:220px;}
 
 @media (max-width:600px){
   .tab-bar{flex-wrap:nowrap; gap:4px; overflow-x:auto; scrollbar-width:none;}
@@ -998,7 +1006,7 @@
 
 <div class="wrap">
   <div class="topbar">
-    <h1>產線即時監看板 <button class="version-badge" id="version-badge">v21.1</button><button class="theme-toggle" id="theme-toggle" type="button" aria-label="切換深色／淺色" title="切換深色／淺色"><span class="tt-moon">🌙</span><span class="tt-sun">☀️</span></button></h1>
+    <h1>產線即時監看板 <button class="version-badge" id="version-badge">v21.3</button><button class="theme-toggle" id="theme-toggle" type="button" aria-label="切換深色／淺色" title="切換深色／淺色"><span class="tt-moon">🌙</span><span class="tt-sun">☀️</span></button></h1>
     <div class="topbar-right">
       <button class="export-btn" id="settings-btn">設定 API 網址</button>
       <button class="export-btn" id="admin-btn">管理者設定</button>
@@ -3847,6 +3855,8 @@ document.getElementById('records-switch').addEventListener('click', (e) => {
 
 // ---------- 版本紀錄 ----------
 const VERSION_LOG = [
+  {v:'v21.3', date:'2026/10/13', d:'耗材兩項改進（後端 .gs 有異動，需要重新部署，試算表「耗材品項」會自動多一欄「到貨日」）：(1) 叫貨紀錄可以勾「已到貨」並選到貨日；庫存表上叫貨中的品項也有一顆「已到貨」快速按鈕（到貨日記為今天）。到貨後狀態會顯示「已到貨・待盤點」，盤點登記時該品項的數量會自動預填「上次盤點＋叫貨數量」，再依實際盤點修改即可。叫貨狀態改成以「有沒有標已到貨」判斷，不再用盤點日期猜。(2) 盤點登記快速統計：有設定每箱入數的品項，分成「箱數」與「散數」兩格，自動算出 箱數×每箱入數＋散數；數量格也可以直接輸入算式（例如 35+200、12*40+25），下方即時顯示計算結果，儲存時算式會留在備註'},
+  {v:'v21.2', date:'2026/10/13', d:'耗材「叫貨狀態」可以編輯（純前端修改，不需要重新部署 .gs）：庫存表右邊的按鈕改成「叫貨紀錄」，按下去可以自己選叫貨日期（可補填過去已經叫貨的日期，跟採購單對齊）、填叫貨數量，已經有紀錄的也可以修改或清除'},
   {v:'v21.1', date:'2026/10/13', d:'手機上的分頁列（看板・4台／異常／統計／紀錄／支援／耗材）改成固定排在同一列，文字完整顯示，不會被擠到第二行（純前端修改，不需要重新部署 .gs）。做法是依手機寬度自動微調文字大小與間距，不縮成單字、也不需要展開'},
   {v:'v21.0', date:'2026/10/13', d:'新增「耗材」分頁（標籤紙、碳帶等耗材盤點與叫貨提醒，只有完整版／管理者看得到，後端 .gs 有異動，需要重新部署）：(1) 叫貨提醒・目前庫存：每個品項顯示最近一次盤點的數量、安全庫存、狀態（正常／建議叫貨／已叫貨等到貨／尚未盤點），低於安全庫存的標紅，分頁標籤上也會顯示需叫貨的品項數；按「今天已叫貨」會記錄上次叫貨日（可填叫貨數量），叫貨日晚於最近盤點時，狀態會改成「已叫貨・等到貨」，不再重複提醒。(2) 盤點登記：選一次日期，一張表列出所有品項，只要填有盤點到的，一次儲存；選「箱」會依每箱入數自動換算成個數；同一天重複盤點同一品項會先提醒。(3) 品項設定：可自己新增、修改、刪除品項（品名、規格、單位、每箱入數、安全庫存、上次叫貨日、叫貨數量、備註）。(4) 自訂欄位：可自己新增欄位（文字或數字，加在品項設定或盤點登記），不用找人改程式。(5) 歷史盤點紀錄可在「紀錄」分頁的「耗材盤點記錄」查看、編輯、刪除。試算表會自動多出 ConsumableItems、ConsumableLog、ConsumableFields 三個分頁'},
   {v:'v20.11', date:'2026/10/12', d:'修正手機上輸入完時間後，把頁面滑掉、關閉再重新打開，輸入好的時間就不見的問題（純前端修改，不需要重新部署 .gs）。原因：時間是輸入框，以前要等輸入框「失去焦點」才會存檔，打完直接把頁面滑掉或關閉就沒存到。現在打字停下來約 0.7 秒就會自動存（時間、客戶名稱、備註都一樣），另外頁面切到背景或關閉的當下，也會先把畫面上所有還沒存的內容送出一次'},
@@ -4374,8 +4384,8 @@ initAdminGenerator();
 // ===================== 耗材盤點（標籤紙、碳帶…）=====================
 // 資料存在三個分頁：品項設定（ConsumableItems）、盤點紀錄（ConsumableLog）、自訂欄位清單（ConsumableFields）。
 // 只有完整版（管理者）看得到、填寫。簡化版沒有這個分頁。
-const CON_ITEM_COLS = ['品名','規格','單位','每箱入數','安全庫存','上次叫貨日','叫貨數量','備註'];
-const CON_ITEM_CFG = {fieldTypes:{'上次叫貨日':{type:'date'}}};
+const CON_ITEM_COLS = ['品名','規格','單位','每箱入數','安全庫存','上次叫貨日','叫貨數量','到貨日','備註'];
+const CON_ITEM_CFG = {fieldTypes:{'上次叫貨日':{type:'date'},'到貨日':{type:'date'}}};
 let conEditItemRow = null;      // 正在編輯的品項（試算表列號），編輯中不重畫，避免洗掉輸入內容
 let conCountDraft = {};         // 盤點登記表上已經打了、還沒儲存的內容（自動更新畫面時不會被洗掉）
 let conSaving = false;
@@ -4409,15 +4419,26 @@ function conLatestCount(it){
   return best ? {row:best, date:bestDate, qty:conNum(best['數量'])} : null;
 }
 
-// 狀態：正常／建議叫貨／已叫貨（叫貨日在最近一次盤點之後，視為還在等到貨）／尚未盤點／未設定安全量
+// 到貨狀態：叫貨了、而且還沒標「已到貨」→ 等到貨
+function conPending(it){
+  const ord = conYMD(it['上次叫貨日']), arr = conYMD(it['到貨日']);
+  return !!ord && !(arr && arr >= ord);
+}
+// 已到貨、但到貨日在最近一次盤點之後 → 還沒盤點進庫存
+function conNeedCount(it, latest){
+  const ord = conYMD(it['上次叫貨日']), arr = conYMD(it['到貨日']);
+  if(!ord || !arr || arr < ord) return false;
+  return !latest || arr > latest.date;
+}
+// 狀態：正常／建議叫貨／已叫貨等到貨／已到貨待盤點／尚未盤點／未設定安全量
 function conStatus(it){
   const latest = conLatestCount(it);
   const safety = conNum(it['安全庫存']);
-  const ordered = conYMD(it['上次叫貨日']);
+  if(conNeedCount(it, latest) && latest) return {cls:'warn', label:`已到貨 ${conFmtMD(it['到貨日'])}・待盤點`, low:false, arrived:true, latest};
   if(!latest || latest.qty === null) return {cls:'muted', label:'尚未盤點', low:false, latest};
   if(safety === null || safety <= 0) return {cls:'muted', label:'未設定安全量', low:false, latest};
   if(latest.qty < safety){
-    if(ordered && ordered >= latest.date){
+    if(conPending(it)){
       return {cls:'warn', label:`已叫貨 ${conFmtMD(it['上次叫貨日'])}・等到貨`, low:false, ordered:true, latest};
     }
     return {cls:'bad', label:`建議叫貨（缺 ${Math.round((safety - latest.qty)*100)/100}）`, low:true, latest};
@@ -4469,12 +4490,53 @@ function renderConStock(){
     const stockTxt = st.latest && st.latest.qty !== null ? `<b>${escapeHtml(String(st.latest.qty))}</b> ${escapeHtml(conUnit(it))}<span class="stats-muted con-asof"> (${escapeHtml(conFmtMD(buildDateOnly(...st.latest.date.split('-').map(Number))))} 盤點)</span>` : '—';
     const safety = conNum(it['安全庫存']);
     const ordTxt = it['上次叫貨日'] ? `${escapeHtml(cleanDisplayTime(it['上次叫貨日']))}${it['叫貨數量'] ? `（${escapeHtml(String(it['叫貨數量']))}）` : ''}` : '—';
-    return `<tr class="${st.low ? 'con-low' : ''}"><td>${escapeHtml(conLabel(it))}</td><td>${stockTxt}</td><td>${safety === null ? '—' : escapeHtml(String(safety))}</td><td><span class="con-status ${st.cls}">${escapeHtml(st.label)}</span></td><td>${ordTxt}</td><td><button data-con-ordered="${it._row}">已叫貨</button></td></tr>`;
+    return `<tr class="${st.low ? 'con-low' : ''}"><td>${escapeHtml(conLabel(it))}</td><td>${stockTxt}</td><td>${safety === null ? '—' : escapeHtml(String(safety))}</td><td><span class="con-status ${st.cls}">${escapeHtml(st.label)}</span></td><td>${ordTxt}</td><td class="con-actions"><button data-con-ordered="${it._row}">叫貨紀錄</button>${conPending(it) ? ` <button data-con-arrived="${it._row}">已到貨</button>` : ''}</td></tr>`;
   }).join('');
   wrap.innerHTML = `<table class="viewer-table"><thead><tr><th>品項</th><th>目前庫存</th><th>安全庫存</th><th>狀態</th><th>上次叫貨日</th><th>操作</th></tr></thead><tbody>${rows}</tbody></table>`;
 }
 
 // ---- 盤點登記 ----
+// 數量欄可以直接輸入算式，例如 35+200 或 12*40+25（全形符號也可以）
+function conEval(raw){
+  let t = String(raw == null ? '' : raw).trim();
+  if(t === '') return {empty:true, val:null, isExpr:false};
+  t = t.replace(/[０-９]/g, c => String.fromCharCode(c.charCodeAt(0) - 0xFEE0))
+       .replace(/[＋]/g, '+').replace(/[－−]/g, '-').replace(/[×xX＊]/g, '*').replace(/[÷／]/g, '/').replace(/[（]/g, '(').replace(/[）]/g, ')').replace(/．/g, '.').replace(/\s+/g, '');
+  if(!/^[0-9+\-*/().]+$/.test(t) || /\*\*/.test(t)) return {empty:false, val:null, isExpr:false, bad:true};
+  let v;
+  try{ v = Function('"use strict";return (' + t + ')')(); }catch(e){ return {empty:false, val:null, isExpr:false, bad:true}; }
+  if(typeof v !== 'number' || !isFinite(v) || v < 0) return {empty:false, val:null, isExpr:false, bad:true};
+  return {empty:false, val:Math.round(v * 100) / 100, isExpr:/[+\-*/()]/.test(t), text:t};
+}
+// 一個品項目前草稿算出來的總數：箱數×每箱入數＋散數
+function conDraftTotal(it, dr){
+  const per = conNum(it['每箱入數']);
+  const q = conEval(dr.qty);
+  const bx = (per && per > 0) ? conEval(dr.boxes) : {empty:true, val:null};
+  if(q.bad || bx.bad) return {bad:true};
+  if(q.empty && bx.empty) return {empty:true};
+  const total = Math.round(((bx.val || 0) * (per || 0) + (q.val || 0)) * 100) / 100;
+  return {total, q, bx, per, showCalc: !!(bx.val !== null && !bx.empty) || q.isExpr};
+}
+function conCalcText(it, dr){
+  const r = conDraftTotal(it, dr);
+  if(r.bad) return '<span class="con-calc-bad">格式不正確</span>';
+  if(r.empty || !r.showCalc) return '';
+  const parts = [];
+  if(r.bx && !r.bx.empty) parts.push(`${r.bx.val}箱×${r.per}`);
+  if(r.q && !r.q.empty) parts.push(r.q.isExpr ? `(${r.q.text})` : `${r.q.val}`);
+  return `${escapeHtml(parts.join(' ＋ '))} ＝ <b>${r.total}</b> ${escapeHtml(conUnit(it))}`;
+}
+// 到貨後尚未盤點的品項：預填「上次盤點＋叫貨數量」
+function conPrefill(it){
+  const latest = conLatestCount(it);
+  if(!conNeedCount(it, latest)) return null;
+  const oq = conNum(it['叫貨數量']);
+  if(oq === null || oq <= 0) return null;
+  const base = latest && latest.qty !== null ? latest.qty : 0;
+  return {expr: `${base}+${oq}`, base, oq};
+}
+
 function renderConCount(){
   const wrap = document.getElementById('con-count');
   if(!consumableItems.length){ wrap.innerHTML = '<div class="viewer-empty">請先新增品項。</div>'; return; }
@@ -4482,36 +4544,49 @@ function renderConCount(){
   const head = '<tr><th>品項</th><th>上次盤點</th><th>本次數量</th><th>備註</th>' + custom.map(f => `<th>${escapeHtml(f['欄位名稱'])}</th>`).join('') + '</tr>';
   const rows = consumableItems.map(it => {
     const k = conItemKey(it);
-    const dr = conCountDraft[k] || {};
+    let dr = conCountDraft[k];
+    let hint = '';
+    if(!dr){
+      const pf = conPrefill(it);
+      if(pf){ dr = conCountDraft[k] = {qty: pf.expr, prefilled: true}; }
+      else dr = {};
+    }
+    if(dr.prefilled){
+      const pf = conPrefill(it);
+      if(pf) hint = `<div class="stats-muted con-hint">已到貨預填：上次 ${pf.base} ＋ 叫貨 ${pf.oq}，請依實際盤點修改</div>`;
+    }
     const latest = conLatestCount(it);
     const per = conNum(it['每箱入數']);
-    const unitSel = (per && per > 0)
-      ? `<select data-con-unit="${escapeHtml(k)}"><option value="base"${dr.unit !== 'box' ? ' selected' : ''}>${escapeHtml(conUnit(it))}</option><option value="box"${dr.unit === 'box' ? ' selected' : ''}>箱（×${per}）</option></select>`
-      : `<span class="stats-muted">${escapeHtml(conUnit(it))}</span>`;
+    const boxInp = (per && per > 0)
+      ? `<div class="con-boxrow"><input type="text" inputmode="numeric" class="con-box" data-con-box="${escapeHtml(k)}" value="${escapeHtml(dr.boxes || '')}" placeholder="箱數"> <span class="stats-muted">箱 × ${per} ＋</span></div>`
+      : '';
     const extra = custom.map(f => {
       const nm = f['欄位名稱'];
       return `<td><input type="text" ${f['類型'] === '數字' ? 'inputmode="decimal"' : ''} data-con-extra="${escapeHtml(nm)}" data-con-key="${escapeHtml(k)}" value="${escapeHtml((dr.extra && dr.extra[nm]) || '')}"></td>`;
     }).join('');
     return `<tr><td>${escapeHtml(conLabel(it))}</td><td>${latest && latest.qty !== null ? escapeHtml(String(latest.qty)) + ' ' + escapeHtml(conUnit(it)) : '—'}</td>
-      <td class="con-qty"><input type="text" inputmode="decimal" data-con-qty="${escapeHtml(k)}" value="${escapeHtml(dr.qty || '')}" placeholder="數量"> ${unitSel}</td>
+      <td class="con-qty">${boxInp}<input type="text" inputmode="text" class="con-loose" data-con-qty="${escapeHtml(k)}" value="${escapeHtml(dr.qty || '')}" placeholder="${per ? '散數' : '數量'}"> <span class="stats-muted">${escapeHtml(conUnit(it))}</span>
+        <div class="con-calc" data-con-calc="${escapeHtml(k)}">${conCalcText(it, dr)}</div>${hint}</td>
       <td><input type="text" data-con-note="${escapeHtml(k)}" value="${escapeHtml(dr.note || '')}" placeholder="例：一串5個"></td>${extra}</tr>`;
   }).join('');
   wrap.innerHTML = `<table class="viewer-table"><thead>${head}</thead><tbody>${rows}</tbody></table>`;
 }
 document.getElementById('con-count').addEventListener('input', (e) => {
   const el = e.target;
-  const k = el.dataset.conQty || el.dataset.conNote || el.dataset.conKey;
+  const k = el.dataset.conQty || el.dataset.conBox || el.dataset.conNote || el.dataset.conKey;
   if(!k) return;
   const dr = conCountDraft[k] = conCountDraft[k] || {};
-  if(el.dataset.conQty !== undefined) dr.qty = el.value;
+  if(el.dataset.conQty !== undefined){ dr.qty = el.value; dr.prefilled = false; }
+  else if(el.dataset.conBox !== undefined){ dr.boxes = el.value; }
   else if(el.dataset.conNote !== undefined) dr.note = el.value;
   else if(el.dataset.conExtra !== undefined){ dr.extra = dr.extra || {}; dr.extra[el.dataset.conExtra] = el.value; }
-});
-document.getElementById('con-count').addEventListener('change', (e) => {
-  const el = e.target;
-  if(el.dataset.conUnit === undefined) return;
-  const dr = conCountDraft[el.dataset.conUnit] = conCountDraft[el.dataset.conUnit] || {};
-  dr.unit = el.value;
+  if(el.dataset.conQty !== undefined || el.dataset.conBox !== undefined){
+    const it = consumableItems.find(x => conItemKey(x) === k);
+    const box = [...document.querySelectorAll('#con-count [data-con-calc]')].find(x => x.dataset.conCalc === k);
+    if(it && box) box.innerHTML = conCalcText(it, dr);
+    const hint = box && box.parentElement.querySelector('.con-hint');
+    if(hint && dr.prefilled === false) hint.remove();
+  }
 });
 
 async function saveConCount(){
@@ -4524,24 +4599,21 @@ async function saveConCount(){
   consumableItems.forEach(it => {
     const k = conItemKey(it);
     const dr = conCountDraft[k] || {};
-    const raw = String(dr.qty == null ? '' : dr.qty).trim();
-    if(raw === '') return;
-    const n = conNum(raw);
-    if(n === null || n < 0 || !/^\d+(\.\d+)?$/.test(raw)){ bad.push(conLabel(it)); return; }
-    const per = conNum(it['每箱入數']);
-    let qty = n, note = String(dr.note || '').trim();
-    if(dr.unit === 'box' && per > 0){
-      qty = Math.round(n * per * 100) / 100;
-      const boxNote = `（${n}箱×${per}）`;
-      note = note ? `${note} ${boxNote}` : boxNote;
-    }
+    const tot = conDraftTotal(it, dr);
+    if(tot.empty) return;
+    if(tot.bad){ bad.push(conLabel(it)); return; }
+    let qty = tot.total, note = String(dr.note || '').trim();
+    const parts = [];
+    if(tot.bx && !tot.bx.empty) parts.push(`${tot.bx.val}箱×${tot.per}` + ((tot.q && !tot.q.empty) ? `＋散${tot.q.text || tot.q.val}` : ''));
+    else if(tot.q && tot.q.isExpr) parts.push(tot.q.text);
+    if(parts.length){ const tr = `（${parts.join('')}）`; note = note ? `${note} ${tr}` : tr; }
     const row = {'日期': dateStr, '品名': it['品名'], '規格': it['規格'], '數量': qty, '單位': conUnit(it), '備註': note};
     custom.forEach(f => { row[f['欄位名稱']] = (dr.extra && dr.extra[f['欄位名稱']]) || ''; });
     out.push(row);
     const ymd = conYMD(dateStr);
     if(consumableLog.some(r => conKey(r['品名'], r['規格']) === k && recordDateStr({dateKey:'日期'}, r) === ymd)) dup.push(conLabel(it));
   });
-  if(bad.length){ alert('以下品項的數量格式不正確（請輸入 0 以上的數字）：\n\n・' + bad.join('\n・')); return; }
+  if(bad.length){ alert('以下品項的數量格式不正確（請輸入 0 以上的數字，或像 35+200 這樣的算式）：\n\n・' + bad.join('\n・')); return; }
   if(!out.length){ alert('還沒有填任何數量。'); return; }
   if(!API_URL){ alert('尚未設定 API 網址。'); return; }
   if(dup.length && !confirm(`這一天已經盤點過以下品項：\n\n・${dup.join('\n・')}\n\n確定要再新增一筆嗎？（如果是要修改，請到「查看／編輯歷史盤點紀錄」）`)) return;
@@ -4565,25 +4637,83 @@ async function saveConCount(){
 document.getElementById('con-count-submit').addEventListener('click', saveConCount);
 document.getElementById('con-history-btn').addEventListener('click', () => { showTab('records'); renderViewer('consumable'); });
 
-// ---- 今天已叫貨 ----
-document.getElementById('con-stock').addEventListener('click', async (e) => {
-  const btn = e.target.closest('[data-con-ordered]');
-  if(!btn) return;
-  const row = Number(btn.dataset.conOrdered);
-  const it = consumableItems.find(x => x._row === row);
-  if(!it) return;
-  const qty = prompt(`「${conLabel(it)}」今天叫貨了嗎？\n可以填這次叫貨的數量（不填也可以），按確定後會記錄今天為「上次叫貨日」。`, '');
-  if(qty === null) return;
-  btn.disabled = true;
-  try{
-    await apiPost({action:'updateRow', sheet:'ConsumableItems', row, data:{'上次叫貨日': conTodayDateOnly(), '叫貨數量': qty.trim()}});
-    await loadState();
-    renderConsumables();
-  }catch(err){
-    alert('儲存失敗：' + err);
-    btn.disabled = false;
+// ---- 叫貨紀錄（可填實際叫貨日、數量，也可清除）----
+(function(){
+  const ov = document.createElement('div');
+  ov.className = 'save-overlay'; ov.id = 'con-order-overlay';
+  ov.innerHTML = `<div class="save-overlay-box" style="text-align:left;max-width:380px;width:92%;">
+    <div style="font-weight:700;font-size:16px;margin-bottom:4px;" id="con-order-title"></div>
+    <div class="stats-muted" style="margin-bottom:12px;">依採購實際叫貨的日期填寫，可以補填過去的日期。</div>
+    <div class="field"><label>叫貨日期</label><div class="ymd-row" style="display:flex;gap:6px;">
+      <select id="con-order-y" class="ymd-select ymd-year"></select><select id="con-order-m" class="ymd-select ymd-month"></select><select id="con-order-d" class="ymd-select ymd-day"></select></div></div>
+    <div class="field" style="margin-top:10px;"><label>叫貨數量（可不填）</label><input type="text" inputmode="numeric" id="con-order-qty"></div>
+    <label style="display:flex;align-items:center;gap:8px;margin-top:14px;font-weight:700;"><input type="checkbox" id="con-order-arrived" style="width:20px;height:20px;"> 已到貨</label>
+    <div id="con-arr-wrap" style="display:none;margin-top:8px;"><div class="stats-muted" style="margin-bottom:4px;">到貨日期（到貨後做盤點登記時，數量會自動預填「上次盤點＋叫貨數量」）</div>
+      <div class="ymd-row" style="display:flex;gap:6px;"><select id="con-arr-y" class="ymd-select ymd-year"></select><select id="con-arr-m" class="ymd-select ymd-month"></select><select id="con-arr-d" class="ymd-select ymd-day"></select></div></div>
+    <div style="display:flex;gap:8px;margin-top:16px;flex-wrap:wrap;">
+      <button class="log-submit" id="con-order-save" type="button">儲存</button>
+      <button class="date-tab" id="con-order-cancel" type="button">取消</button>
+      <button class="date-tab" id="con-order-clear" type="button" style="margin-left:auto;">清除叫貨紀錄</button></div></div>`;
+  document.body.appendChild(ov);
+  let row = null;
+  const $ = id => document.getElementById(id);
+  const close = () => { ov.classList.remove('open'); row = null; };
+  $('con-order-cancel').addEventListener('click', close);
+  $('con-order-arrived').addEventListener('change', () => { $('con-arr-wrap').style.display = $('con-order-arrived').checked ? '' : 'none'; });
+  async function submit(data){
+    const r = row; if(r === null) return;
+    ['con-order-save','con-order-clear'].forEach(i => $(i).disabled = true);
+    try{
+      await apiPost({action:'updateRow', sheet:'ConsumableItems', row:r, data});
+      close();
+      await loadState();
+      renderConsumables();
+    }catch(err){ alert('儲存失敗：' + err); }
+    finally{ ['con-order-save','con-order-clear'].forEach(i => $(i).disabled = false); }
   }
-});
+  $('con-order-save').addEventListener('click', () => {
+    const y = $('con-order-y').value, m = $('con-order-m').value, d = $('con-order-d').value;
+    if(!(y && m && d)){ alert('請選好叫貨日期。'); return; }
+    const q = $('con-order-qty').value.trim();
+    if(q && !/^\d+(\.\d+)?$/.test(q)){ alert('叫貨數量請輸入數字。'); return; }
+    let arr = '';
+    if($('con-order-arrived').checked){
+      const ay = $('con-arr-y').value, am = $('con-arr-m').value, ad = $('con-arr-d').value;
+      if(!(ay && am && ad)){ alert('請選好到貨日期。'); return; }
+      arr = buildDateOnly(ay, am, ad);
+      if(conYMD(arr) < conYMD(buildDateOnly(y, m, d))){ alert('到貨日期不能早於叫貨日期。'); return; }
+    }
+    submit({'上次叫貨日': buildDateOnly(y, m, d), '叫貨數量': q, '到貨日': arr});
+  });
+  $('con-order-clear').addEventListener('click', () => {
+    if(!confirm('確定要清除這個品項的叫貨紀錄嗎？')) return;
+    submit({'上次叫貨日': '', '叫貨數量': '', '到貨日': ''});
+  });
+  document.getElementById('con-stock').addEventListener('click', (e) => {
+    const btn = e.target.closest('[data-con-ordered]');
+    if(!btn) return;
+    const it = consumableItems.find(x => x._row === Number(btn.dataset.conOrdered));
+    if(!it) return;
+    row = it._row;
+    const cur = parseDateOnly(it['上次叫貨日']);
+    const has = cur.year && cur.month && cur.day;
+    const t = new Date();
+    $('con-order-title').textContent = `叫貨紀錄：${conLabel(it)}`;
+    $('con-order-y').innerHTML = yearOptionsHtml(has ? cur.year : t.getFullYear());
+    $('con-order-m').innerHTML = monthOptionsHtml(has ? cur.month : t.getMonth()+1);
+    $('con-order-d').innerHTML = dayOptionsHtml(has ? cur.day : t.getDate());
+    $('con-order-qty').value = it['叫貨數量'] == null ? '' : String(it['叫貨數量']);
+    const arrP = parseDateOnly(it['到貨日']);
+    const hasArr = has && arrP.year && arrP.month && arrP.day && conYMD(it['到貨日']) >= conYMD(it['上次叫貨日']);
+    $('con-order-arrived').checked = !!hasArr;
+    $('con-arr-wrap').style.display = hasArr ? '' : 'none';
+    $('con-arr-y').innerHTML = yearOptionsHtml(hasArr ? arrP.year : t.getFullYear());
+    $('con-arr-m').innerHTML = monthOptionsHtml(hasArr ? arrP.month : t.getMonth()+1);
+    $('con-arr-d').innerHTML = dayOptionsHtml(hasArr ? arrP.day : t.getDate());
+    $('con-order-clear').style.display = has ? '' : 'none';
+    ov.classList.add('open');
+  });
+})();
 
 // ---- 品項設定 ----
 function renderConAddForm(){
@@ -4688,6 +4818,23 @@ document.getElementById('con-items').addEventListener('click', async (e) => {
       renderConsumables();
     }catch(err){ alert('刪除失敗：' + err); }
   }
+});
+
+// 庫存表上的「已到貨」快速按鈕：到貨日記為今天
+document.getElementById('con-stock').addEventListener('click', async (e) => {
+  const btn = e.target.closest('[data-con-arrived]');
+  if(!btn) return;
+  const it = consumableItems.find(x => x._row === Number(btn.dataset.conArrived));
+  if(!it) return;
+  const arr = conTodayDateOnly();
+  const ordYmd = conYMD(it['上次叫貨日']), arrYmd = conYMD(arr);
+  if(ordYmd && arrYmd < ordYmd){ alert('今天比叫貨日還早，請用「叫貨紀錄」自己選到貨日期。'); return; }
+  btn.disabled = true;
+  try{
+    await apiPost({action:'updateRow', sheet:'ConsumableItems', row: it._row, data:{'到貨日': arr}});
+    await loadState();
+    renderConsumables();
+  }catch(err){ alert('儲存失敗：' + err); btn.disabled = false; }
 });
 
 // ---- 自訂欄位 ----
