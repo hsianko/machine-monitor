@@ -1006,7 +1006,7 @@
 
 <div class="wrap">
   <div class="topbar">
-    <h1>產線即時監看板 <button class="version-badge" id="version-badge">v21.3</button><button class="theme-toggle" id="theme-toggle" type="button" aria-label="切換深色／淺色" title="切換深色／淺色"><span class="tt-moon">🌙</span><span class="tt-sun">☀️</span></button></h1>
+    <h1>產線即時監看板 <button class="version-badge" id="version-badge">v21.5</button><button class="theme-toggle" id="theme-toggle" type="button" aria-label="切換深色／淺色" title="切換深色／淺色"><span class="tt-moon">🌙</span><span class="tt-sun">☀️</span></button></h1>
     <div class="topbar-right">
       <button class="export-btn" id="settings-btn">設定 API 網址</button>
       <button class="export-btn" id="admin-btn">管理者設定</button>
@@ -1496,7 +1496,7 @@
       </div>
 
       <div class="admin-section">
-        <div class="admin-section-title">已產生的連結</div>
+        <div class="admin-section-title">已產生的連結 <button class="kbtn" id="admin-key-purge" type="button" style="margin-left:8px;font-weight:400;">清除已過期／已作廢的連結</button></div>
         <div id="admin-key-list"></div>
       </div>
     </div>
@@ -1637,6 +1637,21 @@ function checkCustomerRestriction(machine, customerName){
 // （不是寫死在程式碼裡），所以之後有新增人員/新增工作事項，選單會自動多這個選項。
 function getSupportConfigOptions(type){
   return supportConfig.filter(r => r['類型'] === type).map(r => r['值']).filter(Boolean);
+}
+
+// 只有日期、沒有時間的值不存進試算表（存了就會把舊日期一直留著，隔天打開還是顯示舊日期）；
+// 使用者在畫面上手動選的日期（還沒填時間）只暫存在這次瀏覽的記憶體裡。
+const pendingDates = {};
+function compositeOrEmpty(year, month, day, time){ return time ? buildComposite(year, month, day, time) : ''; }
+// 舊版殘留的「只有過去日期、沒有時間」的值，視為空白（畫面預設改回今天）
+function parseCompositeFresh(str){
+  const p = parseComposite(str);
+  if(p.year && !p.time){
+    const t = new Date();
+    const ymd = (y,m,d) => `${y}-${String(m).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+    if(ymd(p.year, p.month, p.day) < ymd(t.getFullYear(), t.getMonth()+1, t.getDate())) return {year:'', month:'', day:'', time:''};
+  }
+  return p;
 }
 
 // 「結束時間跨到隔天」是不是有勾選——只是畫面上的顯示狀態，不會存進試算表，
@@ -1953,12 +1968,13 @@ function render(){
     const d = state[m.key];
     const st = computeStatus(m.key);
     const pct = computePct(m.key);
-    const sp = parseComposite(d.startTime);
-    const ep = parseComposite(d.actualEnd);
+    const sp = parseCompositeFresh(d.startTime);
+    const ep = parseCompositeFresh(d.actualEnd);
+    const pend = pendingDates[m.key] || {};
     // 日期欄位：如果還沒選過，畫面上直接預設顯示今天，不用每次都手動選年/月/日。
-    const sYearDefault = sp.year || todayY;
-    const sMonthDefault = sp.month || todayM;
-    const sDayDefault = sp.day || todayD;
+    const sYearDefault = sp.year || (pend.s && pend.s.y) || todayY;
+    const sMonthDefault = sp.month || (pend.s && pend.s.m) || todayM;
+    const sDayDefault = sp.day || (pend.s && pend.s.d) || todayD;
     // 是否為跨日：使用者手動勾選過就照勾選的；沒勾選過的話，如果原本存的資料開始/結束日期本來就不同天，也視為跨日，避免舊資料顯示錯誤。
     const datesDiffer = sp.month && sp.day && ep.month && ep.day && (String(ep.year||sYearDefault) !== String(sp.year||sYearDefault) || String(ep.month) !== String(sp.month) || String(ep.day) !== String(sp.day));
     const crossDay = (m.key in crossDayToggle) ? crossDayToggle[m.key] : !!datesDiffer;
@@ -2082,9 +2098,9 @@ function render(){
         <div class="field time-group" data-role="end-date">
           <label>結束日期</label>
           <div class="time-row">
-            <select data-part="e-year">${yearOptionsHtml(ep.year || sYearDefault)}</select>
-            <select data-part="e-month">${monthOptionsHtml(ep.month || sMonthDefault)}</select>
-            <select data-part="e-day">${dayOptionsHtml(ep.day || sDayDefault)}</select>
+            <select data-part="e-year">${yearOptionsHtml(ep.year || (pend.e && pend.e.y) || sYearDefault)}</select>
+            <select data-part="e-month">${monthOptionsHtml(ep.month || (pend.e && pend.e.m) || sMonthDefault)}</select>
+            <select data-part="e-day">${dayOptionsHtml(ep.day || (pend.e && pend.e.d) || sDayDefault)}</select>
           </div>
         </div>
         ` : ''}
@@ -2155,6 +2171,8 @@ function render(){
     // iPhone 的 Safari 點按鈕時，不會讓剛打字的輸入框先失去焦點，所以 change 事件常常來不及發生，
     // 結果畫面上明明填了時間（或客戶名稱），儲存時系統卻以為是空白。
     function commitCardInputs(){
+      // 這張卡片已經被重新畫過（換成新的一張）就不要再用舊畫面的內容去存，避免把剛輸入的新內容蓋回舊值
+      if(!card.isConnected) return;
       let changed = false;
       card.querySelectorAll('[data-k]').forEach(inp => {
         const k = inp.dataset.k;
@@ -2166,8 +2184,8 @@ function render(){
       if(sY && sM && sD){
         const eY = card.querySelector('[data-part="e-year"]'), eM = card.querySelector('[data-part="e-month"]'), eD = card.querySelector('[data-part="e-day"]');
         const sT = readTimeVal(card.querySelector('[data-part="s-time"]')), eT = readTimeVal(card.querySelector('[data-part="e-time"]'));
-        const st = buildComposite(sY.value, sM.value, sD.value, sT);
-        const et = buildComposite(eY ? eY.value : sY.value, eM ? eM.value : sM.value, eD ? eD.value : sD.value, eT);
+        const st = compositeOrEmpty(sY.value, sM.value, sD.value, sT);
+        const et = compositeOrEmpty(eY ? eY.value : sY.value, eM ? eM.value : sM.value, eD ? eD.value : sD.value, eT);
         if(st !== state[m.key].startTime || et !== state[m.key].actualEnd){
           state[m.key].startTime = st; state[m.key].actualEnd = et; changed = true;
         }
@@ -2197,8 +2215,9 @@ function render(){
       const eYear = eYearSel ? eYearSel.value : sYear;
       const eMonth = eMonthSel ? eMonthSel.value : sMonth;
       const eDay = eDaySel ? eDaySel.value : sDay;
-      state[m.key].startTime = buildComposite(sYear, sMonth, sDay, sTime);
-      state[m.key].actualEnd = buildComposite(eYear, eMonth, eDay, eTime);
+      state[m.key].startTime = compositeOrEmpty(sYear, sMonth, sDay, sTime);
+      state[m.key].actualEnd = compositeOrEmpty(eYear, eMonth, eDay, eTime);
+      pendingDates[m.key] = {s:{y:sYear, m:sMonth, d:sDay}, e:{y:eYear, m:eMonth, d:eDay}};
       saveState(m.key);
       // 時間是輸入框：剛輸入完馬上整張重畫，會把正要點的下一個輸入框洗掉（手機上特別明顯），
       // 所以如果游標已經跑到別的輸入框／選單，先不重畫，等那邊也輸入完再一起更新。
@@ -2219,8 +2238,9 @@ function render(){
         const sDay = card.querySelector('[data-part="s-day"]').value;
         const sTime = readTimeVal(card.querySelector('[data-part="s-time"]'));
         const eTime = readTimeVal(card.querySelector('[data-part="e-time"]'));
-        state[m.key].startTime = buildComposite(sYear, sMonth, sDay, sTime);
-        state[m.key].actualEnd = buildComposite(sYear, sMonth, sDay, eTime);
+        state[m.key].startTime = compositeOrEmpty(sYear, sMonth, sDay, sTime);
+        state[m.key].actualEnd = compositeOrEmpty(sYear, sMonth, sDay, eTime);
+        pendingDates[m.key] = {s:{y:sYear, m:sMonth, d:sDay}, e:{y:sYear, m:sMonth, d:sDay}};
         saveState(m.key);
       }
       render();
@@ -2237,7 +2257,7 @@ function render(){
     const clearBtn = card.querySelector('[data-clear]');
     if(clearBtn) clearBtn.addEventListener('click', () => {
       if(confirm(`確定要清空 ${m.key} 的資料嗎？`)){
-        state[m.key] = { customer:'', totalBoxes:'', currentBox:'', startTime:'', actualEnd:'', remark:'', jobId:'', filledBy:'' };
+        state[m.key] = { customer:'', totalBoxes:'', currentBox:'', startTime:'', actualEnd:'', remark:'', jobId:'', filledBy:'' }; delete pendingDates[m.key];
         delete crossDayToggle[m.key];
         clearResumeHintDismiss(m.key);
         saveState(m.key, {writeFilledBy:true});
@@ -2314,7 +2334,7 @@ function render(){
         const okDone = await saveLog(record);
         if(!okDone) return;
 
-        state[m.key] = { customer:'', totalBoxes:'', currentBox:'', startTime:'', actualEnd:'', remark:'', jobId:'', filledBy:'' };
+        state[m.key] = { customer:'', totalBoxes:'', currentBox:'', startTime:'', actualEnd:'', remark:'', jobId:'', filledBy:'' }; delete pendingDates[m.key];
         delete crossDayToggle[m.key];
         delete forceDone[m.key];
         clearResumeHintDismiss(m.key);
@@ -2366,6 +2386,7 @@ function render(){
         // 這張訂單還沒做完，只清開始／結束時間，客戶、箱數、訂單序號都留著，方便明天接續。
         state[m.key].startTime = '';
         state[m.key].actualEnd = '';
+        delete pendingDates[m.key];
         delete crossDayToggle[m.key];
         await saveState(m.key);
         const syncHint = document.getElementById('save-hint').textContent;
@@ -2771,7 +2792,7 @@ function missingRecordFields(machineKey){
   if(!String(dd.customer||'').trim()) missing.push('客戶名稱');
   if(dd.totalBoxes === '' || dd.totalBoxes == null) missing.push('總箱數');
   if(dd.currentBox === '' || dd.currentBox == null) missing.push('目前箱數');
-  if(!(sp.year && sp.month && sp.day) || !(ep.year && ep.month && ep.day)) missing.push('日期');
+  if((sp.time && !(sp.year && sp.month && sp.day)) || (ep.time && !(ep.year && ep.month && ep.day))) missing.push('日期');
   if(!sp.time) missing.push('開始時間');
   if(!ep.time) missing.push('結束時間');
   return missing;
@@ -3855,6 +3876,8 @@ document.getElementById('records-switch').addEventListener('click', (e) => {
 
 // ---------- 版本紀錄 ----------
 const VERSION_LOG = [
+  {v:'v21.5', date:'2026/10/14', d:'管理者設定裡「已產生的連結」旁邊新增「清除已過期／已作廢的連結」按鈕，一次刪掉所有過期、作廢的通行鑰匙紀錄（有效中與尚未開始的不會動）。後端 .gs 有異動，需要重新部署'},
+  {v:'v21.4', date:'2026/10/14', d:'修正機台卡片的日期隔天打開還是停在上次日期的問題（純前端修改，不需要重新部署 .gs）。原因：只要打開過卡片、沒填時間就關閉頁面，系統會把畫面上預設的日期單獨存成「日期、沒有時間」，下次打開就一直顯示那個舊日期。現在沒填時間就不存日期，每天打開預設都是今天；手動選別天的日期（還沒填時間）時，只暫存在畫面上，填了時間才一起存。之前試算表裡殘留的舊日期，也會自動視為空白、改顯示今天。另外順手修正一個小問題：輸入框打字後馬上換欄位時，偶爾舊畫面的內容會把剛輸入的新時間蓋回去'},
   {v:'v21.3', date:'2026/10/13', d:'耗材兩項改進（後端 .gs 有異動，需要重新部署，試算表「耗材品項」會自動多一欄「到貨日」）：(1) 叫貨紀錄可以勾「已到貨」並選到貨日；庫存表上叫貨中的品項也有一顆「已到貨」快速按鈕（到貨日記為今天）。到貨後狀態會顯示「已到貨・待盤點」，盤點登記時該品項的數量會自動預填「上次盤點＋叫貨數量」，再依實際盤點修改即可。叫貨狀態改成以「有沒有標已到貨」判斷，不再用盤點日期猜。(2) 盤點登記快速統計：有設定每箱入數的品項，分成「箱數」與「散數」兩格，自動算出 箱數×每箱入數＋散數；數量格也可以直接輸入算式（例如 35+200、12*40+25），下方即時顯示計算結果，儲存時算式會留在備註'},
   {v:'v21.2', date:'2026/10/13', d:'耗材「叫貨狀態」可以編輯（純前端修改，不需要重新部署 .gs）：庫存表右邊的按鈕改成「叫貨紀錄」，按下去可以自己選叫貨日期（可補填過去已經叫貨的日期，跟採購單對齊）、填叫貨數量，已經有紀錄的也可以修改或清除'},
   {v:'v21.1', date:'2026/10/13', d:'手機上的分頁列（看板・4台／異常／統計／紀錄／支援／耗材）改成固定排在同一列，文字完整顯示，不會被擠到第二行（純前端修改，不需要重新部署 .gs）。做法是依手機寬度自動微調文字大小與間距，不縮成單字、也不需要展開'},
@@ -4334,6 +4357,21 @@ function renderAdminKeyList(){
   wrap.querySelectorAll('[data-key-revoke]').forEach(b => b.addEventListener('click', () => adminKeyAction('revokeKey', b.dataset.keyRevoke, '確定要作廢這個連結嗎？作廢後馬上失效，用這個連結的人就不能再輸入了。')));
   wrap.querySelectorAll('[data-key-delete]').forEach(b => b.addEventListener('click', () => adminKeyAction('deleteKey', b.dataset.keyDelete, '確定要刪除這筆連結紀錄嗎？')));
 }
+
+document.getElementById('admin-key-purge').addEventListener('click', async () => {
+  const n = adminKeys.filter(k => k.state === 'expired' || k.state === 'revoked').length;
+  if(!n){ alert('目前沒有已過期或已作廢的連結。'); return; }
+  if(!confirm(`確定要刪除 ${n} 筆已過期／已作廢的連結紀錄嗎？\n\n有效中與尚未開始的連結不會被刪除。`)) return;
+  const btn = document.getElementById('admin-key-purge');
+  btn.disabled = true;
+  try{
+    const res = await apiPost({action:'purgeKeys'});
+    await refreshAdminKeyList();
+    alert(`已清除 ${res.removed != null ? res.removed : n} 筆。`);
+  }catch(err){
+    alert('清除失敗：' + err.message);
+  }finally{ btn.disabled = false; }
+});
 
 async function adminKeyAction(action, key, confirmText){
   if(!confirm(confirmText)) return;
