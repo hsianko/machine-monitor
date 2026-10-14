@@ -1006,7 +1006,7 @@
 
 <div class="wrap">
   <div class="topbar">
-    <h1>產線即時監看板 <button class="version-badge" id="version-badge">v21.5</button><button class="theme-toggle" id="theme-toggle" type="button" aria-label="切換深色／淺色" title="切換深色／淺色"><span class="tt-moon">🌙</span><span class="tt-sun">☀️</span></button></h1>
+    <h1>產線即時監看板 <button class="version-badge" id="version-badge">v21.6</button><button class="theme-toggle" id="theme-toggle" type="button" aria-label="切換深色／淺色" title="切換深色／淺色"><span class="tt-moon">🌙</span><span class="tt-sun">☀️</span></button></h1>
     <div class="topbar-right">
       <button class="export-btn" id="settings-btn">設定 API 網址</button>
       <button class="export-btn" id="admin-btn">管理者設定</button>
@@ -2173,6 +2173,8 @@ function render(){
     function commitCardInputs(){
       // 這張卡片已經被重新畫過（換成新的一張）就不要再用舊畫面的內容去存，避免把剛輸入的新內容蓋回舊值
       if(!card.isConnected) return;
+      // 正在儲存／完成訂單的途中，不要再把畫面上的舊內容收進 state（否則剛清空的卡片會被舊內容蓋回來）
+      if(savingLock[m.key]) return;
       let changed = false;
       card.querySelectorAll('[data-k]').forEach(inp => {
         const k = inp.dataset.k;
@@ -2302,6 +2304,7 @@ function render(){
       // 已經有一個存檔動作在進行中，忽略這次點擊，避免因為畫面還沒更新而重複送出。
       if(savingLock[m.key]) return;
       commitCardInputs();
+      clearTimeout(typingTimer);
       const dd = state[m.key];
       const missingDone = missingRecordFields(m.key);
       if(missingDone.length){ alertMissingFields(missingDone); return; }
@@ -2344,6 +2347,12 @@ function render(){
           alert('提醒：完成紀錄已經確實存進機台產能記錄了，但清空這張卡片時同步失敗（可能是網路瞬間不穩）。畫面可能還會顯示舊資料，麻煩重新整理一次，如果還是沒清空，再點一次「清空本機台資料」即可，不會影響已經存好的紀錄。');
         }
         await loadState();
+        // 確認試算表裡這台的卡片真的清空了；萬一被別的畫面（例如舊的分頁、手機）寫回舊資料，再清一次。
+        if(lastLoadedServerState && lastLoadedServerState[m.key] && String(lastLoadedServerState[m.key]['客戶名稱'] || '').trim()){
+          state[m.key] = { customer:'', totalBoxes:'', currentBox:'', startTime:'', actualEnd:'', remark:'', jobId:'', filledBy:'' };
+          await saveState(m.key, {writeFilledBy:true});
+          await loadState();
+        }
         focusTodayInLog();
         renderViewer('log', true, true);
         showSaveSuccess(`${m.key}・${doneCustomer}\n已完成並加入紀錄。`);
@@ -2360,6 +2369,7 @@ function render(){
       // 已經有一個存檔動作在進行中，忽略這次點擊，避免因為畫面還沒更新而重複送出。
       if(savingLock[m.key]) return;
       commitCardInputs();
+      clearTimeout(typingTimer);
       const dd = state[m.key];
       const missingDaily = missingRecordFields(m.key);
       if(missingDaily.length){ alertMissingFields(missingDaily); return; }
@@ -2766,6 +2776,7 @@ async function saveState(machine, opts){
         hint.textContent = '已同步至試算表 · ' + fmtClock();
       }while(savePendingAgain[machine]);
       saveUnsaved[machine] = false;
+      lastSaveDoneAt[machine] = Date.now();
     }catch(err){
       hint.textContent = '同步失敗，請檢查網路或 API 網址：' + err;
       if(err && err.code){
@@ -2892,7 +2903,13 @@ function bootFromCache(){
   }catch(e){ showingCache = false; }
 }
 let loadRetryTimer = null;
+// 每台機台「最近一次把畫面資料存回試算表」的完成時間，以及最近一次讀到的伺服器資料。
+// 在這個時間「之前」就送出的讀取，回來的資料是舊的（例如存檔前就發出去、存檔後才回來的自動更新），不能拿來蓋掉畫面。
+const lastSaveDoneAt = {};
+let lastLoadedServerState = null;
 async function loadState(){
+  const loadStartedAt = Date.now();
+  lastLoadedServerState = null;
   const hint = document.getElementById('save-hint');
   if(!API_URL){
     hint.textContent = '尚未設定 API 網址，請點選右上角「設定 API 網址」';
@@ -2912,9 +2929,11 @@ async function loadState(){
     if(json.state){
       stateEverLoaded = true;
       showingCache = false;
+      lastLoadedServerState = json.state;
       saveLoadCache(json);
       MACHINES.forEach(m => {
-        const stillDirty = (dirtyUntil[m.key] && Date.now() < dirtyUntil[m.key]) || saveUnsaved[m.key] || saveInFlight[m.key];
+        const staleLoad = lastSaveDoneAt[m.key] && loadStartedAt < lastSaveDoneAt[m.key];
+        const stillDirty = staleLoad || (dirtyUntil[m.key] && Date.now() < dirtyUntil[m.key]) || saveUnsaved[m.key] || saveInFlight[m.key];
         if(stillDirty){
           // 最近才本機修改過，先不要用伺服器資料覆蓋。
           // 但完整版沒有填寫人欄位、使用者不可能在本機改它，所以永遠以伺服器為準（簡化版填的名字才不會被舊資料擋住）。
@@ -3876,6 +3895,8 @@ document.getElementById('records-switch').addEventListener('click', (e) => {
 
 // ---------- 版本紀錄 ----------
 const VERSION_LOG = [
+  {v:'v21.6', date:'2026/10/14', d:'加強「確定完成並加入紀錄」之後卡片自動清空的可靠度（純前端修改，不需要重新部署 .gs）：(1) 存檔之前就發出去、存檔之後才回來的自動更新，視為舊資料，不再拿來蓋掉畫面；(2) 按完成後會再向試算表確認這張卡片真的清空了，萬一被別的畫面（例如舊分頁、手機）寫回舊資料，會自動再清一次'},
+  {v:'v21.6', date:'2026/10/14', d:'修正按「確定完成並加入紀錄」之後，紀錄已經加入、但卡片資料沒有被清空的問題（純前端修改，不需要重新部署 .gs）。原因：打完時間後馬上按完成，系統為了防止漏存，會在打字停下約 0.7 秒時自動把畫面上的內容存一次；剛好卡在「紀錄已存、卡片剛清空」的空檔，就把畫面上還沒更新的舊內容又存回去，卡片因此被蓋回舊資料。現在儲存途中不再做這個自動存，按下完成或記錄進度時也會先取消排隊中的自動存'},
   {v:'v21.5', date:'2026/10/14', d:'管理者設定裡「已產生的連結」旁邊新增「清除已過期／已作廢的連結」按鈕，一次刪掉所有過期、作廢的通行鑰匙紀錄（有效中與尚未開始的不會動）。後端 .gs 有異動，需要重新部署'},
   {v:'v21.4', date:'2026/10/14', d:'修正機台卡片的日期隔天打開還是停在上次日期的問題（純前端修改，不需要重新部署 .gs）。原因：只要打開過卡片、沒填時間就關閉頁面，系統會把畫面上預設的日期單獨存成「日期、沒有時間」，下次打開就一直顯示那個舊日期。現在沒填時間就不存日期，每天打開預設都是今天；手動選別天的日期（還沒填時間）時，只暫存在畫面上，填了時間才一起存。之前試算表裡殘留的舊日期，也會自動視為空白、改顯示今天。另外順手修正一個小問題：輸入框打字後馬上換欄位時，偶爾舊畫面的內容會把剛輸入的新時間蓋回去'},
   {v:'v21.3', date:'2026/10/13', d:'耗材兩項改進（後端 .gs 有異動，需要重新部署，試算表「耗材品項」會自動多一欄「到貨日」）：(1) 叫貨紀錄可以勾「已到貨」並選到貨日；庫存表上叫貨中的品項也有一顆「已到貨」快速按鈕（到貨日記為今天）。到貨後狀態會顯示「已到貨・待盤點」，盤點登記時該品項的數量會自動預填「上次盤點＋叫貨數量」，再依實際盤點修改即可。叫貨狀態改成以「有沒有標已到貨」判斷，不再用盤點日期猜。(2) 盤點登記快速統計：有設定每箱入數的品項，分成「箱數」與「散數」兩格，自動算出 箱數×每箱入數＋散數；數量格也可以直接輸入算式（例如 35+200、12*40+25），下方即時顯示計算結果，儲存時算式會留在備註'},
