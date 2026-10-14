@@ -211,6 +211,7 @@
   .con-field-add input, .con-field-add select{background:var(--bg-field); border:1px solid var(--border); border-radius:6px;
     color:var(--text-primary); padding:7px 8px; font-size:13px;}
   .simple-log-section{margin-top:24px;}
+  .prev-progress-note{font-size:12.5px; color:var(--text-muted); margin-top:6px;}
   .simple-log-empty{color:var(--text-muted); font-size:13px; padding:12px 0;}
   .version-modal{
     background:var(--bg-panel);
@@ -1006,7 +1007,7 @@
 
 <div class="wrap">
   <div class="topbar">
-    <h1>產線即時監看板 <button class="version-badge" id="version-badge">v21.6</button><button class="theme-toggle" id="theme-toggle" type="button" aria-label="切換深色／淺色" title="切換深色／淺色"><span class="tt-moon">🌙</span><span class="tt-sun">☀️</span></button></h1>
+    <h1>產線即時監看板 <button class="version-badge" id="version-badge">v21.7</button><button class="theme-toggle" id="theme-toggle" type="button" aria-label="切換深色／淺色" title="切換深色／淺色"><span class="tt-moon">🌙</span><span class="tt-sun">☀️</span></button></h1>
     <div class="topbar-right">
       <button class="export-btn" id="settings-btn">設定 API 網址</button>
       <button class="export-btn" id="admin-btn">管理者設定</button>
@@ -2058,6 +2059,7 @@ function render(){
           <div class="gauge-crate" style="left:${pct}%">▣</div>
         </div>
         `}
+        ${(() => { const pn = previousProgressNote(m.key); return pn ? `<div class="prev-progress-note">↩ ${escapeHtml(pn)}</div>` : ''; })()}
         ${isOverflow ? '<div class="qty-warning">⚠ 目前箱數已超過總箱數，請確認並修正！</div>' : ''}
       </div>
       <div class="times">
@@ -3717,6 +3719,31 @@ function todayYMDLocal(){
   return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
 }
 
+// 簡化版下方的紀錄只顯示「今天作業」的：開始日期或結束日期是今天（夜班跨午夜也看得到）。
+// 日期都讀不到的才退回用「儲存日期」判斷。
+function simpleRowIsToday(r, today){
+  const ds = [recordDateStr({dateKey:'startTime'}, r), recordDateStr({dateKey:'actualEnd'}, r)].filter(Boolean);
+  if(ds.length) return ds.indexOf(today) !== -1;
+  return recordDateStr({dateKey:'loggedAt'}, r) === today;
+}
+// 做一半的訂單：這張卡片的訂單在今天以前已經存過進度，回傳最近一筆的提醒文字
+function previousProgressNote(machineKey){
+  const d = state[machineKey];
+  if(!d || !d.jobId) return '';
+  const today = todayYMDLocal();
+  let best = null, bestDate = '';
+  completedLog.forEach(r => {
+    if(r.jobId !== d.jobId) return;
+    const day = recordDateStr({dateKey:'startTime'}, r) || recordDateStr({dateKey:'actualEnd'}, r) || recordDateStr({dateKey:'loggedAt'}, r);
+    if(!day || day >= today) return;
+    if(!best || day > bestDate || (day === bestDate && (r._row||0) > (best._row||0))){ best = r; bestDate = day; }
+  });
+  if(!best) return '';
+  const p = bestDate.split('-');
+  const box = parseFloat(best.currentBox);
+  return `這張訂單 ${parseInt(p[1],10)}/${parseInt(p[2],10)} 已做到 ${isNaN(box) ? '?' : box} 箱，今天是接續做`;
+}
+
 function renderSimpleLog(){
   if(!SIMPLE_MODE_MACHINE) return;
   const wrap = document.getElementById('simple-log-body');
@@ -3727,7 +3754,7 @@ function renderSimpleLog(){
   if(simpleEditRow !== null) return;
   const today = todayYMDLocal();
   simpleLogRows = completedLog
-    .filter(r => r.machine === SIMPLE_MODE_MACHINE && recordDateStr({dateKey:'loggedAt'}, r) === today)
+    .filter(r => r.machine === SIMPLE_MODE_MACHINE && simpleRowIsToday(r, today))
     .sort((a,b) => (b._row||0) - (a._row||0));
   if(!simpleLogRows.length){
     wrap.innerHTML = '<div class="simple-log-empty">今天還沒有儲存的紀錄。</div>';
@@ -3895,6 +3922,7 @@ document.getElementById('records-switch').addEventListener('click', (e) => {
 
 // ---------- 版本紀錄 ----------
 const VERSION_LOG = [
+  {v:'v21.7', date:'2026/10/14', d:'(1) 簡化版下方「今日已儲存的紀錄」改成只顯示「今天作業」的紀錄（開始或結束日期是今天，夜班跨午夜也看得到），不再因為「儲存日期是今天」就把以前作業日期的紀錄顯示出來，避免人員看錯。(2) 做一半的訂單隔天接續時，卡片進度條下方會多一行小字，例如「↩ 這張訂單 10/13 已做到 9 箱，今天是接續做」（純前端修改，不需要重新部署 .gs）'},
   {v:'v21.6', date:'2026/10/14', d:'加強「確定完成並加入紀錄」之後卡片自動清空的可靠度（純前端修改，不需要重新部署 .gs）：(1) 存檔之前就發出去、存檔之後才回來的自動更新，視為舊資料，不再拿來蓋掉畫面；(2) 按完成後會再向試算表確認這張卡片真的清空了，萬一被別的畫面（例如舊分頁、手機）寫回舊資料，會自動再清一次'},
   {v:'v21.6', date:'2026/10/14', d:'修正按「確定完成並加入紀錄」之後，紀錄已經加入、但卡片資料沒有被清空的問題（純前端修改，不需要重新部署 .gs）。原因：打完時間後馬上按完成，系統為了防止漏存，會在打字停下約 0.7 秒時自動把畫面上的內容存一次；剛好卡在「紀錄已存、卡片剛清空」的空檔，就把畫面上還沒更新的舊內容又存回去，卡片因此被蓋回舊資料。現在儲存途中不再做這個自動存，按下完成或記錄進度時也會先取消排隊中的自動存'},
   {v:'v21.5', date:'2026/10/14', d:'管理者設定裡「已產生的連結」旁邊新增「清除已過期／已作廢的連結」按鈕，一次刪掉所有過期、作廢的通行鑰匙紀錄（有效中與尚未開始的不會動）。後端 .gs 有異動，需要重新部署'},
