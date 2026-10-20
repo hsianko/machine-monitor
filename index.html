@@ -1001,13 +1001,16 @@
   .tab-btn{flex:1 1 auto; justify-content:center; white-space:nowrap; font-size:clamp(11px,3.3vw,13px); padding:9px clamp(4px,1.6vw,8px); gap:3px;}
   .tab-badge{font-size:9px; padding:0 5px;}
 }
+
+#con-arrive-overlay input[type=text], #con-order-overlay input[type=text]{background:var(--bg-field); color:var(--text-primary); border:1px solid var(--border); border-radius:8px; padding:8px 10px; font-family:inherit; font-size:14px;}
+#con-arrive-overlay .field input[type=text]{width:100%; box-sizing:border-box;}
 </style>
 </head>
 <body>
 
 <div class="wrap">
   <div class="topbar">
-    <h1>產線即時監看板 <button class="version-badge" id="version-badge">v21.7</button><button class="theme-toggle" id="theme-toggle" type="button" aria-label="切換深色／淺色" title="切換深色／淺色"><span class="tt-moon">🌙</span><span class="tt-sun">☀️</span></button></h1>
+    <h1>產線即時監看板 <button class="version-badge" id="version-badge">v21.8</button><button class="theme-toggle" id="theme-toggle" type="button" aria-label="切換深色／淺色" title="切換深色／淺色"><span class="tt-moon">🌙</span><span class="tt-sun">☀️</span></button></h1>
     <div class="topbar-right">
       <button class="export-btn" id="settings-btn">設定 API 網址</button>
       <button class="export-btn" id="admin-btn">管理者設定</button>
@@ -3922,6 +3925,7 @@ document.getElementById('records-switch').addEventListener('click', (e) => {
 
 // ---------- 版本紀錄 ----------
 const VERSION_LOG = [
+  {v:'v21.8', date:'2026/10/20', d:'耗材「叫貨提醒」卡片裡按「已到貨」，改成直接跳出視窗：選到貨日期、填本次盤點數量（已預填「上次盤點＋叫貨數量」，也可輸入箱數或算式）、備註，按「儲存到貨與盤點」一次完成到貨標記與盤點登記；只想先標記到貨、晚點再盤點，可按「只標記已到貨」。不用再自己滑到下方的盤點登記（純前端修改，不需要重新部署 .gs）'},
   {v:'v21.7', date:'2026/10/14', d:'(1) 簡化版下方「今日已儲存的紀錄」改成只顯示「今天作業」的紀錄（開始或結束日期是今天，夜班跨午夜也看得到），不再因為「儲存日期是今天」就把以前作業日期的紀錄顯示出來，避免人員看錯。(2) 做一半的訂單隔天接續時，卡片進度條下方會多一行小字，例如「↩ 這張訂單 10/13 已做到 9 箱，今天是接續做」（純前端修改，不需要重新部署 .gs）'},
   {v:'v21.6', date:'2026/10/14', d:'加強「確定完成並加入紀錄」之後卡片自動清空的可靠度（純前端修改，不需要重新部署 .gs）：(1) 存檔之前就發出去、存檔之後才回來的自動更新，視為舊資料，不再拿來蓋掉畫面；(2) 按完成後會再向試算表確認這張卡片真的清空了，萬一被別的畫面（例如舊分頁、手機）寫回舊資料，會自動再清一次'},
   {v:'v21.6', date:'2026/10/14', d:'修正按「確定完成並加入紀錄」之後，紀錄已經加入、但卡片資料沒有被清空的問題（純前端修改，不需要重新部署 .gs）。原因：打完時間後馬上按完成，系統為了防止漏存，會在打字停下約 0.7 秒時自動把畫面上的內容存一次；剛好卡在「紀錄已存、卡片剛清空」的空檔，就把畫面上還沒更新的舊內容又存回去，卡片因此被蓋回舊資料。現在儲存途中不再做這個自動存，按下完成或記錄進度時也會先取消排隊中的自動存'},
@@ -4676,6 +4680,21 @@ document.getElementById('con-count').addEventListener('input', (e) => {
   }
 });
 
+// 把一個品項的盤點草稿（箱數／數量算式／備註／自訂欄位）整理成要存的一列
+function conBuildLogRow(it, dr, dateStr, custom){
+  const tot = conDraftTotal(it, dr);
+  if(tot.empty) return {skip:true};
+  if(tot.bad) return {bad:true};
+  let note = String(dr.note || '').trim();
+  const parts = [];
+  if(tot.bx && !tot.bx.empty) parts.push(`${tot.bx.val}箱×${tot.per}` + ((tot.q && !tot.q.empty) ? `＋散${tot.q.text || tot.q.val}` : ''));
+  else if(tot.q && tot.q.isExpr) parts.push(tot.q.text);
+  if(parts.length){ const tr = `（${parts.join('')}）`; note = note ? `${note} ${tr}` : tr; }
+  const row = {'日期': dateStr, '品名': it['品名'], '規格': it['規格'], '數量': tot.total, '單位': conUnit(it), '備註': note};
+  custom.forEach(f => { row[f['欄位名稱']] = (dr.extra && dr.extra[f['欄位名稱']]) || ''; });
+  return {row};
+}
+
 async function saveConCount(){
   if(conSaving) return;
   const y = document.getElementById('con-year').value, m = document.getElementById('con-month').value, d = document.getElementById('con-day').value;
@@ -4686,17 +4705,10 @@ async function saveConCount(){
   consumableItems.forEach(it => {
     const k = conItemKey(it);
     const dr = conCountDraft[k] || {};
-    const tot = conDraftTotal(it, dr);
-    if(tot.empty) return;
-    if(tot.bad){ bad.push(conLabel(it)); return; }
-    let qty = tot.total, note = String(dr.note || '').trim();
-    const parts = [];
-    if(tot.bx && !tot.bx.empty) parts.push(`${tot.bx.val}箱×${tot.per}` + ((tot.q && !tot.q.empty) ? `＋散${tot.q.text || tot.q.val}` : ''));
-    else if(tot.q && tot.q.isExpr) parts.push(tot.q.text);
-    if(parts.length){ const tr = `（${parts.join('')}）`; note = note ? `${note} ${tr}` : tr; }
-    const row = {'日期': dateStr, '品名': it['品名'], '規格': it['規格'], '數量': qty, '單位': conUnit(it), '備註': note};
-    custom.forEach(f => { row[f['欄位名稱']] = (dr.extra && dr.extra[f['欄位名稱']]) || ''; });
-    out.push(row);
+    const res = conBuildLogRow(it, dr, dateStr, custom);
+    if(res.skip) return;
+    if(res.bad){ bad.push(conLabel(it)); return; }
+    out.push(res.row);
     const ymd = conYMD(dateStr);
     if(consumableLog.some(r => conKey(r['品名'], r['規格']) === k && recordDateStr({dateKey:'日期'}, r) === ymd)) dup.push(conLabel(it));
   });
@@ -4907,22 +4919,114 @@ document.getElementById('con-items').addEventListener('click', async (e) => {
   }
 });
 
-// 庫存表上的「已到貨」快速按鈕：到貨日記為今天
-document.getElementById('con-stock').addEventListener('click', async (e) => {
-  const btn = e.target.closest('[data-con-arrived]');
-  if(!btn) return;
-  const it = consumableItems.find(x => x._row === Number(btn.dataset.conArrived));
-  if(!it) return;
-  const arr = conTodayDateOnly();
-  const ordYmd = conYMD(it['上次叫貨日']), arrYmd = conYMD(arr);
-  if(ordYmd && arrYmd < ordYmd){ alert('今天比叫貨日還早，請用「叫貨紀錄」自己選到貨日期。'); return; }
-  btn.disabled = true;
-  try{
-    await apiPost({action:'updateRow', sheet:'ConsumableItems', row: it._row, data:{'到貨日': arr}});
+// 庫存表上的「已到貨」按鈕：跳出視窗，一次完成「標記到貨」＋「盤點登記」
+(function(){
+  const ov = document.createElement('div');
+  ov.className = 'save-overlay'; ov.id = 'con-arrive-overlay';
+  ov.innerHTML = `<div class="save-overlay-box" style="text-align:left;max-width:420px;width:94%;max-height:92vh;overflow:auto;">
+    <div style="font-weight:700;font-size:16px;margin-bottom:2px;" id="con-ar-title"></div>
+    <div class="stats-muted" id="con-ar-info" style="margin-bottom:10px;"></div>
+    <div class="field"><label>到貨／盤點日期</label><div class="ymd-row" style="display:flex;gap:6px;">
+      <select id="con-ar-y" class="ymd-select ymd-year"></select><select id="con-ar-m" class="ymd-select ymd-month"></select><select id="con-ar-d" class="ymd-select ymd-day"></select></div></div>
+    <div id="con-ar-fields" style="margin-top:10px;"></div>
+    <div style="display:flex;gap:8px;margin-top:16px;flex-wrap:wrap;">
+      <button class="log-submit" id="con-ar-save" type="button">儲存到貨與盤點</button>
+      <button class="date-tab" id="con-ar-only" type="button">只標記已到貨</button>
+      <button class="date-tab" id="con-ar-cancel" type="button">取消</button></div></div>`;
+  document.body.appendChild(ov);
+  const $ = id => document.getElementById(id);
+  let cur = null, dr = {};
+  const close = () => { ov.classList.remove('open'); cur = null; };
+  $('con-ar-cancel').addEventListener('click', close);
+  function paintCalc(){ const c = $('con-ar-calc'); if(c && cur) c.innerHTML = conCalcText(cur, dr); }
+  function dateVal(){
+    const y = $('con-ar-y').value, m = $('con-ar-m').value, d = $('con-ar-d').value;
+    return (y && m && d) ? buildDateOnly(y, m, d) : '';
+  }
+  function checkDate(){
+    const ds = dateVal();
+    if(!ds){ alert('請選好日期。'); return null; }
+    const ord = conYMD(cur['上次叫貨日']);
+    if(ord && conYMD(ds) < ord){ alert('到貨日期不能早於叫貨日期。'); return null; }
+    return ds;
+  }
+  async function finish(msg){
+    close();
     await loadState();
     renderConsumables();
-  }catch(err){ alert('儲存失敗：' + err); btn.disabled = false; }
-});
+    if(msg) showSaveSuccess(msg);
+  }
+  $('con-ar-only').addEventListener('click', async () => {
+    if(!cur) return;
+    const ds = checkDate(); if(!ds) return;
+    const row = cur._row;
+    ['con-ar-save','con-ar-only'].forEach(i => $(i).disabled = true);
+    try{
+      await apiPost({action:'updateRow', sheet:'ConsumableItems', row, data:{'到貨日': ds}});
+      await finish('');
+    }catch(err){ alert('儲存失敗：' + err); }
+    finally{ ['con-ar-save','con-ar-only'].forEach(i => $(i).disabled = false); }
+  });
+  $('con-ar-save').addEventListener('click', async () => {
+    if(!cur) return;
+    const ds = checkDate(); if(!ds) return;
+    const res = conBuildLogRow(cur, dr, ds, conCustomFields('盤點紀錄'));
+    if(res.skip){ alert('請填寫這次盤點的數量；如果只想標記到貨，請按「只標記已到貨」。'); return; }
+    if(res.bad){ alert('數量格式不正確（請輸入 0 以上的數字，或像 35+200 這樣的算式）。'); return; }
+    const it = cur, row = cur._row;
+    ['con-ar-save','con-ar-only'].forEach(i => $(i).disabled = true);
+    try{
+      await apiPost({action:'updateRow', sheet:'ConsumableItems', row, data:{'到貨日': ds}});
+      await apiPost({action:'appendConsumableLogBatch', data:[res.row]});
+      await finish(`${conLabel(it)}\n已記錄到貨並盤點：${res.row['數量']} ${conUnit(it)}`);
+    }catch(err){
+      alert('儲存失敗：' + err + '\n（到貨日可能已記錄，請看庫存表狀態確認後再試）');
+      await loadState(); renderConsumables();
+    }finally{ ['con-ar-save','con-ar-only'].forEach(i => $(i).disabled = false); }
+  });
+  $('con-ar-fields').addEventListener('input', (e) => {
+    const el = e.target;
+    if(el.dataset.arQty !== undefined) dr.qty = el.value;
+    else if(el.dataset.arBox !== undefined) dr.boxes = el.value;
+    else if(el.dataset.arNote !== undefined) dr.note = el.value;
+    else if(el.dataset.arExtra !== undefined){ dr.extra = dr.extra || {}; dr.extra[el.dataset.arExtra] = el.value; }
+    paintCalc();
+  });
+  document.getElementById('con-stock').addEventListener('click', (e) => {
+    const btn = e.target.closest('[data-con-arrived]');
+    if(!btn) return;
+    const it = consumableItems.find(x => x._row === Number(btn.dataset.conArrived));
+    if(!it) return;
+    cur = it;
+    const latest = conLatestCount(it);
+    const oq = conNum(it['叫貨數量']);
+    const base = latest && latest.qty !== null ? latest.qty : null;
+    dr = {};
+    let hint = '';
+    if(oq !== null && oq > 0){
+      dr.qty = `${base === null ? 0 : base}+${oq}`;
+      hint = `已預填：${base === null ? '（尚無上次盤點，以 0 計）' : '上次 ' + base} ＋ 叫貨 ${oq}，請依實際盤點修改`;
+    }
+    const per = conNum(it['每箱入數']);
+    $('con-ar-title').textContent = `已到貨：${conLabel(it)}`;
+    $('con-ar-info').textContent = `上次盤點：${base === null ? '—' : base + ' ' + conUnit(it)}　叫貨：${it['上次叫貨日'] ? cleanDisplayTime(it['上次叫貨日']) : '—'}${oq ? '（' + oq + '）' : ''}`;
+    const t = new Date();
+    $('con-ar-y').innerHTML = yearOptionsHtml(t.getFullYear());
+    $('con-ar-m').innerHTML = monthOptionsHtml(t.getMonth()+1);
+    $('con-ar-d').innerHTML = dayOptionsHtml(t.getDate());
+    const custom = conCustomFields('盤點紀錄').map(f => `<div class="field" style="margin-top:8px;"><label>${escapeHtml(f['欄位名稱'])}</label><input type="text" ${f['類型'] === '數字' ? 'inputmode="decimal"' : ''} data-ar-extra="${escapeHtml(f['欄位名稱'])}"></div>`).join('');
+    $('con-ar-fields').innerHTML = `
+      <label style="font-weight:700;">本次盤點數量</label>
+      <div class="con-qty" style="margin-top:4px;">
+        ${per && per > 0 ? `<div class="con-boxrow"><input type="text" inputmode="numeric" class="con-box" data-ar-box value="" placeholder="箱數"> <span class="stats-muted">箱 × ${per} ＋</span></div>` : ''}
+        <input type="text" inputmode="text" class="con-loose" data-ar-qty value="${escapeHtml(dr.qty || '')}" placeholder="${per ? '散數' : '數量'}"> <span class="stats-muted">${escapeHtml(conUnit(it))}</span>
+        <div class="con-calc" id="con-ar-calc">${conCalcText(it, dr)}</div>
+        ${hint ? `<div class="stats-muted con-hint">${escapeHtml(hint)}</div>` : ''}
+      </div>
+      <div class="field" style="margin-top:8px;"><label>備註</label><input type="text" data-ar-note placeholder="例：有14箱在3樓貨架"></div>${custom}`;
+    ov.classList.add('open');
+  });
+})();
 
 // ---- 自訂欄位 ----
 function renderConFields(){
