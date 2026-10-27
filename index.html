@@ -1066,6 +1066,7 @@ input, button, select, textarea{font-family:var(--font-ui);}
 .status{border:1.5px solid var(--border-strong);}
 
 /* --- 貼紙：數據框／看板面板 --- */
+#viewer-panel{box-shadow:none !important; border-radius:0 !important; background:transparent;}  /* 紀錄頁本身沒有外框，不要只剩陰影 */
 .overview-stat,.pending-board,.running-list,.log-panel,.viewer-panel{
   border:var(--bw) solid var(--ink); border-radius:24px; box-shadow:var(--off) var(--off) 0 var(--ink-shadow);
 }
@@ -1145,7 +1146,7 @@ input, button, select, textarea{font-family:var(--font-ui);}
 
 <div class="wrap">
   <div class="topbar">
-    <h1>產線即時監看板 <button class="version-badge" id="version-badge">v22.0</button><button class="theme-toggle" id="theme-toggle" type="button" aria-label="切換深色／淺色" title="切換深色／淺色"><span class="tt-moon">🌙</span><span class="tt-sun">☀️</span></button></h1>
+    <h1>產線即時監看板 <button class="version-badge" id="version-badge">v22.1</button><button class="theme-toggle" id="theme-toggle" type="button" aria-label="切換深色／淺色" title="切換深色／淺色"><span class="tt-moon">🌙</span><span class="tt-sun">☀️</span></button></h1>
     <div class="topbar-right">
       <button class="export-btn" id="settings-btn">設定 API 網址</button>
       <button class="export-btn" id="admin-btn">管理者設定</button>
@@ -4066,6 +4067,7 @@ document.getElementById('records-switch').addEventListener('click', (e) => {
 
 // ---------- 版本紀錄 ----------
 const VERSION_LOG = [
+  {v:'v22.1', date:'2026/10/27', d:'修正「紀錄」頁在手機上只剩右邊與下方陰影、外框看起來被裁掉的問題（紀錄頁本身沒有外框，陰影一併移除）。純前端修改'},
   {v:'v22.0', date:'2026/10/27', d:'外觀改版（手繪貼紙風，深色／淺色都有）：卡片、數據框、主要按鈕改成粗框＋實心陰影＋虛線縫線的貼紙樣式，機台卡片依機台色帶粉彩底；表格、輸入框、編輯畫面維持輕量好讀。字體改為昭源圓體，數字維持等寬對齊。手機上已預留陰影空間，不會被切到。純前端修改，不需要重新部署 .gs'},
   {v:'v21.9', date:'2026/10/27', d:'所有會寫入試算表的動作，統一跟看板一樣：按下去先跳出「儲存中…請稍候，不要重複按」的全螢幕視窗，存好後顯示「儲存成功」並可按「知道了」關閉；刪除則顯示「刪除中…／已刪除」。涵蓋：異常（新增、掃碼異常、快速 +1）、紀錄（編輯、刪除）、支援（新增紀錄、新增選項）、不能跑名單、耗材（叫貨紀錄、已到貨、新增／編輯／刪除品項、新增／刪除欄位）。失敗時會關閉視窗並跳出原因（純前端修改，不需要重新部署 .gs）'},
   {v:'v21.8', date:'2026/10/20', d:'耗材「叫貨提醒」卡片裡按「已到貨」，改成直接跳出視窗：選到貨日期、填本次盤點數量（已預填「上次盤點＋叫貨數量」，也可輸入箱數或算式）、備註，按「儲存到貨與盤點」一次完成到貨標記與盤點登記；只想先標記到貨、晚點再盤點，可按「只標記已到貨」。不用再自己滑到下方的盤點登記（純前端修改，不需要重新部署 .gs）'},
