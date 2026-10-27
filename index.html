@@ -19,10 +19,11 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Chiron+GoRound+TC:wght@400;500;700&display=swap">
 <link rel="manifest" href="manifest.json">
 <link rel="icon" href="icon-192.png">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
-<meta name="theme-color" content="#14171c">
+<meta name="theme-color" content="#1F1B19">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="產線監看板">
@@ -1005,13 +1006,146 @@
 
 #con-arrive-overlay input[type=text], #con-order-overlay input[type=text]{background:var(--bg-field); color:var(--text-primary); border:1px solid var(--border); border-radius:8px; padding:8px 10px; font-family:inherit; font-size:14px;}
 #con-arrive-overlay .field input[type=text]{width:100%; box-sizing:border-box;}
+
+/* ===== v22.0 手繪貼紙風：卡片、數據框、主要按鈕用「貼紙」（粗框＋實心陰影＋虛線縫線）；
+   表格、輸入框、編輯畫面維持輕量。深淺兩種主題共用同一套結構，只換顏色變數。===== */
+:root{
+  --font-ui:'Chiron GoRound TC','Huninn','PingFang TC','Microsoft JhengHei',sans-serif;
+  --font-display:var(--font-ui);
+  --font-mono:var(--font-ui);
+  --radius:18px;
+  --bw:3px;            /* 貼紙外框粗細 */
+  --off:5px;           /* 實心陰影位移 */
+  --ink:#3E3A39;       /* 貼紙外框色 */
+  --ink-shadow:#3E3A39;/* 實心陰影色 */
+  --on-accent:#3E3A39; /* 放在粉彩底上的字色 */
+  --stitch:rgba(62,58,57,.28);
+  --card-mix:14%;
+}
+:root[data-theme="dark"], :root:not([data-theme]){
+  --bg-page:#1F1B19; --bg-panel:#2B2623; --bg-field:#35302C;
+  --border:#463F39; --border-strong:#5E554C;
+  --text-primary:#F5EDE0; --text-secondary:#C4B9A9; --text-muted:#9A8F81;
+  --status-idle:#8C8276; --status-run:#86D19A; --status-done:#8CC4E8;
+  --m-daibao:#F2C26B; --m-erbao:#88CBA6; --m-sanbao:#F29C88; --m-sibao:#A3B4F0;
+  --amber:#F2C26B; --amber-rgb:242,194,107; --red:#F29C88; --red-rgb:242,156,136;
+  --green:#86D19A; --green-rgb:134,209,154; --blue:#8CC4E8; --blue-rgb:140,196,232;
+  --stripe:#3A342F; --overlay:rgba(8,6,5,.66);
+  --ink:#E4D9C6; --ink-shadow:#0B0908; --stitch:rgba(228,217,198,.22);
+  --card-mix:17%;
+  --shadow-lg:0 24px 64px rgba(0,0,0,.55); --shadow-md:0 8px 24px rgba(0,0,0,.4);
+}
+:root[data-theme="light"]{
+  --bg-page:#FFFCF6; --bg-panel:#FFFFFF; --bg-field:#FBF3E4;
+  --border:#EADFCB; --border-strong:#D9CBB2;
+  --text-primary:#3E3A39; --text-secondary:#6B6360; --text-muted:#857C75;
+  --status-idle:#B5ABA0; --status-run:#2F8A55; --status-done:#3F7FB0;
+  --m-daibao:#D99A1E; --m-erbao:#4E9C6E; --m-sanbao:#DD6E58; --m-sibao:#6F86CF;
+  --amber:#A96F0B; --amber-rgb:169,111,11; --red:#C9472F; --red-rgb:201,71,47;
+  --green:#2F8A55; --green-rgb:47,138,85; --blue:#3F7FB0; --blue-rgb:63,127,176;
+  --stripe:#F3E9D6; --overlay:rgba(62,58,57,.42);
+  --shadow-lg:0 24px 64px rgba(62,58,57,.25); --shadow-md:0 8px 24px rgba(62,58,57,.16);
+}
+body{font-family:var(--font-ui); font-variant-numeric:tabular-nums;}
+input, button, select, textarea{font-family:var(--font-ui);}
+.theme-toggle,.version-badge{border-color:var(--ink);}
+:root[data-theme="light"] .theme-toggle .tt-sun{background:#F6D27A; box-shadow:none;}
+:root[data-theme="dark"] .theme-toggle .tt-moon{background:#5E554C;}
+
+/* --- 貼紙：卡片 --- */
+.card{
+  position:relative;
+  background:color-mix(in srgb,var(--accent) var(--card-mix),var(--bg-panel));
+  border:var(--bw) solid var(--ink);
+  border-radius:26px;
+  box-shadow:var(--off) var(--off) 0 var(--ink-shadow);
+}
+.card::before{content:""; position:absolute; inset:6px; border:1.5px dashed var(--stitch); border-radius:19px; pointer-events:none;}
+.card > *{position:relative;}
+.card-head .name{background:var(--accent); color:var(--on-accent); padding:2px 14px; border-radius:999px; border:2px solid var(--ink);}
+.status{border:1.5px solid var(--border-strong);}
+
+/* --- 貼紙：數據框／看板面板 --- */
+.overview-stat,.pending-board,.running-list,.log-panel,.viewer-panel{
+  border:var(--bw) solid var(--ink); border-radius:24px; box-shadow:var(--off) var(--off) 0 var(--ink-shadow);
+}
+.overview-stat{--tint:var(--bg-panel); background:var(--tint); color:var(--text-primary);}
+.overview-stat:nth-child(1){--tint:color-mix(in srgb,#F6D27A 62%,var(--bg-panel));}
+.overview-stat:nth-child(2){--tint:color-mix(in srgb,#B9DAA5 58%,var(--bg-panel));}
+.overview-stat:nth-child(3){--tint:color-mix(in srgb,#A8D3E6 58%,var(--bg-panel));}
+.overview-stat:nth-child(4){--tint:color-mix(in srgb,#F2A497 55%,var(--bg-panel));}
+:root[data-theme="dark"] .overview-stat:nth-child(1){--tint:color-mix(in srgb,#F6D27A 24%,var(--bg-panel));}
+:root[data-theme="dark"] .overview-stat:nth-child(2){--tint:color-mix(in srgb,#B9DAA5 22%,var(--bg-panel));}
+:root[data-theme="dark"] .overview-stat:nth-child(3){--tint:color-mix(in srgb,#A8D3E6 22%,var(--bg-panel));}
+:root[data-theme="dark"] .overview-stat:nth-child(4){--tint:color-mix(in srgb,#F2A497 22%,var(--bg-panel));}
+:root[data-theme="light"] .overview-stat .overview-label,:root[data-theme="light"] .overview-stat .overview-sub{color:#5C5551;}
+:root[data-theme="light"] .overview-value.overview-accent,:root[data-theme="light"] .overview-value.overview-warn{color:#3E3A39;}
+.overview-track{background:rgba(62,58,57,.15); height:8px; border-radius:999px;}
+:root[data-theme="dark"] .overview-track{background:rgba(255,255,255,.12);}
+.overview-fill{border-radius:999px;}
+
+/* --- 貼紙：主要按鈕（分頁、完成、送出、日期分頁） --- */
+.tab-btn,.done-btn,.log-submit,.date-tab{
+  border:2px solid var(--ink); border-radius:16px; box-shadow:3px 3px 0 var(--ink-shadow);
+  background:var(--bg-panel); color:var(--text-primary); transition:transform .08s, box-shadow .08s;
+}
+.tab-btn{padding:8px 14px; font-weight:500;}
+.tab-btn.active{background:#F6D27A; color:#3E3A39; border-color:var(--ink); font-weight:700;}
+.tab-btn.active .tab-badge{background:#3E3A39; color:#FFFCF6;}
+.tab-btn:active,.done-btn:active,.log-submit:active,.date-tab:active{transform:translate(2px,2px); box-shadow:1px 1px 0 var(--ink-shadow);}
+.done-btn{padding:7px 12px; font-size:12px; border-radius:14px;}
+.done-btn.btn-daily{background:color-mix(in srgb,#A8D3E6 70%,var(--bg-panel)); color:#3E3A39;}
+.done-btn.btn-done{background:color-mix(in srgb,#B9DAA5 75%,var(--bg-panel)); color:#3E3A39;}
+.done-btn:disabled,.log-submit:disabled{box-shadow:none; opacity:.5; transform:none;}
+.done-btn:hover,.log-submit:hover{border-color:var(--ink); color:#3E3A39;}
+.log-submit{background:color-mix(in srgb,#B9DAA5 75%,var(--bg-panel)); color:#3E3A39; font-weight:700; height:auto; min-height:34px; border-radius:14px;}
+.date-tab{padding:5px 12px; font-size:12px; box-shadow:2px 2px 0 var(--ink-shadow); border-radius:999px; background:var(--bg-panel); color:var(--text-primary);}
+.date-tab.active{background:#F6D27A; color:#3E3A39; border-color:var(--ink);}
+.date-tab:hover{border-color:var(--ink);}
+
+/* --- 輕量：輸入框、表格內按鈕、快速按鈕 --- */
+.field input,.field select,.log-form input,.log-form select,.time-input,
+#con-arrive-overlay input[type=text],#con-order-overlay input[type=text]{
+  border:1.5px solid var(--border-strong); border-radius:12px; background:var(--bg-field); color:var(--text-primary);
+}
+.field input:focus,.field select:focus{border-color:var(--ink); box-shadow:0 0 0 3px color-mix(in srgb,var(--accent,#F6D27A) 35%,transparent);}
+.quick-btn,button.kbtn,.time-now-btn{border-radius:999px; border:1.5px solid var(--border-strong); box-shadow:none;}
+.quick-btn:hover,button.kbtn:hover{border-color:var(--ink);}
+.viewer-table th{background:var(--bg-field); color:var(--text-secondary);}
+.gauge-track{border-radius:999px; border:1.5px solid var(--border-strong);}
+.gauge-fill{border-radius:999px;}
+
+/* --- 視窗：外框用貼紙，內容維持輕量 --- */
+.version-modal{border:var(--bw) solid var(--ink); border-radius:26px; box-shadow:var(--off) var(--off) 0 var(--ink-shadow);}
+.save-overlay-box{border:var(--bw) solid var(--ink) !important; border-radius:26px; box-shadow:6px 6px 0 var(--ink-shadow);}
+.save-overlay-box.busy{background:color-mix(in srgb,#F6D27A 30%,var(--bg-panel));}
+.save-overlay-btn{border:2px solid var(--ink); border-radius:16px; box-shadow:3px 3px 0 var(--ink-shadow); background:color-mix(in srgb,#B9DAA5 80%,var(--bg-panel)); color:#3E3A39;}
+.modal-overlay{padding:24px 24px 28px;}
+
+/* --- 手機：陰影與框線縮小，並替會被裁切的容器預留空間 --- */
+@media (max-width:600px){
+  :root{--bw:2.5px; --off:3px;}
+  .card::before{inset:5px; border-radius:16px;}
+  .card,.overview-stat,.pending-board,.running-list,.log-panel,.viewer-panel{border-radius:22px;}
+  .tab-bar{padding:2px 4px 6px 2px; margin-right:-2px;}   /* overflow-x:auto 會裁掉陰影，所以四周留白 */
+  .tab-btn{box-shadow:2px 2px 0 var(--ink-shadow); border-width:2px; border-radius:13px; font-weight:500; padding:8px clamp(3px,1.2vw,6px); font-size:clamp(11px,3.1vw,12.5px);}
+  .tab-btn:active{box-shadow:1px 1px 0 var(--ink-shadow);}
+  .overview-bar{gap:12px; padding-right:3px; padding-bottom:3px;}
+  .grid{padding-right:3px; padding-bottom:3px;}
+  .modal-overlay{padding:16px 16px 20px;}
+  #con-stock .viewer-table th,#con-stock .viewer-table td{font-size:12.5px; padding:8px 3px;}
+  #con-stock .con-status{white-space:normal; font-size:11px; line-height:1.35; padding:2px 7px;}
+  #con-stock .con-actions{width:74px;}
+  #con-stock .con-actions button{font-size:12px; padding:5px 2px;}
+}
+@media (max-width:480px){ body{padding:12px 15px 12px 12px;} }
 </style>
 </head>
 <body>
 
 <div class="wrap">
   <div class="topbar">
-    <h1>產線即時監看板 <button class="version-badge" id="version-badge">v21.9</button><button class="theme-toggle" id="theme-toggle" type="button" aria-label="切換深色／淺色" title="切換深色／淺色"><span class="tt-moon">🌙</span><span class="tt-sun">☀️</span></button></h1>
+    <h1>產線即時監看板 <button class="version-badge" id="version-badge">v22.0</button><button class="theme-toggle" id="theme-toggle" type="button" aria-label="切換深色／淺色" title="切換深色／淺色"><span class="tt-moon">🌙</span><span class="tt-sun">☀️</span></button></h1>
     <div class="topbar-right">
       <button class="export-btn" id="settings-btn">設定 API 網址</button>
       <button class="export-btn" id="admin-btn">管理者設定</button>
@@ -3932,6 +4066,7 @@ document.getElementById('records-switch').addEventListener('click', (e) => {
 
 // ---------- 版本紀錄 ----------
 const VERSION_LOG = [
+  {v:'v22.0', date:'2026/10/27', d:'外觀改版（手繪貼紙風，深色／淺色都有）：卡片、數據框、主要按鈕改成粗框＋實心陰影＋虛線縫線的貼紙樣式，機台卡片依機台色帶粉彩底；表格、輸入框、編輯畫面維持輕量好讀。字體改為昭源圓體，數字維持等寬對齊。手機上已預留陰影空間，不會被切到。純前端修改，不需要重新部署 .gs'},
   {v:'v21.9', date:'2026/10/27', d:'所有會寫入試算表的動作，統一跟看板一樣：按下去先跳出「儲存中…請稍候，不要重複按」的全螢幕視窗，存好後顯示「儲存成功」並可按「知道了」關閉；刪除則顯示「刪除中…／已刪除」。涵蓋：異常（新增、掃碼異常、快速 +1）、紀錄（編輯、刪除）、支援（新增紀錄、新增選項）、不能跑名單、耗材（叫貨紀錄、已到貨、新增／編輯／刪除品項、新增／刪除欄位）。失敗時會關閉視窗並跳出原因（純前端修改，不需要重新部署 .gs）'},
   {v:'v21.8', date:'2026/10/20', d:'耗材「叫貨提醒」卡片裡按「已到貨」，改成直接跳出視窗：選到貨日期、填本次盤點數量（已預填「上次盤點＋叫貨數量」，也可輸入箱數或算式）、備註，按「儲存到貨與盤點」一次完成到貨標記與盤點登記；只想先標記到貨、晚點再盤點，可按「只標記已到貨」。不用再自己滑到下方的盤點登記（純前端修改，不需要重新部署 .gs）'},
   {v:'v21.7', date:'2026/10/14', d:'(1) 簡化版下方「今日已儲存的紀錄」改成只顯示「今天作業」的紀錄（開始或結束日期是今天，夜班跨午夜也看得到），不再因為「儲存日期是今天」就把以前作業日期的紀錄顯示出來，避免人員看錯。(2) 做一半的訂單隔天接續時，卡片進度條下方會多一行小字，例如「↩ 這張訂單 10/13 已做到 9 箱，今天是接續做」（純前端修改，不需要重新部署 .gs）'},
@@ -6680,7 +6815,7 @@ function syncThemeColors(){
 function applyTheme(theme){
   document.documentElement.setAttribute('data-theme', theme);
   const meta = document.querySelector('meta[name="theme-color"]');
-  if(meta) meta.setAttribute('content', theme === 'light' ? '#f3f4f6' : '#14171c');
+  if(meta) meta.setAttribute('content', theme === 'light' ? '#FFFCF6' : '#1F1B19');
   const btn = document.getElementById('theme-toggle');
   if(btn){
     btn.setAttribute('aria-pressed', theme === 'light' ? 'true' : 'false');
