@@ -166,6 +166,7 @@
     background:var(--overlay); align-items:center; justify-content:center; padding:24px;
   }
   .save-overlay.open{display:flex;}
+  #save-overlay{z-index:400;}
   .save-overlay-box{
     background:var(--bg-panel); border:2px solid var(--green); border-radius:16px;
     width:100%; max-width:380px; padding:32px 24px 24px; text-align:center; box-shadow:var(--shadow-lg);
@@ -1010,7 +1011,7 @@
 
 <div class="wrap">
   <div class="topbar">
-    <h1>產線即時監看板 <button class="version-badge" id="version-badge">v21.8</button><button class="theme-toggle" id="theme-toggle" type="button" aria-label="切換深色／淺色" title="切換深色／淺色"><span class="tt-moon">🌙</span><span class="tt-sun">☀️</span></button></h1>
+    <h1>產線即時監看板 <button class="version-badge" id="version-badge">v21.9</button><button class="theme-toggle" id="theme-toggle" type="button" aria-label="切換深色／淺色" title="切換深色／淺色"><span class="tt-moon">🌙</span><span class="tt-sun">☀️</span></button></h1>
     <div class="topbar-right">
       <button class="export-btn" id="settings-btn">設定 API 網址</button>
       <button class="export-btn" id="admin-btn">管理者設定</button>
@@ -2819,11 +2820,11 @@ function alertMissingFields(missing){
 
 // 全螢幕提醒視窗：儲存途中顯示「儲存中，請勿重複按」（擋住畫面避免連按），完成後顯示「儲存成功」。
 let saveOverlayTimer = null;
-function showSaveBusy(text){
+function showSaveBusy(text, title){
   clearTimeout(saveOverlayTimer);
   document.getElementById('save-overlay-box').classList.add('busy');
   document.getElementById('save-overlay-icon').textContent = '⏳';
-  document.getElementById('save-overlay-title').textContent = '儲存中…';
+  document.getElementById('save-overlay-title').textContent = title || '儲存中…';
   document.getElementById('save-overlay-text').textContent = text || '請稍候，不要重複按。';
   document.getElementById('save-overlay-btn').style.display = 'none';
   document.getElementById('save-overlay').classList.add('open');
@@ -3699,11 +3700,14 @@ async function handleSaveEdit(view, idx){
   const originalText = saveBtn ? saveBtn.textContent : '';
   if(saveBtn){ saveBtn.disabled = true; saveBtn.textContent = '儲存中…'; }
   if(cancelBtn){ cancelBtn.disabled = true; }
+  showSaveBusy('正在儲存修改，請稍候，不要重複按。');
   try{
     await apiPost({action:'updateRow', sheet:cfg.sheet, row:r._row, data: cfg.toApi(newValues)});
     await loadState();
     renderViewer(view, false, true);
+    showSaveSuccess('修改已儲存。');
   }catch(err){
+    hideSaveOverlay();
     alert('儲存失敗：' + err);
     if(saveBtn){ saveBtn.disabled = false; saveBtn.textContent = originalText; }
     if(cancelBtn){ cancelBtn.disabled = false; }
@@ -3842,11 +3846,14 @@ async function handleDelete(view, idx){
   const r = currentViewRows[idx];
   if(!confirm('確定要刪除這筆紀錄嗎？此動作無法復原。')) return;
   if(!API_URL){ alert('尚未設定 API 網址，無法刪除。'); return; }
+  showSaveBusy('正在刪除，請稍候，不要重複按。', '刪除中…');
   try{
     await apiPost({action:'deleteRow', sheet:cfg.sheet, row:r._row});
     await loadState();
     renderViewer(view, false, true);
+    showSaveSuccess('這筆紀錄已刪除。', '已刪除');
   }catch(err){
+    hideSaveOverlay();
     alert('刪除失敗：' + err);
   }
 }
@@ -3925,6 +3932,7 @@ document.getElementById('records-switch').addEventListener('click', (e) => {
 
 // ---------- 版本紀錄 ----------
 const VERSION_LOG = [
+  {v:'v21.9', date:'2026/10/27', d:'所有會寫入試算表的動作，統一跟看板一樣：按下去先跳出「儲存中…請稍候，不要重複按」的全螢幕視窗，存好後顯示「儲存成功」並可按「知道了」關閉；刪除則顯示「刪除中…／已刪除」。涵蓋：異常（新增、掃碼異常、快速 +1）、紀錄（編輯、刪除）、支援（新增紀錄、新增選項）、不能跑名單、耗材（叫貨紀錄、已到貨、新增／編輯／刪除品項、新增／刪除欄位）。失敗時會關閉視窗並跳出原因（純前端修改，不需要重新部署 .gs）'},
   {v:'v21.8', date:'2026/10/20', d:'耗材「叫貨提醒」卡片裡按「已到貨」，改成直接跳出視窗：選到貨日期、填本次盤點數量（已預填「上次盤點＋叫貨數量」，也可輸入箱數或算式）、備註，按「儲存到貨與盤點」一次完成到貨標記與盤點登記；只想先標記到貨、晚點再盤點，可按「只標記已到貨」。不用再自己滑到下方的盤點登記（純前端修改，不需要重新部署 .gs）'},
   {v:'v21.7', date:'2026/10/14', d:'(1) 簡化版下方「今日已儲存的紀錄」改成只顯示「今天作業」的紀錄（開始或結束日期是今天，夜班跨午夜也看得到），不再因為「儲存日期是今天」就把以前作業日期的紀錄顯示出來，避免人員看錯。(2) 做一半的訂單隔天接續時，卡片進度條下方會多一行小字，例如「↩ 這張訂單 10/13 已做到 9 箱，今天是接續做」（純前端修改，不需要重新部署 .gs）'},
   {v:'v21.6', date:'2026/10/14', d:'加強「確定完成並加入紀錄」之後卡片自動清空的可靠度（純前端修改，不需要重新部署 .gs）：(1) 存檔之前就發出去、存檔之後才回來的自動更新，視為舊資料，不再拿來蓋掉畫面；(2) 按完成後會再向試算表確認這張卡片真的清空了，萬一被別的畫面（例如舊分頁、手機）寫回舊資料，會自動再清一次'},
@@ -4762,12 +4770,14 @@ document.getElementById('con-history-btn').addEventListener('click', () => { sho
   async function submit(data){
     const r = row; if(r === null) return;
     ['con-order-save','con-order-clear'].forEach(i => $(i).disabled = true);
+    showSaveBusy('正在儲存叫貨紀錄，請稍候，不要重複按。');
     try{
       await apiPost({action:'updateRow', sheet:'ConsumableItems', row:r, data});
       close();
       await loadState();
       renderConsumables();
-    }catch(err){ alert('儲存失敗：' + err); }
+      showSaveSuccess('叫貨紀錄已儲存。');
+    }catch(err){ hideSaveOverlay(); alert('儲存失敗：' + err); }
     finally{ ['con-order-save','con-order-clear'].forEach(i => $(i).disabled = false); }
   }
   $('con-order-save').addEventListener('click', () => {
@@ -4843,6 +4853,7 @@ async function addConItem(){
   document.querySelectorAll('#con-add-form [data-con-add]').forEach(el => { data[el.dataset.conAdd] = el.value.trim(); });
   const btn = document.getElementById('con-add-submit');
   btn.disabled = true; btn.textContent = '新增中…';
+  showSaveBusy('正在新增品項，請稍候，不要重複按。');
   try{
     await apiPost({action:'appendConsumableItem', data});
     await loadState();
@@ -4851,6 +4862,7 @@ async function addConItem(){
     renderConsumables();
     showSaveSuccess(`已新增品項：${[name, spec].filter(Boolean).join(' ')}`);
   }catch(err){
+    hideSaveOverlay();
     alert('新增失敗：' + err);
   }finally{
     btn.disabled = false; btn.textContent = '＋新增品項';
@@ -4896,6 +4908,7 @@ document.getElementById('con-items').addEventListener('click', async (e) => {
     if((data['每箱入數'] && !/^\d+(\.\d+)?$/.test(data['每箱入數'])) || (data['安全庫存'] && !/^\d+(\.\d+)?$/.test(data['安全庫存']))){ alert('每箱入數、安全庫存請輸入數字。'); return; }
     if(consumableItems.some(x => x._row !== row && conKey(x['品名'], x['規格']) === conKey(data['品名'], data['規格']))){ alert('已經有同樣品名與規格的品項了。'); return; }
     save.disabled = true; save.textContent = '儲存中…';
+    showSaveBusy('正在儲存品項設定，請稍候，不要重複按。');
     try{
       await apiPost({action:'updateRow', sheet:'ConsumableItems', row, data});
       conEditItemRow = null;
@@ -4903,6 +4916,7 @@ document.getElementById('con-items').addEventListener('click', async (e) => {
       renderConsumables();
       showSaveSuccess('品項設定已儲存。');
     }catch(err){
+      hideSaveOverlay();
       alert('儲存失敗：' + err);
       save.disabled = false; save.textContent = '儲存';
     }
@@ -4911,11 +4925,13 @@ document.getElementById('con-items').addEventListener('click', async (e) => {
     const it = consumableItems.find(x => x._row === row);
     if(!it) return;
     if(!confirm(`確定要刪除品項「${conLabel(it)}」嗎？\n\n過去已經存的盤點紀錄不會被刪除，只是這個品項不會再出現在盤點表跟叫貨提醒裡。`)) return;
+    showSaveBusy('正在刪除，請稍候，不要重複按。', '刪除中…');
     try{
       await apiPost({action:'deleteRow', sheet:'ConsumableItems', row});
       await loadState();
       renderConsumables();
-    }catch(err){ alert('刪除失敗：' + err); }
+      showSaveSuccess('品項已刪除。', '已刪除');
+    }catch(err){ hideSaveOverlay(); alert('刪除失敗：' + err); }
   }
 });
 
@@ -4961,10 +4977,11 @@ document.getElementById('con-items').addEventListener('click', async (e) => {
     const ds = checkDate(); if(!ds) return;
     const row = cur._row;
     ['con-ar-save','con-ar-only'].forEach(i => $(i).disabled = true);
+    showSaveBusy('正在儲存到貨紀錄，請稍候，不要重複按。');
     try{
       await apiPost({action:'updateRow', sheet:'ConsumableItems', row, data:{'到貨日': ds}});
-      await finish('');
-    }catch(err){ alert('儲存失敗：' + err); }
+      await finish('已標記到貨。');
+    }catch(err){ hideSaveOverlay(); alert('儲存失敗：' + err); }
     finally{ ['con-ar-save','con-ar-only'].forEach(i => $(i).disabled = false); }
   });
   $('con-ar-save').addEventListener('click', async () => {
@@ -4975,11 +4992,13 @@ document.getElementById('con-items').addEventListener('click', async (e) => {
     if(res.bad){ alert('數量格式不正確（請輸入 0 以上的數字，或像 35+200 這樣的算式）。'); return; }
     const it = cur, row = cur._row;
     ['con-ar-save','con-ar-only'].forEach(i => $(i).disabled = true);
+    showSaveBusy('正在儲存到貨與盤點，請稍候，不要重複按。');
     try{
       await apiPost({action:'updateRow', sheet:'ConsumableItems', row, data:{'到貨日': ds}});
       await apiPost({action:'appendConsumableLogBatch', data:[res.row]});
       await finish(`${conLabel(it)}\n已記錄到貨並盤點：${res.row['數量']} ${conUnit(it)}`);
     }catch(err){
+      hideSaveOverlay();
       alert('儲存失敗：' + err + '\n（到貨日可能已記錄，請看庫存表狀態確認後再試）');
       await loadState(); renderConsumables();
     }finally{ ['con-ar-save','con-ar-only'].forEach(i => $(i).disabled = false); }
@@ -5041,17 +5060,20 @@ document.getElementById('con-fields-list').addEventListener('click', async (e) =
   const f = consumableFields.find(x => x._row === row);
   if(!f) return;
   if(!confirm(`確定要刪除欄位「${f['欄位名稱']}」嗎？\n\n畫面上不會再顯示這個欄位，但試算表裡已經存的資料不會消失。`)) return;
+  showSaveBusy('正在刪除欄位，請稍候，不要重複按。', '刪除中…');
   try{
     await apiPost({action:'removeConsumableField', row});
     await loadState();
     renderConsumables();
-  }catch(err){ alert('刪除失敗：' + err); }
+    showSaveSuccess('欄位已刪除。', '已刪除');
+  }catch(err){ hideSaveOverlay(); alert('刪除失敗：' + err); }
 });
 document.getElementById('con-field-add-btn').addEventListener('click', async () => {
   const name = document.getElementById('con-field-name').value.trim();
   if(!name){ alert('請填寫欄位名稱。'); return; }
   const btn = document.getElementById('con-field-add-btn');
   btn.disabled = true; btn.textContent = '新增中…';
+  showSaveBusy('正在新增欄位，請稍候，不要重複按。');
   try{
     await apiPost({action:'addConsumableField', name, target: document.getElementById('con-field-target').value, fieldType: document.getElementById('con-field-type').value});
     document.getElementById('con-field-name').value = '';
@@ -5060,6 +5082,7 @@ document.getElementById('con-field-add-btn').addEventListener('click', async () 
     renderConsumables();
     showSaveSuccess(`已新增欄位：${name}`);
   }catch(err){
+    hideSaveOverlay();
     alert('新增失敗：' + err);
   }finally{
     btn.disabled = false; btn.textContent = '＋新增欄位';
@@ -5166,6 +5189,7 @@ document.getElementById('ab-submit').addEventListener('click', async () => {
     return;
   }
   if(!API_URL){ hint.textContent = '尚未設定 API 網址，請先點右上角「設定 API 網址」。'; return; }
+  showSaveBusy('正在儲存異常紀錄，請稍候，不要重複按。');
   try{
     const record = {
       '發生日期': buildDateOnly(year, month, day),
@@ -5195,7 +5219,9 @@ document.getElementById('ab-submit').addEventListener('click', async () => {
     document.getElementById('ab-partno-wrap').style.display = 'none';
     document.getElementById('ab-partno-label').textContent = '料號';
     renderViewer('abnormal', true);
+    showSaveSuccess(`${year}/${month}/${day} ${machine}\n${type} 已記錄。`);
   }catch(err){
+    hideSaveOverlay();
     hint.textContent = '新增失敗：' + err;
   }
 });
@@ -5215,6 +5241,7 @@ document.getElementById('sc-submit').addEventListener('click', async () => {
     return;
   }
   if(!API_URL){ hint.textContent = '尚未設定 API 網址，請先點右上角「設定 API 網址」。'; return; }
+  showSaveBusy('正在儲存掃碼異常紀錄，請稍候，不要重複按。');
   try{
     const record = {
       '發生日期': buildDateOnly(year, month, day),
@@ -5236,7 +5263,9 @@ document.getElementById('sc-submit').addEventListener('click', async () => {
     document.getElementById('sc-lot').value = '';
     document.getElementById('sc-origin').value = '';
     renderViewer('scan', true);
+    showSaveSuccess(`${year}/${month}/${day} ${machine}\n掃碼異常已記錄。`);
   }catch(err){
+    hideSaveOverlay();
     hint.textContent = '新增失敗：' + err;
   }
 });
@@ -5264,14 +5293,17 @@ async function quickAddAbnormal(machine, type, btn){
   const record = { '發生日期': buildDateOnly(year, month, day), '機台': machine, '異常類型': type, '異常次數': '1', '料盤產地': '', '原因': '', '料號': '' };
   const original = btn.textContent;
   btn.disabled = true;
+  showSaveBusy('正在儲存，請稍候，不要重複按。');
   try{
     await apiPost({action:'appendAbnormal', data: record});
     await loadState();
+    showSaveSuccess(`${machine}\n${type} +1 已記錄。`);
     btn.classList.add('just-added');
     btn.textContent = '已記錄 ✓';
     renderPendingDetails();
     setTimeout(() => { btn.classList.remove('just-added'); btn.textContent = original; btn.disabled = false; }, 1200);
   }catch(err){
+    hideSaveOverlay();
     alert('快速記錄失敗：' + err);
     btn.textContent = original;
     btn.disabled = false;
@@ -5284,14 +5316,17 @@ async function quickAddScan(machine, btn){
   const record = { '發生日期': buildDateOnly(year, month, day), '機台': machine, '異常次數': '1', 'Scan位置': '', 'LOT': '', '產地': '' };
   const original = btn.textContent;
   btn.disabled = true;
+  showSaveBusy('正在儲存，請稍候，不要重複按。');
   try{
     await apiPost({action:'appendScan', data: record});
     await loadState();
+    showSaveSuccess(`${machine}\n掃碼異常 +1 已記錄。`);
     btn.classList.add('just-added');
     btn.textContent = '已記錄 ✓';
     renderPendingDetails();
     setTimeout(() => { btn.classList.remove('just-added'); btn.textContent = original; btn.disabled = false; }, 1200);
   }catch(err){
+    hideSaveOverlay();
     alert('快速記錄失敗：' + err);
     btn.textContent = original;
     btn.disabled = false;
@@ -5472,13 +5507,15 @@ async function addSupportConfigItem(type, label, selectId, btnId){
   const originalText = btn.textContent;
   btn.disabled = true;
   btn.textContent = '新增中…';
+  showSaveBusy('正在新增選項，請稍候，不要重複按。');
   try{
     await apiPost({action:'appendSupportConfig', data:{'類型':type, '值':trimmed}});
     supportConfig.push({'類型':type, '值':trimmed});
     refreshSupportDropdowns();
     document.getElementById(selectId).value = trimmed;
-    alert(`已新增「${trimmed}」，下拉選單已經自動選好了。`);
+    showSaveSuccess(`已新增「${trimmed}」，\n下拉選單已經自動選好了。`);
   }catch(err){
+    hideSaveOverlay();
     alert('新增失敗：' + err.message);
   }finally{
     addSupportConfigBusy = false;
@@ -5513,6 +5550,7 @@ async function submitSupportRecord(){
   submitSupportBusy = true;
   btn.disabled = true;
   btn.textContent = '儲存中…';
+  showSaveBusy('正在儲存支援紀錄，請稍候，不要重複按。');
   try{
     const record = {
       '日期': buildDateOnly(year, month, day),
@@ -5533,7 +5571,9 @@ async function submitSupportRecord(){
     document.getElementById('sup-hours').textContent = '--';
     renderSupportStats();
     if(currentLogView === 'support') renderViewer('support', true);
+    showSaveSuccess(`${year}/${month}/${day} ${person}\n${worktype}（${hours}小時）已記錄。`);
   }catch(err){
+    hideSaveOverlay();
     hint.textContent = '新增失敗：' + err.message;
   }finally{
     submitSupportBusy = false;
@@ -5610,13 +5650,16 @@ async function saveRestrictionEdit(rowNum, btn){
   if(!API_URL){ alert('尚未設定 API 網址，請先點右上角「設定 API 網址」。'); return; }
   btn.disabled = true;
   btn.textContent = '儲存中…';
+  showSaveBusy('正在儲存，請稍候，不要重複按。');
   try{
     await apiPost({action:'updateRow', sheet:'MachineRestrictions', row: rowNum, data:{'客戶關鍵字':customer, '事件':event, '機台':machine}});
     editingRestrictionRow = null;
     await loadState();
     renderRestrictionList();
     render(); // 卡片上的即時提醒要立刻反映最新名單
+    showSaveSuccess('不能跑名單已更新。');
   }catch(err){
+    hideSaveOverlay();
     alert('儲存失敗：' + err.message);
     btn.disabled = false;
     btn.textContent = '儲存';
@@ -5639,6 +5682,7 @@ async function submitRestriction(){
   submitRestrictionBusy = true;
   btn.disabled = true;
   btn.textContent = '儲存中…';
+  showSaveBusy('正在儲存，請稍候，不要重複按。');
   try{
     await apiPost({action:'appendRestriction', data:{'客戶關鍵字':customer, '事件':event, '機台':machine}});
     await loadState();
@@ -5648,7 +5692,9 @@ async function submitRestriction(){
     document.getElementById('res-machine').value = '';
     hint.textContent = '已新增 · ' + fmtClock();
     render(); // 卡片上的即時提醒要立刻反映最新名單
+    showSaveSuccess('已新增到不能跑名單。');
   }catch(err){
+    hideSaveOverlay();
     hint.textContent = '新增失敗：' + err.message;
   }finally{
     submitRestrictionBusy = false;
@@ -5660,12 +5706,15 @@ async function submitRestriction(){
 async function deleteRestriction(rowNum){
   if(!confirm('確定要刪除這筆限制嗎？')) return;
   if(!API_URL){ alert('尚未設定 API 網址。'); return; }
+  showSaveBusy('正在刪除，請稍候，不要重複按。', '刪除中…');
   try{
     await apiPost({action:'deleteRow', sheet:'MachineRestrictions', row: rowNum});
     await loadState();
     renderRestrictionList();
     render();
+    showSaveSuccess('已從不能跑名單刪除。', '已刪除');
   }catch(err){
+    hideSaveOverlay();
     alert('刪除失敗：' + err.message);
   }
 }
