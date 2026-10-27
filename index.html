@@ -1025,7 +1025,7 @@
 :root[data-theme="dark"], :root:not([data-theme]){
   --bg-page:#1F1B19; --bg-panel:#2B2623; --bg-field:#35302C;
   --border:#463F39; --border-strong:#5E554C;
-  --text-primary:#F5EDE0; --text-secondary:#C4B9A9; --text-muted:#9A8F81;
+  --text-primary:#F8F1E6; --text-secondary:#DDD3C3; --text-muted:#BDB2A2;
   --status-idle:#8C8276; --status-run:#86D19A; --status-done:#8CC4E8;
   --m-daibao:#F2C26B; --m-erbao:#88CBA6; --m-sanbao:#F29C88; --m-sibao:#A3B4F0;
   --amber:#F2C26B; --amber-rgb:242,194,107; --red:#F29C88; --red-rgb:242,156,136;
@@ -1117,11 +1117,22 @@ input, button, select, textarea{font-family:var(--font-ui);}
 .gauge-fill{border-radius:999px;}
 
 /* --- 視窗：外框用貼紙，內容維持輕量 --- */
-.version-modal{border:var(--bw) solid var(--ink); border-radius:26px; box-shadow:var(--off) var(--off) 0 var(--ink-shadow);}
+.version-modal{overflow:hidden; border:var(--bw) solid var(--ink); border-radius:26px; box-shadow:var(--off) var(--off) 0 var(--ink-shadow);}
 .save-overlay-box{border:var(--bw) solid var(--ink) !important; border-radius:26px; box-shadow:6px 6px 0 var(--ink-shadow);}
 .save-overlay-box.busy{background:color-mix(in srgb,#F6D27A 30%,var(--bg-panel));}
 .save-overlay-btn{border:2px solid var(--ink); border-radius:16px; box-shadow:3px 3px 0 var(--ink-shadow); background:color-mix(in srgb,#B9DAA5 80%,var(--bg-panel)); color:#3E3A39;}
 .modal-overlay{padding:24px 24px 28px;}
+
+/* --- 小字放大一點，深色底上更好讀 --- */
+.field label,.times .field label{font-size:13px;}
+.overview-label{font-size:12.5px;}
+.overview-sub{font-size:13px;}
+.status{font-size:12px;}
+.data-notice p{font-size:12.5px;}
+.date-tab{font-size:13px;}
+.done-btn{font-size:13px;}
+.con-status{font-size:12px;}
+.version-badge{font-size:12px;}
 
 /* --- 手機：陰影與框線縮小，並替會被裁切的容器預留空間 --- */
 @media (max-width:600px){
@@ -1146,7 +1157,7 @@ input, button, select, textarea{font-family:var(--font-ui);}
 
 <div class="wrap">
   <div class="topbar">
-    <h1>產線即時監看板 <button class="version-badge" id="version-badge">v22.1</button><button class="theme-toggle" id="theme-toggle" type="button" aria-label="切換深色／淺色" title="切換深色／淺色"><span class="tt-moon">🌙</span><span class="tt-sun">☀️</span></button></h1>
+    <h1>產線即時監看板 <button class="version-badge" id="version-badge">v22.3</button><button class="theme-toggle" id="theme-toggle" type="button" aria-label="切換深色／淺色" title="切換深色／淺色"><span class="tt-moon">🌙</span><span class="tt-sun">☀️</span></button></h1>
     <div class="topbar-right">
       <button class="export-btn" id="settings-btn">設定 API 網址</button>
       <button class="export-btn" id="admin-btn">管理者設定</button>
@@ -4067,6 +4078,8 @@ document.getElementById('records-switch').addEventListener('click', (e) => {
 
 // ---------- 版本紀錄 ----------
 const VERSION_LOG = [
+  {v:'v22.3', date:'2026/10/27', d:'深色版小字更好讀：次要文字、說明文字調亮，欄位標籤、數據框說明、狀態標籤等小字放大約 1px。純前端修改'},
+  {v:'v22.2', date:'2026/10/27', d:'修正版本紀錄等視窗的捲軸尾端超出圓角外框的問題。純前端修改'},
   {v:'v22.1', date:'2026/10/27', d:'修正「紀錄」頁在手機上只剩右邊與下方陰影、外框看起來被裁掉的問題（紀錄頁本身沒有外框，陰影一併移除）。純前端修改'},
   {v:'v22.0', date:'2026/10/27', d:'外觀改版（手繪貼紙風，深色／淺色都有）：卡片、數據框、主要按鈕改成粗框＋實心陰影＋虛線縫線的貼紙樣式，機台卡片依機台色帶粉彩底；表格、輸入框、編輯畫面維持輕量好讀。字體改為昭源圓體，數字維持等寬對齊。手機上已預留陰影空間，不會被切到。純前端修改，不需要重新部署 .gs'},
   {v:'v21.9', date:'2026/10/27', d:'所有會寫入試算表的動作，統一跟看板一樣：按下去先跳出「儲存中…請稍候，不要重複按」的全螢幕視窗，存好後顯示「儲存成功」並可按「知道了」關閉；刪除則顯示「刪除中…／已刪除」。涵蓋：異常（新增、掃碼異常、快速 +1）、紀錄（編輯、刪除）、支援（新增紀錄、新增選項）、不能跑名單、耗材（叫貨紀錄、已到貨、新增／編輯／刪除品項、新增／刪除欄位）。失敗時會關閉視窗並跳出原因（純前端修改，不需要重新部署 .gs）'},
