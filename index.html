@@ -1157,7 +1157,7 @@ input, button, select, textarea{font-family:var(--font-ui);}
 
 <div class="wrap">
   <div class="topbar">
-    <h1>產線即時監看板 <button class="version-badge" id="version-badge">v22.3</button><button class="theme-toggle" id="theme-toggle" type="button" aria-label="切換深色／淺色" title="切換深色／淺色"><span class="tt-moon">🌙</span><span class="tt-sun">☀️</span></button></h1>
+    <h1>產線即時監看板 <button class="version-badge" id="version-badge">v22.4</button><button class="theme-toggle" id="theme-toggle" type="button" aria-label="切換深色／淺色" title="切換深色／淺色"><span class="tt-moon">🌙</span><span class="tt-sun">☀️</span></button></h1>
     <div class="topbar-right">
       <button class="export-btn" id="settings-btn">設定 API 網址</button>
       <button class="export-btn" id="admin-btn">管理者設定</button>
@@ -2969,7 +2969,7 @@ let saveOverlayTimer = null;
 function showSaveBusy(text, title){
   clearTimeout(saveOverlayTimer);
   document.getElementById('save-overlay-box').classList.add('busy');
-  document.getElementById('save-overlay-icon').textContent = '⏳';
+  document.getElementById('save-overlay-icon').innerHTML = '<svg width="56" height="64" viewBox="0 0 56 64" aria-hidden="true" style="display:block;margin:0 auto"><rect x="6" y="2" width="44" height="7" rx="3.5" fill="#E8412C"/><rect x="6" y="55" width="44" height="7" rx="3.5" fill="#E8412C"/><path d="M11 9h34c0 14-9 18-12 23 3 5 12 9 12 23H11c0-14 9-18 12-23-3-5-12-9-12-23z" fill="#FFF4D6" stroke="#6B6360" stroke-width="2" stroke-linejoin="round"/><path d="M15 9h26c-1 7-5 11-9 14h-8c-4-3-8-7-9-14z" fill="#F5B731"/><path d="M28 32l-4 6v17h8V38z" fill="#F5B731"/><path d="M13 55c1-6 5-9 9-12h12c4 3 8 6 9 12z" fill="#F5B731"/></svg>';
   document.getElementById('save-overlay-title').textContent = title || '儲存中…';
   document.getElementById('save-overlay-text').textContent = text || '請稍候，不要重複按。';
   document.getElementById('save-overlay-btn').style.display = 'none';
@@ -4078,6 +4078,7 @@ document.getElementById('records-switch').addEventListener('click', (e) => {
 
 // ---------- 版本紀錄 ----------
 const VERSION_LOG = [
+  {v:'v22.4', date:'2026/10/30', d:'「儲存中」視窗的沙漏改成固定圖案，電腦、手機看到的樣子一致。純前端修改'},
   {v:'v22.3', date:'2026/10/27', d:'深色版小字更好讀：次要文字、說明文字調亮，欄位標籤、數據框說明、狀態標籤等小字放大約 1px。純前端修改'},
   {v:'v22.2', date:'2026/10/27', d:'修正版本紀錄等視窗的捲軸尾端超出圓角外框的問題。純前端修改'},
   {v:'v22.1', date:'2026/10/27', d:'修正「紀錄」頁在手機上只剩右邊與下方陰影、外框看起來被裁掉的問題（紀錄頁本身沒有外框，陰影一併移除）。純前端修改'},
