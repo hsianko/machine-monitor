@@ -1134,6 +1134,16 @@ input, button, select, textarea{font-family:var(--font-ui);}
 .con-status{font-size:12px;}
 .version-badge{font-size:12px;}
 
+/* --- 簡化版「填寫說明」 --- */
+.help-btn{width:34px; height:34px; border-radius:50%; border:2px solid var(--ink); background:#F6D27A; color:#3E3A39; font-weight:700; font-size:18px; box-shadow:2px 2px 0 var(--ink-shadow); cursor:pointer; flex-shrink:0; padding:0; line-height:1;}
+.help-btn:active{transform:translate(1px,1px); box-shadow:1px 1px 0 var(--ink-shadow);}
+.help-body{line-height:1.7; font-size:14px;}
+.help-sec{margin-bottom:16px;}
+.help-sec:last-child{margin-bottom:0;}
+.help-sec h4{margin:0 0 6px; font-size:15px; color:var(--text-primary);}
+.help-chip{display:inline-block; border:2px solid #3E3A39; border-radius:12px; padding:1px 10px; font-weight:700; color:#3E3A39; margin-top:4px;}
+.help-warn{background:rgba(var(--red-rgb),.12); border:1px solid rgba(var(--red-rgb),.4); border-radius:12px; padding:8px 12px; margin-top:6px;}
+
 /* --- 手機：陰影與框線縮小，並替會被裁切的容器預留空間 --- */
 @media (max-width:600px){
   :root{--bw:2.5px; --off:3px;}
@@ -1157,7 +1167,7 @@ input, button, select, textarea{font-family:var(--font-ui);}
 
 <div class="wrap">
   <div class="topbar">
-    <h1>產線即時監看板 <button class="version-badge" id="version-badge">v22.6</button><button class="theme-toggle" id="theme-toggle" type="button" aria-label="切換深色／淺色" title="切換深色／淺色"><span class="tt-moon">🌙</span><span class="tt-sun">☀️</span></button></h1>
+    <h1>產線即時監看板 <button class="version-badge" id="version-badge">v22.7</button><button class="theme-toggle" id="theme-toggle" type="button" aria-label="切換深色／淺色" title="切換深色／淺色"><span class="tt-moon">🌙</span><span class="tt-sun">☀️</span></button><button class="help-btn" id="help-btn" type="button" aria-label="填寫說明" title="填寫說明" style="display:none">?</button></h1>
     <div class="topbar-right">
       <button class="export-btn" id="settings-btn">設定 API 網址</button>
       <button class="export-btn" id="admin-btn">管理者設定</button>
@@ -1580,6 +1590,26 @@ input, button, select, textarea{font-family:var(--font-ui);}
   <div class="save-hint" id="save-hint">載入中...</div>
 </div>
 
+<div class="modal-overlay" id="help-overlay">
+  <div class="version-modal">
+    <div class="version-modal-head">
+      <span class="vtitle">填寫說明</span>
+      <button class="modal-close-x" id="help-close-x">✕</button>
+    </div>
+    <div class="version-modal-body help-body">
+      <div class="help-sec"><h4>① 兩個按鈕差在哪？</h4>
+        <div><span class="help-chip" style="background:#CDE6F1">記錄今日進度</span><br>今天先收工，這張訂單還沒做完，明天可以接著做。</div>
+        <div style="margin-top:8px"><span class="help-chip" style="background:#D9ECCB">確定完成並加入紀錄</span><br>整張訂單全部做完了才按。</div></div>
+      <div class="help-sec"><h4>② 「目前第幾箱」怎麼填？</h4>
+        填這張訂單<b>累計</b>做到第幾箱，不是今天做幾箱。<br>例：總共 141 箱，昨天做到 40，今天又做 9 箱，就填 <b>49</b>。</div>
+      <div class="help-sec"><h4>③ 隔天要接著做怎麼辦？</h4>
+        直接開同一台的填報畫面，客戶名稱和箱數會自動帶出，記得把日期和開始時間改成今天。</div>
+      <div class="help-sec"><h4>④ 什麼時候才能按「箱數不對？仍要標示完成」？</h4>
+        請先重新核對「總箱數」與「目前第幾箱」，<b>核對三次</b>仍然對不上，才可以按這個按鈕。
+        <div class="help-warn">一般情況不要按；箱數有填對時，請用「確定完成並加入紀錄」。</div></div>
+    </div>
+  </div>
+</div>
 <div class="modal-overlay" id="version-overlay">
   <div class="version-modal">
     <div class="version-modal-head">
@@ -4081,6 +4111,7 @@ document.getElementById('records-switch').addEventListener('click', (e) => {
 
 // ---------- 版本紀錄 ----------
 const VERSION_LOG = [
+  {v:'v22.7', date:'2026/11/02', d:'簡化版標題旁新增黃色「?」填寫說明按鈕（完整版不顯示）：說明兩個按鈕的差別、「目前第幾箱」怎麼填、隔天怎麼接著做，以及「箱數不對？仍要標示完成」要核對三次仍對不上才能按。純前端修改'},
   {v:'v22.6', date:'2026/11/02', d:'簡化版輸入客戶名稱時，建議清單改成包含所有機台做過的客戶（只多給名稱，不含其他機台的箱數、時間等內容）。後端 .gs 有異動（gs-2026-11-02-v20），需要先重新部署 .gs，再上傳網頁'},
   {v:'v22.5', date:'2026/10/30', d:'「儲存中」沙漏圖案重畫成跟電腦版一樣：黑色粗外框、紅色上下蓋、黃色沙子，位置置中。純前端修改'},
   {v:'v22.4', date:'2026/10/30', d:'「儲存中」視窗的沙漏改成固定圖案，電腦、手機看到的樣子一致。純前端修改'},
@@ -4348,6 +4379,17 @@ document.getElementById('version-badge').addEventListener('click', (e) => {
   openVersionModal();
 });
 document.getElementById('version-close-x').addEventListener('click', closeVersionModal);
+// 簡化版才有的「填寫說明」按鈕
+(function(){
+  const btn = document.getElementById('help-btn'), ov = document.getElementById('help-overlay');
+  if(!btn || !ov) return;
+  if(SIMPLE_MODE_MACHINE) btn.style.display = '';
+  const close = () => ov.classList.remove('open');
+  btn.addEventListener('click', () => ov.classList.add('open'));
+  document.getElementById('help-close-x').addEventListener('click', close);
+  ov.addEventListener('click', (e) => { if(e.target === ov) close(); });
+})();
+
 document.getElementById('version-overlay').addEventListener('click', (e) => {
   if(e.target.id === 'version-overlay') closeVersionModal();
 });
