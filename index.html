@@ -1157,7 +1157,7 @@ input, button, select, textarea{font-family:var(--font-ui);}
 
 <div class="wrap">
   <div class="topbar">
-    <h1>產線即時監看板 <button class="version-badge" id="version-badge">v22.5</button><button class="theme-toggle" id="theme-toggle" type="button" aria-label="切換深色／淺色" title="切換深色／淺色"><span class="tt-moon">🌙</span><span class="tt-sun">☀️</span></button></h1>
+    <h1>產線即時監看板 <button class="version-badge" id="version-badge">v22.6</button><button class="theme-toggle" id="theme-toggle" type="button" aria-label="切換深色／淺色" title="切換深色／淺色"><span class="tt-moon">🌙</span><span class="tt-sun">☀️</span></button></h1>
     <div class="topbar-right">
       <button class="export-btn" id="settings-btn">設定 API 網址</button>
       <button class="export-btn" id="admin-btn">管理者設定</button>
@@ -3001,7 +3001,7 @@ async function saveLog(record){
 // 讓輸入框打字時可以直接跳出來點選，減少打字量（也順便減少畫面跳掉時損失的內容）。
 // 純粹是「建議」，不會限制輸入，還是可以自由打完全新的內容。
 function updateSuggestionLists(){
-  const customerSet = new Set();
+  const customerSet = new Set((extraCustomerNames || []).map(c => String(c||'').trim()).filter(Boolean));
   const remarkSet = new Set();
   completedLog.forEach(r => {
     const c = String(r.customer||'').trim();
@@ -3051,6 +3051,7 @@ function bootFromCache(){
     jobOverrides = {};
     (json.jobOverrides || []).forEach(o => { jobOverrides[o.jobId] = o; });
     if(json.restrictions) restrictionsLog = json.restrictions;
+    if(Array.isArray(json.customers)) extraCustomerNames = json.customers;
     showingCache = true;
   }catch(e){ showingCache = false; }
 }
@@ -3078,6 +3079,7 @@ async function loadState(){
     serverActiveJobIds = new Set(json.activeJobIds || []);
     jobOverrides = {};
     (json.jobOverrides || []).forEach(o => { jobOverrides[o.jobId] = o; });
+    if(Array.isArray(json.customers)) extraCustomerNames = json.customers;
     if(json.state){
       stateEverLoaded = true;
       showingCache = false;
@@ -3291,6 +3293,7 @@ function clearResumeHintDismiss(machine){
 }
 let serverActiveJobIds = new Set();
 let jobOverrides = {};
+let extraCustomerNames = [];   // 簡化版：後端額外給的「所有機台做過的客戶名稱」（只有名稱）
 
 function getActiveJobIds(){
   const ids = new Set(serverActiveJobIds);
@@ -4078,6 +4081,7 @@ document.getElementById('records-switch').addEventListener('click', (e) => {
 
 // ---------- 版本紀錄 ----------
 const VERSION_LOG = [
+  {v:'v22.6', date:'2026/11/02', d:'簡化版輸入客戶名稱時，建議清單改成包含所有機台做過的客戶（只多給名稱，不含其他機台的箱數、時間等內容）。後端 .gs 有異動（gs-2026-11-02-v20），需要先重新部署 .gs，再上傳網頁'},
   {v:'v22.5', date:'2026/10/30', d:'「儲存中」沙漏圖案重畫成跟電腦版一樣：黑色粗外框、紅色上下蓋、黃色沙子，位置置中。純前端修改'},
   {v:'v22.4', date:'2026/10/30', d:'「儲存中」視窗的沙漏改成固定圖案，電腦、手機看到的樣子一致。純前端修改'},
   {v:'v22.3', date:'2026/10/27', d:'深色版小字更好讀：次要文字、說明文字調亮，欄位標籤、數據框說明、狀態標籤等小字放大約 1px。純前端修改'},
