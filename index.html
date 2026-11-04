@@ -1136,6 +1136,31 @@ input, button, select, textarea{font-family:var(--font-ui);}
 
 .eta-clock{font-size:12px; color:var(--text-secondary); margin-top:2px;}
 
+
+/* --- 作業小記（Q&A） --- */
+#notes-panel{display:none;}
+#viewer-panel.notes-mode > *:not(#notes-panel){display:none !important;}
+#viewer-panel.notes-mode > #notes-panel{display:block;}
+.notes-toolbar{display:flex; gap:8px; align-items:center; margin-bottom:10px; flex-wrap:wrap;}
+.notes-toolbar input[type=search]{flex:1 1 220px; min-width:0; border:1.5px solid var(--border-strong); border-radius:999px; background:var(--bg-field); color:var(--text-primary); padding:9px 16px;}
+.notes-toolbar input[type=search]:focus{outline:none; border-color:var(--ink);}
+.note-group{margin:14px 0 6px; font-weight:700; font-size:14px; color:var(--text-primary);}
+.note-group span{display:inline-block; background:#F6D27A; color:#3E3A39; border:2px solid var(--ink); border-radius:999px; padding:1px 12px;}
+.note-item{background:var(--bg-panel); border:1.5px solid var(--border-strong); border-radius:16px; margin-bottom:8px; overflow:hidden;}
+.note-head{display:flex; align-items:center; justify-content:space-between; gap:8px; width:100%; background:none; border:none; color:var(--text-primary); text-align:left; padding:11px 14px; cursor:pointer; font-weight:600; font-size:15px; line-height:1.5;}
+.note-head .note-tag{flex-shrink:0; font-size:11px; font-weight:500; color:var(--text-secondary); background:var(--bg-field); border:1px solid var(--border-strong); border-radius:999px; padding:0 8px;}
+.note-head .note-arrow{flex-shrink:0; color:var(--text-muted);}
+.note-body{display:none; padding:0 14px 12px; border-top:1px dashed var(--border-strong);}
+.note-item.open .note-body{display:block;}
+.note-text{white-space:pre-wrap; word-break:break-word; line-height:1.8; font-size:14px; padding-top:10px; color:var(--text-primary);}
+.note-meta{display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-top:10px; font-size:12px; color:var(--text-muted);}
+.note-meta button{border:1.5px solid var(--border-strong); border-radius:999px; background:var(--bg-field); color:var(--text-primary); padding:3px 12px; font-size:12px; cursor:pointer;}
+.note-form{background:var(--bg-panel); border:var(--bw) solid var(--ink); border-radius:22px; box-shadow:var(--off) var(--off) 0 var(--ink-shadow); padding:14px 16px 16px; margin-bottom:14px; display:grid; gap:10px;}
+.note-form .field input,.note-form .field textarea{width:100%; border:1.5px solid var(--border-strong); border-radius:12px; background:var(--bg-field); color:var(--text-primary); padding:9px 12px; font-family:var(--font-ui);}
+.note-form textarea{min-height:150px; resize:vertical; line-height:1.7;}
+.note-form .note-hint{font-size:12px; color:var(--text-muted);}
+.note-form .note-actions{display:flex; gap:8px; flex-wrap:wrap;}
+
 /* --- 簡化版「填寫說明」 --- */
 .help-btn{width:34px; height:34px; border-radius:50%; border:2px solid var(--ink); background:#F6D27A; color:#3E3A39; font-weight:700; font-size:18px; box-shadow:2px 2px 0 var(--ink-shadow); cursor:pointer; flex-shrink:0; padding:0; line-height:1;}
 .help-btn:active{transform:translate(1px,1px); box-shadow:1px 1px 0 var(--ink-shadow);}
@@ -1171,7 +1196,7 @@ input, button, select, textarea{font-family:var(--font-ui);}
 
 <div class="wrap">
   <div class="topbar">
-    <h1>產線即時監看板 <button class="version-badge" id="version-badge">v22.9</button><button class="theme-toggle" id="theme-toggle" type="button" aria-label="切換深色／淺色" title="切換深色／淺色"><span class="tt-moon">🌙</span><span class="tt-sun">☀️</span></button><button class="help-btn" id="help-btn" type="button" aria-label="填寫說明" title="填寫說明" style="display:none">?</button></h1>
+    <h1>產線即時監看板 <button class="version-badge" id="version-badge">v23.0</button><button class="theme-toggle" id="theme-toggle" type="button" aria-label="切換深色／淺色" title="切換深色／淺色"><span class="tt-moon">🌙</span><span class="tt-sun">☀️</span></button><button class="help-btn" id="help-btn" type="button" aria-label="填寫說明" title="填寫說明" style="display:none">?</button></h1>
     <div class="topbar-right">
       <button class="export-btn" id="settings-btn">設定 API 網址</button>
       <button class="export-btn" id="admin-btn">管理者設定</button>
@@ -1446,6 +1471,15 @@ input, button, select, textarea{font-family:var(--font-ui);}
     <div class="section-title" id="viewer-title" style="margin-bottom:8px;"></div>
     <div class="date-tabs" id="records-switch"></div>
     <div class="viewer-panel open" id="viewer-panel" style="border:none; padding:0;">
+      <div id="notes-panel">
+        <div class="notes-toolbar">
+          <input type="search" id="notes-search" placeholder="輸入關鍵字搜尋，例如：圖番、託運單" autocomplete="off">
+          <button class="date-tab" id="notes-add-btn" type="button">＋ 新增小記</button>
+        </div>
+        <div class="date-tabs" id="notes-cats"></div>
+        <div id="notes-form-wrap"></div>
+        <div id="notes-list"></div>
+      </div>
       <div class="date-tabs" id="viewer-date-tabs"></div>
       <div class="dash-controls" style="margin-bottom:10px;">
         <button class="date-tab" id="viewer-range-toggle">📅 自訂日期區間</button>
@@ -3150,6 +3184,11 @@ async function loadState(){
     if(json.support){ supportLog = json.support; }
     if(json.supportConfig){ supportConfig = json.supportConfig; }
     if(json.restrictions){ restrictionsLog = json.restrictions; }
+    if(Array.isArray(json.workNotes)){
+      workNotes = json.workNotes;
+      workNotesLoaded = true;
+      if(currentLogView === 'notes' && notesEdit === null) renderNotes();   // 正在編輯時不重畫，避免打到一半的內容被洗掉
+    }
     if(json.consumableItems){
       consumableItems = json.consumableItems;
       consumableLog = json.consumableLog || [];
@@ -3719,6 +3758,7 @@ function displayValue(view, r, k){
 
 function renderViewer(view, highlightLast, keepDateFilter){
   currentLogView = view;
+  document.getElementById('viewer-panel').classList.remove('notes-mode');
   editingIdx = null;
   if(!keepDateFilter){ currentDateFilter = null; remarkFilterOn = false; currentMachineFilter = null; currentRangeFilter = null; }
   const cfg = VIEW_CONFIG[view];
@@ -3842,7 +3882,8 @@ function renderRecordsSwitch(){
     {view:'abnormal', label:'機台異常記錄'},
     {view:'scan', label:'機台掃碼異常記錄'},
     {view:'support', label:'支援紀錄'},
-    {view:'consumable', label:'耗材盤點記錄'}
+    {view:'consumable', label:'耗材盤點記錄'},
+    {view:'notes', label:'作業小記'}
   ];
   wrap.innerHTML = items.map(it => `<button class="date-tab${currentLogView===it.view?' active':''}" data-view="${it.view}">${it.label}</button>`).join('');
 }
@@ -4123,11 +4164,152 @@ document.getElementById('viewer-range-clear').addEventListener('click', () => {
 document.getElementById('records-switch').addEventListener('click', (e) => {
   const btn = e.target.closest('[data-view]');
   if(!btn) return;
+  if(btn.dataset.view === 'notes'){ renderNotes(); return; }
   renderViewer(btn.dataset.view);
+});
+
+
+// ---------- 作業小記（Q&A）：放在「紀錄」分頁裡，只有完整版看得到 ----------
+let workNotes = [];
+let workNotesLoaded = false;
+let notesCat = '';
+let notesQuery = '';
+let notesOpen = {};
+let notesEdit = null;   // null＝沒在編輯；'new'＝新增；數字＝正在編輯的試算表列號
+
+// 內容裡用 **文字** 可以加粗標重點
+function noteFmt(text){ return escapeHtml(text).replace(/\*\*(.+?)\*\*/g, '<b>$1</b>'); }
+
+function renderNotes(){
+  currentLogView = 'notes';
+  editingIdx = null;
+  document.getElementById('viewer-title').textContent = '作業小記';
+  document.getElementById('viewer-panel').classList.add('notes-mode');
+  renderRecordsSwitch();
+  const cats = [];
+  workNotes.forEach(n => { const c = n['分類'] || '未分類'; if(cats.indexOf(c) === -1) cats.push(c); });
+  if(notesCat && cats.indexOf(notesCat) === -1) notesCat = '';
+  document.getElementById('notes-cats').innerHTML =
+    `<button class="date-tab${notesCat===''?' active':''}" data-note-cat="">全部</button>` +
+    cats.map(c => `<button class="date-tab${notesCat===c?' active':''}" data-note-cat="${escapeHtml(c)}">${escapeHtml(c)}</button>`).join('');
+  renderNoteForm(cats);
+  renderNoteList(cats);
+}
+
+function renderNoteList(cats){
+  const wrap = document.getElementById('notes-list');
+  if(!workNotesLoaded){
+    wrap.innerHTML = '<div class="viewer-empty">還沒讀到作業小記資料。請確認 Google Apps Script 已重新部署最新版 .gs，再重新整理頁面。</div>';
+    return;
+  }
+  const q = notesQuery.trim().toLowerCase();
+  const list = workNotes.filter(n => {
+    if(notesCat && (n['分類'] || '未分類') !== notesCat) return false;
+    if(!q) return true;
+    return [n['分類'], n['標題'], n['內容']].some(v => String(v || '').toLowerCase().indexOf(q) !== -1);
+  });
+  if(!list.length){
+    wrap.innerHTML = `<div class="viewer-empty">${workNotes.length ? '找不到符合的小記。' : '還沒有小記，按上面的「＋ 新增小記」開始。'}</div>`;
+    return;
+  }
+  const grouped = !q && !notesCat;
+  const itemHtml = n => {
+    const open = !!notesOpen[n._row] || (!!q && list.length <= 8);
+    return `<div class="note-item${open?' open':''}" data-note-row="${n._row}">
+      <button class="note-head" type="button" data-note-toggle="${n._row}"><span>${escapeHtml(n['標題'])}</span>${grouped?'':`<span class="note-tag">${escapeHtml(n['分類'] || '未分類')}</span>`}<span class="note-arrow">${open?'▾':'▸'}</span></button>
+      <div class="note-body"><div class="note-text">${noteFmt(n['內容'] || '')}</div>
+        <div class="note-meta"><span>更新：${escapeHtml(String(n['更新日期'] || ''))}</span><button type="button" data-note-edit="${n._row}">編輯</button><button type="button" data-note-del="${n._row}">刪除</button></div></div></div>`;
+  };
+  if(grouped){
+    wrap.innerHTML = (cats || []).map(c => {
+      const items = list.filter(n => (n['分類'] || '未分類') === c);
+      return items.length ? `<div class="note-group"><span>${escapeHtml(c)}</span></div>` + items.map(itemHtml).join('') : '';
+    }).join('');
+  } else {
+    wrap.innerHTML = list.map(itemHtml).join('');
+  }
+}
+
+function renderNoteForm(cats){
+  const wrap = document.getElementById('notes-form-wrap');
+  if(notesEdit === null){ wrap.innerHTML = ''; return; }
+  const cur = notesEdit === 'new' ? null : workNotes.find(n => n._row === notesEdit);
+  if(notesEdit !== 'new' && !cur){ notesEdit = null; wrap.innerHTML = ''; return; }
+  wrap.innerHTML = `<div class="note-form" id="note-form">
+    <div class="field"><label>分類（可選現有的，也可以自己打新的）</label><input type="text" id="note-cat" list="notes-cat-list" maxlength="20" value="${escapeHtml(cur ? (cur['分類'] || '') : (notesCat || ''))}" placeholder="例如：圖番設定"></div>
+    <div class="field"><label>標題（問題）</label><input type="text" id="note-title" maxlength="100" value="${escapeHtml(cur ? (cur['標題'] || '') : '')}" placeholder="例如：刷一貼一出現除以0的錯誤"></div>
+    <div class="field"><label>內容（處理方式）</label><textarea id="note-content" maxlength="5000" placeholder="可以換行。">${escapeHtml(cur ? (cur['內容'] || '') : '')}</textarea>
+      <div class="note-hint">想標重點的字，前後各加兩個星號，例如 **重點**。</div></div>
+    <div class="note-actions"><button class="date-tab active" id="note-save" type="button">儲存</button><button class="date-tab" id="note-cancel" type="button">取消</button></div>
+    <datalist id="notes-cat-list">${(cats || []).map(c => `<option value="${escapeHtml(c)}">`).join('')}</datalist>
+  </div>`;
+}
+
+async function saveNote(){
+  const cat = document.getElementById('note-cat').value.trim();
+  const title = document.getElementById('note-title').value.trim();
+  const content = document.getElementById('note-content').value;
+  if(!title){ alert('請填寫標題。'); return; }
+  const isNew = notesEdit === 'new';
+  const btn = document.getElementById('note-save');
+  btn.disabled = true;
+  showSaveBusy('正在儲存作業小記，請稍候，不要重複按。');
+  try{
+    await apiPost({action: isNew ? 'appendNote' : 'updateNote', row: isNew ? undefined : notesEdit, data:{'分類':cat, '標題':title, '內容':content}});
+    notesEdit = null;
+    await loadState();
+    renderNotes();
+    showSaveSuccess(isNew ? '已新增作業小記。' : '已更新作業小記。');
+  }catch(err){
+    hideSaveOverlay();
+    alert('儲存失敗：' + err);
+    btn.disabled = false;
+  }
+}
+
+async function deleteNote(row){
+  const n = workNotes.find(x => x._row === row);
+  if(!n) return;
+  if(!confirm(`確定要刪除「${n['標題']}」嗎？刪除後無法復原。`)) return;
+  showSaveBusy('正在刪除，請稍候，不要重複按。', '刪除中…');
+  try{
+    await apiPost({action:'deleteNote', row});
+    await loadState();
+    renderNotes();
+    showSaveSuccess('這則小記已刪除。', '已刪除');
+  }catch(err){
+    hideSaveOverlay();
+    alert('刪除失敗：' + err);
+  }
+}
+
+document.getElementById('notes-search').addEventListener('input', (e) => {
+  notesQuery = e.target.value;
+  renderNoteList(Array.from(new Set(workNotes.map(n => n['分類'] || '未分類'))));
+});
+document.getElementById('notes-add-btn').addEventListener('click', () => {
+  notesEdit = 'new';
+  renderNotes();
+  const f = document.getElementById('note-form');
+  if(f) f.scrollIntoView({block:'center', behavior:'smooth'});
+});
+document.getElementById('notes-panel').addEventListener('click', (e) => {
+  const t = e.target;
+  const cat = t.closest('[data-note-cat]');
+  if(cat){ notesCat = cat.dataset.noteCat; renderNotes(); return; }
+  const tog = t.closest('[data-note-toggle]');
+  if(tog){ const r = Number(tog.dataset.noteToggle); notesOpen[r] = !notesOpen[r]; renderNotes(); return; }
+  const ed = t.closest('[data-note-edit]');
+  if(ed){ notesEdit = Number(ed.dataset.noteEdit); renderNotes(); const f = document.getElementById('note-form'); if(f) f.scrollIntoView({block:'center', behavior:'smooth'}); return; }
+  const del = t.closest('[data-note-del]');
+  if(del){ deleteNote(Number(del.dataset.noteDel)); return; }
+  if(t.closest('#note-save')){ saveNote(); return; }
+  if(t.closest('#note-cancel')){ notesEdit = null; renderNotes(); return; }
 });
 
 // ---------- 版本紀錄 ----------
 const VERSION_LOG = [
+  {v:'v23.0', date:'2026/11/04', d:'「紀錄」分頁新增「作業小記」（Q&A）：把平常的作業小記錄整理成問答，可用關鍵字搜尋、依分類篩選、點開看說明，並可直接在網頁上新增、修改、刪除（內容裡用 **文字** 可加粗標重點）。只有完整版／管理者看得到，簡化版不會拿到這些資料。第一次會自動建立試算表分頁 WorkNotes，並放入 11 則預設內容。後端 .gs 有異動（gs-2026-11-04-v21），需要先重新部署 .gs，再上傳網頁'},
   {v:'v22.9', date:'2026/11/04', d:'手機上總覽列的「今日異常（每百箱 0.00）」不再換成兩行。純前端修改'},
   {v:'v22.8', date:'2026/11/04', d:'「進行中訂單」在「預估還要 X 小時 Y 分鐘」下方新增「預計 HH:MM 完成」（現在時間加上預估時間；不是今天會加上「明天」或日期）。預計時間跟預估還要一樣是用箱數推算，遇到停機、換料、午休會往後延。純前端修改'},
   {v:'v22.7', date:'2026/11/02', d:'簡化版標題旁新增黃色「?」填寫說明按鈕（完整版不顯示）：說明兩個按鈕的差別、「目前第幾箱」怎麼填、隔天怎麼接著做，以及「箱數不對？仍要標示完成」要核對三次仍對不上才能按。純前端修改'},
