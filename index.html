@@ -1134,6 +1134,8 @@ input, button, select, textarea{font-family:var(--font-ui);}
 .con-status{font-size:12px;}
 .version-badge{font-size:12px;}
 
+.eta-clock{font-size:12px; color:var(--text-secondary); margin-top:2px;}
+
 /* --- 簡化版「填寫說明」 --- */
 .help-btn{width:34px; height:34px; border-radius:50%; border:2px solid var(--ink); background:#F6D27A; color:#3E3A39; font-weight:700; font-size:18px; box-shadow:2px 2px 0 var(--ink-shadow); cursor:pointer; flex-shrink:0; padding:0; line-height:1;}
 .help-btn:active{transform:translate(1px,1px); box-shadow:1px 1px 0 var(--ink-shadow);}
@@ -1155,6 +1157,8 @@ input, button, select, textarea{font-family:var(--font-ui);}
   .overview-bar{gap:12px; padding-right:3px; padding-bottom:3px;}
   .grid{padding-right:3px; padding-bottom:3px;}
   .modal-overlay{padding:16px 16px 20px;}
+  .overview-label{white-space:nowrap; font-size:12px;}
+  .overview-label .overview-sub{font-size:11px; margin-left:1px;}
   #con-stock .viewer-table th,#con-stock .viewer-table td{font-size:12.5px; padding:8px 3px;}
   #con-stock .con-status{white-space:normal; font-size:11px; line-height:1.35; padding:2px 7px;}
   #con-stock .con-actions{width:74px;}
@@ -1167,7 +1171,7 @@ input, button, select, textarea{font-family:var(--font-ui);}
 
 <div class="wrap">
   <div class="topbar">
-    <h1>產線即時監看板 <button class="version-badge" id="version-badge">v22.7</button><button class="theme-toggle" id="theme-toggle" type="button" aria-label="切換深色／淺色" title="切換深色／淺色"><span class="tt-moon">🌙</span><span class="tt-sun">☀️</span></button><button class="help-btn" id="help-btn" type="button" aria-label="填寫說明" title="填寫說明" style="display:none">?</button></h1>
+    <h1>產線即時監看板 <button class="version-badge" id="version-badge">v22.9</button><button class="theme-toggle" id="theme-toggle" type="button" aria-label="切換深色／淺色" title="切換深色／淺色"><span class="tt-moon">🌙</span><span class="tt-sun">☀️</span></button><button class="help-btn" id="help-btn" type="button" aria-label="填寫說明" title="填寫說明" style="display:none">?</button></h1>
     <div class="topbar-right">
       <button class="export-btn" id="settings-btn">設定 API 網址</button>
       <button class="export-btn" id="admin-btn">管理者設定</button>
@@ -2718,6 +2722,18 @@ function formatEtaMinutes(mins){
   return m > 0 ? `${h} 小時 ${m} 分鐘` : `${h} 小時`;
 }
 
+// 預計完成時刻：現在時間加上預估還要的分鐘；不是今天就加上「明天」或日期，避免誤會。
+function formatEtaClock(mins){
+  const now = new Date();
+  const end = new Date(now.getTime() + mins * 60000);
+  const pad = n => String(n).padStart(2,'0');
+  const hm = `${pad(end.getHours())}:${pad(end.getMinutes())}`;
+  const dayDiff = Math.round((new Date(end.getFullYear(), end.getMonth(), end.getDate()) - new Date(now.getFullYear(), now.getMonth(), now.getDate())) / 86400000);
+  if(dayDiff <= 0) return hm;
+  if(dayDiff === 1) return `明天 ${hm}`;
+  return `${end.getMonth()+1}/${end.getDate()} ${hm}`;
+}
+
 function renderRunningList(){
   const list = getRunningOrders();
   const wrap = document.getElementById('running-list');
@@ -2740,6 +2756,7 @@ function renderRunningList(){
         <div class="eta-box">
           <div class="eta-label">${isWarn ? '快做完了・預估還要' : '預估還要'}</div>
           <div class="eta-value">${etaLabel}</div>
+          ${o.etaMinutes > 0 ? `<div class="eta-clock">預計 ${formatEtaClock(o.etaMinutes)} 完成</div>` : ''}
         </div>
       </div>`;
     }).join('');
@@ -4111,6 +4128,8 @@ document.getElementById('records-switch').addEventListener('click', (e) => {
 
 // ---------- 版本紀錄 ----------
 const VERSION_LOG = [
+  {v:'v22.9', date:'2026/11/04', d:'手機上總覽列的「今日異常（每百箱 0.00）」不再換成兩行。純前端修改'},
+  {v:'v22.8', date:'2026/11/04', d:'「進行中訂單」在「預估還要 X 小時 Y 分鐘」下方新增「預計 HH:MM 完成」（現在時間加上預估時間；不是今天會加上「明天」或日期）。預計時間跟預估還要一樣是用箱數推算，遇到停機、換料、午休會往後延。純前端修改'},
   {v:'v22.7', date:'2026/11/02', d:'簡化版標題旁新增黃色「?」填寫說明按鈕（完整版不顯示）：說明兩個按鈕的差別、「目前第幾箱」怎麼填、隔天怎麼接著做，以及「箱數不對？仍要標示完成」要核對三次仍對不上才能按。純前端修改'},
   {v:'v22.6', date:'2026/11/02', d:'簡化版輸入客戶名稱時，建議清單改成包含所有機台做過的客戶（只多給名稱，不含其他機台的箱數、時間等內容）。後端 .gs 有異動（gs-2026-11-02-v20），需要先重新部署 .gs，再上傳網頁'},
   {v:'v22.5', date:'2026/10/30', d:'「儲存中」沙漏圖案重畫成跟電腦版一樣：黑色粗外框、紅色上下蓋、黃色沙子，位置置中。純前端修改'},
