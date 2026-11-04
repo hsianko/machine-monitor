@@ -1196,7 +1196,7 @@ input, button, select, textarea{font-family:var(--font-ui);}
 
 <div class="wrap">
   <div class="topbar">
-    <h1>產線即時監看板 <button class="version-badge" id="version-badge">v23.0</button><button class="theme-toggle" id="theme-toggle" type="button" aria-label="切換深色／淺色" title="切換深色／淺色"><span class="tt-moon">🌙</span><span class="tt-sun">☀️</span></button><button class="help-btn" id="help-btn" type="button" aria-label="填寫說明" title="填寫說明" style="display:none">?</button></h1>
+    <h1>產線即時監看板 <button class="version-badge" id="version-badge">v23.1</button><button class="theme-toggle" id="theme-toggle" type="button" aria-label="切換深色／淺色" title="切換深色／淺色"><span class="tt-moon">🌙</span><span class="tt-sun">☀️</span></button><button class="help-btn" id="help-btn" type="button" aria-label="填寫說明" title="填寫說明" style="display:none">?</button></h1>
     <div class="topbar-right">
       <button class="export-btn" id="settings-btn">設定 API 網址</button>
       <button class="export-btn" id="admin-btn">管理者設定</button>
@@ -3757,6 +3757,8 @@ function displayValue(view, r, k){
 }
 
 function renderViewer(view, highlightLast, keepDateFilter){
+  // 「作業小記」不是表格型的紀錄頁，沒有對應的 VIEW_CONFIG；其他地方（重新讀取資料、日期篩選等）呼叫到這裡時，要留在小記頁，不能往下跑。
+  if(view === 'notes'){ if(notesEdit === null) renderNotes(); return; }
   currentLogView = view;
   document.getElementById('viewer-panel').classList.remove('notes-mode');
   editingIdx = null;
@@ -4309,6 +4311,7 @@ document.getElementById('notes-panel').addEventListener('click', (e) => {
 
 // ---------- 版本紀錄 ----------
 const VERSION_LOG = [
+  {v:'v23.1', date:'2026/11/04', d:'修正停在「作業小記」頁時，資料重新讀取後會閃退、跳回其他紀錄頁（並顯示「讀取失敗」）的問題，現在會留在作業小記頁。純前端修改'},
   {v:'v23.0', date:'2026/11/04', d:'「紀錄」分頁新增「作業小記」（Q&A）：把平常的作業小記錄整理成問答，可用關鍵字搜尋、依分類篩選、點開看說明，並可直接在網頁上新增、修改、刪除（內容裡用 **文字** 可加粗標重點）。只有完整版／管理者看得到，簡化版不會拿到這些資料。第一次會自動建立試算表分頁 WorkNotes，並放入 11 則預設內容。後端 .gs 有異動（gs-2026-11-04-v21），需要先重新部署 .gs，再上傳網頁'},
   {v:'v22.9', date:'2026/11/04', d:'手機上總覽列的「今日異常（每百箱 0.00）」不再換成兩行。純前端修改'},
   {v:'v22.8', date:'2026/11/04', d:'「進行中訂單」在「預估還要 X 小時 Y 分鐘」下方新增「預計 HH:MM 完成」（現在時間加上預估時間；不是今天會加上「明天」或日期）。預計時間跟預估還要一樣是用箱數推算，遇到停機、換料、午休會往後延。純前端修改'},
