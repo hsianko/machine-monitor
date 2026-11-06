@@ -1214,7 +1214,7 @@ input, button, select, textarea{font-family:var(--font-ui);}
 
 <div class="wrap">
   <div class="topbar">
-    <h1>產線即時監看板 <button class="version-badge" id="version-badge">v23.3</button><button class="theme-toggle" id="theme-toggle" type="button" aria-label="切換深色／淺色" title="切換深色／淺色"><span class="tt-moon"><svg class="ico ico-moon" aria-hidden="true"><use href="#i-moon"/></svg></span><span class="tt-sun"><svg class="ico ico-sun" aria-hidden="true"><use href="#i-sun"/></svg></span></button><button class="help-btn" id="help-btn" type="button" aria-label="填寫說明" title="填寫說明" style="display:none">?</button></h1>
+    <h1>產線即時監看板 <button class="version-badge" id="version-badge">v23.4</button><button class="theme-toggle" id="theme-toggle" type="button" aria-label="切換深色／淺色" title="切換深色／淺色"><span class="tt-moon"><svg class="ico ico-moon" aria-hidden="true"><use href="#i-moon"/></svg></span><span class="tt-sun"><svg class="ico ico-sun" aria-hidden="true"><use href="#i-sun"/></svg></span></button><button class="help-btn" id="help-btn" type="button" aria-label="填寫說明" title="填寫說明" style="display:none">?</button></h1>
     <div class="topbar-right">
       <button class="export-btn" id="settings-btn">設定 API 網址</button>
       <button class="export-btn" id="admin-btn">管理者設定</button>
@@ -2295,7 +2295,7 @@ function render(){
           <div class="gauge-crate" style="left:${pct}%">▣</div>
         </div>
         `}
-        ${(() => { const pn = previousProgressNote(m.key); return pn ? `<div class="prev-progress-note"><span class="prev-chip" aria-hidden="true"><svg viewBox="0 0 24 24" width="14" height="14"><path d="M9 7 4.5 11.5 9 16" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/><path d="M5 11.5h9a5 5 0 0 1 0 10h-2" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" transform="translate(0 -4)"/></svg></span><span>${escapeHtml(pn)}</span></div>` : ''; })()}
+        ${(() => { const pn = previousProgressNote(m.key); return pn ? `<div class="prev-progress-note"><span class="prev-chip" aria-hidden="true"><svg viewBox="0 0 24 24" width="16" height="16"><g transform="translate(1.5 0)" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M8.5 5 3.5 10l5 5"/><path d="M3.5 10H14a4.5 4.5 0 0 1 0 9H8.5"/></g></svg></span><span>${escapeHtml(pn)}</span></div>` : ''; })()}
         ${isOverflow ? '<div class="qty-warning">'+ico('warn')+'目前箱數已超過總箱數，請確認並修正！</div>' : ''}
       </div>
       <div class="times">
@@ -4331,6 +4331,7 @@ document.getElementById('notes-panel').addEventListener('click', (e) => {
 
 // ---------- 版本紀錄 ----------
 const VERSION_LOG = [
+  {v:'v23.4', date:'2026/11/06', d:'「接續做」提示的小箭頭圖章重畫，箭頭與迴轉線對齊、整體置中。純前端修改'},
   {v:'v23.3', date:'2026/11/06', d:'畫面上的 emoji 符號（⚠、📌、📅、🌙、☀️）全部換成貼紙風圖示（粗框、淡黃／珊瑚色），各種手機和電腦看起來一致，深淺色主題都適用。純前端修改'},
   {v:'v23.2', date:'2026/11/06', d:'簡化版「這張訂單 X/Y 已做到 N 箱，今天是接續做」提示前面的 emoji 符號，改成貼紙風的小圖章（粗框＋實心陰影的淡藍色箭頭），各種手機看起來一致。純前端修改'},
   {v:'v23.1', date:'2026/11/04', d:'修正停在「作業小記」頁時，資料重新讀取後會閃退、跳回其他紀錄頁（並顯示「讀取失敗」）的問題，現在會留在作業小記頁。純前端修改'},
