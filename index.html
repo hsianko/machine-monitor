@@ -1161,6 +1161,17 @@ input, button, select, textarea{font-family:var(--font-ui);}
 .note-form .note-hint{font-size:12px; color:var(--text-muted);}
 .note-form .note-actions{display:flex; gap:8px; flex-wrap:wrap;}
 
+/* --- 「接續做」提示：貼紙小圖章取代 emoji --- */
+.prev-progress-note{display:flex; align-items:center; gap:8px; font-size:13px; color:var(--text-secondary);}
+.prev-chip{flex-shrink:0; display:inline-flex; align-items:center; justify-content:center; width:24px; height:24px; border-radius:8px; border:2px solid var(--ink); background:#A8D3E6; color:#3E3A39; box-shadow:2px 2px 0 var(--ink-shadow);}
+
+/* --- 貼紙風圖示（取代 emoji；SVG 圖示集在 <body> 開頭） --- */
+.ico{display:inline-block; width:1.2em; height:1.2em; vertical-align:-0.22em; margin-right:.3em; flex-shrink:0;}
+.theme-toggle .ico,.remark-icon .ico,.dup-icon .ico{margin:0;}
+.theme-toggle .ico{width:17px; height:17px; vertical-align:middle;}
+.date-tab .ico{width:1.25em; height:1.25em;}
+.qty-warning .ico,.resume-hint-text .ico{vertical-align:-0.25em;}
+
 /* --- 簡化版「填寫說明」 --- */
 .help-btn{width:34px; height:34px; border-radius:50%; border:2px solid var(--ink); background:#F6D27A; color:#3E3A39; font-weight:700; font-size:18px; box-shadow:2px 2px 0 var(--ink-shadow); cursor:pointer; flex-shrink:0; padding:0; line-height:1;}
 .help-btn:active{transform:translate(1px,1px); box-shadow:1px 1px 0 var(--ink-shadow);}
@@ -1193,10 +1204,17 @@ input, button, select, textarea{font-family:var(--font-ui);}
 </style>
 </head>
 <body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false"><defs>
+<symbol id="i-warn" viewBox="0 0 24 24"><path d="M12 3.4 21.6 20.2H2.4Z" style="fill:#F6D27A;stroke:var(--ink);stroke-width:2;stroke-linejoin:round"/><path d="M12 9.6v4.6" style="stroke:#3E3A39;stroke-width:2.4;stroke-linecap:round;fill:none"/><circle cx="12" cy="17.2" r="1.35" style="fill:#3E3A39"/></symbol>
+<symbol id="i-pin" viewBox="0 0 24 24"><path d="M12 15.5V22" style="stroke:var(--ink);stroke-width:2.2;stroke-linecap:round;fill:none"/><circle cx="12" cy="9.5" r="6.2" style="fill:#F2A497;stroke:var(--ink);stroke-width:2"/><circle cx="9.9" cy="7.6" r="1.5" style="fill:#fff;opacity:.85"/></symbol>
+<symbol id="i-cal" viewBox="0 0 24 24"><rect x="3.5" y="5" width="17" height="15.5" rx="3" style="fill:#FFFDF8;stroke:var(--ink);stroke-width:2"/><path d="M3.5 8a3 3 0 0 1 3-3h11a3 3 0 0 1 3 3v3h-17Z" style="fill:#F6D27A;stroke:var(--ink);stroke-width:2;stroke-linejoin:round"/><path d="M8 2.8v4M16 2.8v4" style="stroke:var(--ink);stroke-width:2.2;stroke-linecap:round;fill:none"/><path d="M8 15h2M12.5 15h2M8 18h2" style="stroke:#3E3A39;stroke-width:1.8;stroke-linecap:round;fill:none"/></symbol>
+<symbol id="i-moon" viewBox="0 0 24 24"><path d="M20.5 14.2A8.6 8.6 0 0 1 9.8 3.5a8.6 8.6 0 1 0 10.7 10.7Z" style="fill:#F6D27A;stroke:var(--ink);stroke-width:1.9;stroke-linejoin:round"/></symbol>
+<symbol id="i-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4.4" style="fill:#F6D27A;stroke:var(--ink);stroke-width:1.9"/><path d="M12 2.6v2.6M12 18.8v2.6M2.6 12h2.6M18.8 12h2.6M5.4 5.4l1.8 1.8M16.8 16.8l1.8 1.8M5.4 18.6l1.8-1.8M16.8 7.2l1.8-1.8" style="stroke:var(--ink);stroke-width:1.9;stroke-linecap:round;fill:none"/></symbol>
+</defs></svg>
 
 <div class="wrap">
   <div class="topbar">
-    <h1>產線即時監看板 <button class="version-badge" id="version-badge">v23.1</button><button class="theme-toggle" id="theme-toggle" type="button" aria-label="切換深色／淺色" title="切換深色／淺色"><span class="tt-moon">🌙</span><span class="tt-sun">☀️</span></button><button class="help-btn" id="help-btn" type="button" aria-label="填寫說明" title="填寫說明" style="display:none">?</button></h1>
+    <h1>產線即時監看板 <button class="version-badge" id="version-badge">v23.3</button><button class="theme-toggle" id="theme-toggle" type="button" aria-label="切換深色／淺色" title="切換深色／淺色"><span class="tt-moon"><svg class="ico ico-moon" aria-hidden="true"><use href="#i-moon"/></svg></span><span class="tt-sun"><svg class="ico ico-sun" aria-hidden="true"><use href="#i-sun"/></svg></span></button><button class="help-btn" id="help-btn" type="button" aria-label="填寫說明" title="填寫說明" style="display:none">?</button></h1>
     <div class="topbar-right">
       <button class="export-btn" id="settings-btn">設定 API 網址</button>
       <button class="export-btn" id="admin-btn">管理者設定</button>
@@ -1251,8 +1269,8 @@ input, button, select, textarea{font-family:var(--font-ui);}
   </div>
 
   <div class="data-notice">
-    <p>⚠ 時間紀錄為人工選取之概略時間，非系統自動偵測之精確時間，僅供進度參考。</p>
-    <p>⚠ 箱數為機台實際作業箱數，已扣除「刷一貼一」作業箱數，與後台系統統計基準可能不同。</p>
+    <p><svg class="ico ico-warn" aria-hidden="true"><use href="#i-warn"/></svg>時間紀錄為人工選取之概略時間，非系統自動偵測之精確時間，僅供進度參考。</p>
+    <p><svg class="ico ico-warn" aria-hidden="true"><use href="#i-warn"/></svg>箱數為機台實際作業箱數，已扣除「刷一貼一」作業箱數，與後台系統統計基準可能不同。</p>
   </div>
 
   <div class="tab-content" id="tab-board">
@@ -1482,7 +1500,7 @@ input, button, select, textarea{font-family:var(--font-ui);}
       </div>
       <div class="date-tabs" id="viewer-date-tabs"></div>
       <div class="dash-controls" style="margin-bottom:10px;">
-        <button class="date-tab" id="viewer-range-toggle">📅 自訂日期區間</button>
+        <button class="date-tab" id="viewer-range-toggle"><svg class="ico ico-cal" aria-hidden="true"><use href="#i-cal"/></svg>自訂日期區間</button>
         <div class="dash-control-group" id="viewer-range-picker" style="display:none;">
           <select id="viewer-range-start-year" class="ymd-select ymd-year"></select>
           <select id="viewer-range-start-month" class="ymd-select ymd-month"></select>
@@ -2141,7 +2159,7 @@ function computeFootState(machineKey){
     r.doneHint = '箱數已做滿，可以按這個結案';
   } else if(forceDone[machineKey]){
     r.doneWarn = true;
-    r.doneHint = `⚠ 箱數還沒做滿（差 ${total - cur} 箱），已開啟強制完成，請確認是不是總箱數填錯了`;
+    r.doneHint = `${ico('warn')}箱數還沒做滿（差 ${total - cur} 箱），已開啟強制完成，請確認是不是總箱數填錯了`;
   } else {
     r.doneDisabled = true;
     r.doneWarn = true;
@@ -2240,10 +2258,10 @@ function render(){
       <div class="resume-hint${incompleteMatches.length ? ' show' : ''}${incompleteMatches.length > 1 ? ' multi' : ''}">
         ${incompleteMatches.length ? `<button class="resume-hint-close" data-hint-close="${m.key}" title="不再提示這個客戶" aria-label="關閉提示">✕</button>` : ''}
         ${incompleteMatches.length === 1 ? `
-        <span class="resume-hint-text">⚠ 偵測到「${escapeHtml(d.customer)}」${incompleteMatches[0].machine === m.key ? '在本機台' : `在${incompleteMatches[0].machine}`}有未完成的訂單（累計 ${incompleteMatches[0].currentBox} 箱），要接續${incompleteMatches[0].machine === m.key ? '' : `到${m.key}`}嗎？</span>
+        <span class="resume-hint-text">${ico('warn')}偵測到「${escapeHtml(d.customer)}」${incompleteMatches[0].machine === m.key ? '在本機台' : `在${incompleteMatches[0].machine}`}有未完成的訂單（累計 ${incompleteMatches[0].currentBox} 箱），要接續${incompleteMatches[0].machine === m.key ? '' : `到${m.key}`}嗎？</span>
         <button data-inline-resume="${escapeHtml(incompleteMatches[0].jobId)}" data-inline-resume-machine="${m.key}">接續此訂單</button>
         ` : incompleteMatches.length > 1 ? `
-        <span class="resume-hint-text">⚠ 偵測到「${escapeHtml(d.customer)}」有 ${incompleteMatches.length} 筆未完成的訂單，請選要接續哪一筆：</span>
+        <span class="resume-hint-text">${ico('warn')}偵測到「${escapeHtml(d.customer)}」有 ${incompleteMatches.length} 筆未完成的訂單，請選要接續哪一筆：</span>
         ${incompleteMatches.map(r => `
         <div class="resume-hint-row">
           <span class="resume-hint-text">${r.machine === m.key ? '本機台' : r.machine}・累計 ${r.currentBox} 箱・最後更新 ${escapeHtml(cleanDisplayTime(r.loggedAt))}</span>
@@ -2277,8 +2295,8 @@ function render(){
           <div class="gauge-crate" style="left:${pct}%">▣</div>
         </div>
         `}
-        ${(() => { const pn = previousProgressNote(m.key); return pn ? `<div class="prev-progress-note">↩ ${escapeHtml(pn)}</div>` : ''; })()}
-        ${isOverflow ? '<div class="qty-warning">⚠ 目前箱數已超過總箱數，請確認並修正！</div>' : ''}
+        ${(() => { const pn = previousProgressNote(m.key); return pn ? `<div class="prev-progress-note"><span class="prev-chip" aria-hidden="true"><svg viewBox="0 0 24 24" width="14" height="14"><path d="M9 7 4.5 11.5 9 16" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/><path d="M5 11.5h9a5 5 0 0 1 0 10h-2" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" transform="translate(0 -4)"/></svg></span><span>${escapeHtml(pn)}</span></div>` : ''; })()}
+        ${isOverflow ? '<div class="qty-warning">'+ico('warn')+'目前箱數已超過總箱數，請確認並修正！</div>' : ''}
       </div>
       <div class="times">
         <div class="field time-group" data-role="shared-date">
@@ -2305,7 +2323,7 @@ function render(){
           <span class="details-toggle-arrow">${detailsOpen ? '▾' : '▸'}</span>
           <span>${detailsOpen ? '收起明細' : '明細'}</span>
         </button>
-        ${!detailsOpen && hasRemark ? '<span class="details-badge">📌 有備註</span>' : ''}
+        ${!detailsOpen && hasRemark ? '<span class="details-badge">'+ico('pin')+'有備註</span>' : ''}
         ${!detailsOpen && crossDay ? '<span class="details-badge">跨日</span>' : ''}
       </div>
       ${detailsOpen ? `
@@ -2365,7 +2383,7 @@ function render(){
         if(match && !isRestrictionWarnDismissed(m.key, custInput.value)){
           custWarnEl.style.display = '';
           const machineLabel = match['機台'] === '全部' ? '任何機台' : match['機台'];
-          custWarnEl.innerHTML = `<span>⚠</span><span style="flex:1;">${escapeHtml(match['客戶關鍵字'])} 因為「${escapeHtml(match['事件']||'')}」不能在${escapeHtml(machineLabel)}運作，換一台機台或確認後再繼續</span><button type="button" class="cust-warn-close" title="不再提示這個客戶" aria-label="關閉警示">✕</button>`;
+          custWarnEl.innerHTML = `<span>${ico('warn')}</span><span style="flex:1;">${escapeHtml(match['客戶關鍵字'])} 因為「${escapeHtml(match['事件']||'')}」不能在${escapeHtml(machineLabel)}運作，換一台機台或確認後再繼續</span><button type="button" class="cust-warn-close" title="不再提示這個客戶" aria-label="關閉警示">✕</button>`;
           custWarnEl.querySelector('.cust-warn-close').addEventListener('click', () => {
             dismissRestrictionWarn(m.key, custInput.value);
             custWarnEl.style.display = 'none';
@@ -2767,6 +2785,8 @@ function formatEtaClock(mins){
   if(dayDiff === 1) return `明天 ${hm}`;
   return `${end.getMonth()+1}/${end.getDate()} ${hm}`;
 }
+
+function ico(n){ return `<svg class="ico ico-${n}" aria-hidden="true"><use href="#i-${n}"/></svg>`; }
 
 function renderRunningList(){
   const list = getRunningOrders();
@@ -3201,7 +3221,7 @@ async function loadState(){
     updateSuggestionLists();
     if(currentLogView){ renderViewer(currentLogView, false, true); }
     const beTag = json.backendVersion ? (' · 後端 ' + json.backendVersion) : ' · 後端版本未知（請確認 Apps Script 是否為最新版）';
-    const lockTag = (json.lockActive === false && !SIMPLE_MODE_MACHINE) ? ' · ⚠ 尚未啟用密碼保護' : '';
+    const lockTag = (json.lockActive === false && !SIMPLE_MODE_MACHINE) ? ' · 尚未啟用密碼保護' : '';
     hint.textContent = '已同步至試算表 · ' + fmtClock() + beTag + lockTag;
   }catch(err){
     // 身分驗證沒過：完整版 → 跳出管理者密碼輸入框；簡化版 → 顯示伺服器說明的原因（過期、作廢、尚未開放…）
@@ -3812,7 +3832,7 @@ function renderViewer(view, highlightLast, keepDateFilter){
   const remarkWrap = document.getElementById('viewer-remark-filter');
   if(cfg.remarkKey){
     const remarkCount = allData.filter(r => hasMeaningfulRemark(cfg, r)).length;
-    remarkWrap.innerHTML = `<button class="date-tab remark-filter-btn${remarkFilterOn?' active':''}" id="remark-filter-btn">📌 只看有備註 (${remarkCount})</button>`;
+    remarkWrap.innerHTML = `<button class="date-tab remark-filter-btn${remarkFilterOn?' active':''}" id="remark-filter-btn">${ico('pin')}只看有備註 (${remarkCount})</button>`;
     remarkWrap.style.display = '';
     document.getElementById('remark-filter-btn').addEventListener('click', () => {
       remarkFilterOn = !remarkFilterOn;
@@ -3846,7 +3866,7 @@ function renderViewer(view, highlightLast, keepDateFilter){
   const statsWrap = document.getElementById('viewer-stats');
   if(cfg.statKey && filtered.length){
     const total = filtered.reduce((sum, r) => sum + (parseFloat(r[cfg.statKey]) || 0), 0);
-    const dupWarnHtml = dupRowKeys.size ? `<span class="stats-dup-warn">⚠ 疑似重複 ${dupRowKeys.size} 筆</span>` : '';
+    const dupWarnHtml = dupRowKeys.size ? `<span class="stats-dup-warn">${ico('warn')}疑似重複 ${dupRowKeys.size} 筆</span>` : '';
     statsWrap.innerHTML = `<span class="stats-muted">僅畫面統計・不會匯出</span><span>筆數 <b>${filtered.length}</b></span><span>${cfg.statLabel} <b class="stats-accent">${total}</b></span>${dupWarnHtml}`;
     statsWrap.classList.add('show');
   } else {
@@ -3864,8 +3884,8 @@ function renderViewer(view, highlightLast, keepDateFilter){
       const isDup = dupRowKeys.has(r._row);
       const cells = cfg.keys.map((k, ci) => {
         const val = escapeHtml(cleanDisplayTime(displayValue(view, r, k)));
-        const remarkIcon = (hasRemark && ci === 0) ? '<span class="remark-icon">📌</span>' : '';
-        const dupIcon = (isDup && ci === 0) ? '<span class="dup-icon" title="疑似重複紀錄：機台/客戶/箱數/時間都跟另一筆完全相同">⚠</span>' : '';
+        const remarkIcon = (hasRemark && ci === 0) ? '<span class="remark-icon">'+ico('pin')+'</span>' : '';
+        const dupIcon = (isDup && ci === 0) ? '<span class="dup-icon" title="疑似重複紀錄：機台/客戶/箱數/時間都跟另一筆完全相同">'+ico('warn')+'</span>' : '';
         return `<td>${dupIcon}${remarkIcon}${val}</td>`;
       }).join('');
       const rowCls = [isNew ? 'new-row' : '', hasRemark ? 'remark-row' : '', isDup ? 'dup-row' : ''].filter(Boolean).join(' ');
@@ -4311,6 +4331,8 @@ document.getElementById('notes-panel').addEventListener('click', (e) => {
 
 // ---------- 版本紀錄 ----------
 const VERSION_LOG = [
+  {v:'v23.3', date:'2026/11/06', d:'畫面上的 emoji 符號（⚠、📌、📅、🌙、☀️）全部換成貼紙風圖示（粗框、淡黃／珊瑚色），各種手機和電腦看起來一致，深淺色主題都適用。純前端修改'},
+  {v:'v23.2', date:'2026/11/06', d:'簡化版「這張訂單 X/Y 已做到 N 箱，今天是接續做」提示前面的 emoji 符號，改成貼紙風的小圖章（粗框＋實心陰影的淡藍色箭頭），各種手機看起來一致。純前端修改'},
   {v:'v23.1', date:'2026/11/04', d:'修正停在「作業小記」頁時，資料重新讀取後會閃退、跳回其他紀錄頁（並顯示「讀取失敗」）的問題，現在會留在作業小記頁。純前端修改'},
   {v:'v23.0', date:'2026/11/04', d:'「紀錄」分頁新增「作業小記」（Q&A）：把平常的作業小記錄整理成問答，可用關鍵字搜尋、依分類篩選、點開看說明，並可直接在網頁上新增、修改、刪除（內容裡用 **文字** 可加粗標重點）。只有完整版／管理者看得到，簡化版不會拿到這些資料。第一次會自動建立試算表分頁 WorkNotes，並放入 11 則預設內容。後端 .gs 有異動（gs-2026-11-04-v21），需要先重新部署 .gs，再上傳網頁'},
   {v:'v22.9', date:'2026/11/04', d:'手機上總覽列的「今日異常（每百箱 0.00）」不再換成兩行。純前端修改'},
@@ -4690,7 +4712,7 @@ function updateAdminLockStatus(){
     el.textContent = '✓ 密碼保護已啟用：沒有管理者密碼、也沒有有效通行鑰匙的人，無法讀寫任何資料。';
   } else if(LOCK_ACTIVE === false){
     el.className = 'admin-lock-status warn';
-    el.textContent = '⚠ 尚未設定管理者密碼：目前任何人都能直接讀寫，通行鑰匙也還不會生效。請先到 Apps Script 的「指令碼屬性」新增 ADMIN_PASSWORD，鎖才會啟用。';
+    el.innerHTML = ico('warn') + '尚未設定管理者密碼：目前任何人都能直接讀寫，通行鑰匙也還不會生效。請先到 Apps Script 的「指令碼屬性」新增 ADMIN_PASSWORD，鎖才會啟用。';
   } else {
     el.className = 'admin-lock-status';
     el.textContent = '尚未取得後端狀態（可能還沒連上，或需要先輸入密碼）。';
@@ -4982,7 +5004,7 @@ function renderConStock(){
   const lows = stat.filter(x => x.st.low);
   if(lows.length){
     banner.className = 'con-banner bad';
-    banner.innerHTML = `⚠ 有 <b>${lows.length}</b> 項低於安全庫存，建議叫貨：${lows.map(x => escapeHtml(conLabel(x.it))).join('、')}`;
+    banner.innerHTML = `${ico('warn')}有 <b>${lows.length}</b> 項低於安全庫存，建議叫貨：${lows.map(x => escapeHtml(conLabel(x.it))).join('、')}`;
   } else {
     banner.className = 'con-banner ok';
     banner.textContent = '目前沒有需要叫貨的品項。';
@@ -6708,7 +6730,7 @@ function renderDashboard(){
   const gapNoteEl = document.getElementById('dash-uptime-trend-note');
   if(gapEntries.length){
     gapNoteEl.style.display = '';
-    gapNoteEl.textContent = '⚠ ' + gapEntries.map(([m,dates]) => `${m}在 ${dates.join('、')} 沒有紀錄`).join('；') + '。如果當天機台確實停機，建議到該機台卡片按「標記今日無作業」補一筆紀錄，稼動率才會正確顯示為 0%，而不是被當成沒有資料、圖表出現斷線。';
+    gapNoteEl.innerHTML = ico('warn') + escapeHtml(gapEntries.map(([m,dates]) => `${m}在 ${dates.join('、')} 沒有紀錄`).join('；') + '。如果當天機台確實停機，建議到該機台卡片按「標記今日無作業」補一筆紀錄，稼動率才會正確顯示為 0%，而不是被當成沒有資料、圖表出現斷線。');
   } else {
     gapNoteEl.style.display = 'none';
     gapNoteEl.textContent = '';
@@ -6745,7 +6767,7 @@ function renderDashboard(){
     abnStats.ranked.map((p,i) => `<tr><td>${i+1}</td><td>${p.machine}</td><td>${p.byType['單捲標貼歪']}</td><td>${p.byType['料盤載台推擠']}</td><td>${p.byType['料盤毀損']}</td><td>${p.byType['分料盤落料傾斜']}</td><td>${p.scanCount}</td><td>${p.total}</td><td><span class="level ${p.levelCls}">${p.level}</span></td></tr>`).join('') +
     `</table>`;
 
-  document.getElementById('dash-abn-insight').innerHTML = '⚠ 觀察重點：<br>' + buildAbnormalInsight(abnStats);
+  document.getElementById('dash-abn-insight').innerHTML = ico('warn') + '觀察重點：<br>' + buildAbnormalInsight(abnStats);
 }
 
 function renderDashMachineTabs(){
@@ -6845,7 +6867,7 @@ function buildDashReportHtmlInner(){
   const insightHtml = buildAbnormalInsight(abnStats);
   const uptimeGapEntries = Object.entries(findUptimeGaps(uptimeTrend));
   const gapNoteHtml = uptimeGapEntries.length
-    ? `<p class="note">⚠ ${uptimeGapEntries.map(([m,dates]) => `${m}在 ${dates.join('、')} 沒有紀錄`).join('；')}。如果當天機台確實停機，建議補一筆「無作業」紀錄，稼動率才會正確顯示為 0%。</p>`
+    ? `<p class="note">${ico('warn')}${uptimeGapEntries.map(([m,dates]) => `${m}在 ${dates.join('、')} 沒有紀錄`).join('；')}。如果當天機台確實停機，建議補一筆「無作業」紀錄，稼動率才會正確顯示為 0%。</p>`
     : '';
 
   // Word 對一般 <div> 的分頁控制常常不理會，改用「單一儲存格的表格」包每個區塊，
@@ -6904,7 +6926,7 @@ function buildDashReportHtmlInner(){
 
     ${block('異常次數排行', `
       <table class="data-table"><tr><th>排名</th><th>機台</th><th>單捲標貼歪</th><th>料盤載台推擠</th><th>料盤毀損</th><th>分料盤落料傾斜</th><th>掃碼異常</th><th>合計</th><th>等級</th></tr>${rankRows}</table>
-      <div class="insight">⚠ 觀察重點：<br>${insightHtml}</div>
+      <div class="insight">${ico('warn')}觀察重點：<br>${insightHtml}</div>
     `)}
   </body></html>`;
 }
