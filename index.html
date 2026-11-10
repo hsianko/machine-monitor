@@ -1221,7 +1221,7 @@ input, button, select, textarea{font-family:var(--font-ui);}
 
 <div class="wrap">
   <div class="topbar">
-    <h1>產線即時監看板 <button class="version-badge" id="version-badge">v23.5</button><button class="theme-toggle" id="theme-toggle" type="button" aria-label="切換深色／淺色" title="切換深色／淺色"><span class="tt-moon"><svg class="ico ico-moon" aria-hidden="true"><use href="#i-moon"/></svg></span><span class="tt-sun"><svg class="ico ico-sun" aria-hidden="true"><use href="#i-sun"/></svg></span></button><button class="help-btn" id="help-btn" type="button" aria-label="填寫說明" title="填寫說明" style="display:none">?</button></h1>
+    <h1>產線即時監看板 <button class="version-badge" id="version-badge">v23.6</button><button class="theme-toggle" id="theme-toggle" type="button" aria-label="切換深色／淺色" title="切換深色／淺色"><span class="tt-moon"><svg class="ico ico-moon" aria-hidden="true"><use href="#i-moon"/></svg></span><span class="tt-sun"><svg class="ico ico-sun" aria-hidden="true"><use href="#i-sun"/></svg></span></button><button class="help-btn" id="help-btn" type="button" aria-label="填寫說明" title="填寫說明" style="display:none">?</button></h1>
     <div class="topbar-right">
       <button class="export-btn" id="settings-btn">設定 API 網址</button>
       <button class="export-btn" id="admin-btn">管理者設定</button>
@@ -1414,10 +1414,10 @@ input, button, select, textarea{font-family:var(--font-ui);}
           </div>
           <div class="field">
             <label>狀態</label>
-            <select id="res-status"><option value="不能跑">不能跑</option><option value="已可上機">已可上機（全機台）</option></select>
+            <select id="res-status"><option value="不能跑">不能跑</option><option value="已可上機">已可上機</option></select>
           </div>
           <div class="field" id="res-machine-field">
-            <label>不能跑的機台</label>
+            <label id="res-machine-label">不能跑的機台</label>
             <select id="res-machine"></select>
           </div>
           <button class="log-submit" id="res-submit">新增限制</button>
@@ -1874,13 +1874,15 @@ function isRestrictionLifted(r){ return String(r['狀態']||'').trim() === '已�
 function checkCustomerRestriction(machine, customerName){
   const name = String(customerName||'').trim();
   if(!name) return null;
-  return restrictionsLog.find(r => {
-    if(isRestrictionLifted(r)) return false;   // 「已可上機」的不再警告
+  const covers = r => {
     const kw = String(r['客戶關鍵字']||'').trim();
     if(!kw || !name.includes(kw)) return false;
     const rm = r['機台'];
     return rm === machine || rm === '全部';
-  }) || null;
+  };
+  // 「已可上機」的機台（全部或指定機台）不再警告，且會蓋過同客戶在這台機台上的「不能跑」
+  if(restrictionsLog.some(r => isRestrictionLifted(r) && covers(r))) return null;
+  return restrictionsLog.find(r => !isRestrictionLifted(r) && covers(r)) || null;
 }
 
 // 支援紀錄的「工作事項」「支援人員」下拉選單，選項是從 SupportConfig 分頁動態讀出來的
@@ -4344,6 +4346,7 @@ document.getElementById('notes-panel').addEventListener('click', (e) => {
 
 // ---------- 版本紀錄 ----------
 const VERSION_LOG = [
+  {v:'v23.6', date:'2026/11/10', d:'「已可上機」可以指定機台：選「全部」代表四台都可上，選單一機台就只有那台可上，其他機台仍會警告。已可上機的機台會蓋過同一客戶在該機台上的「不能跑」。後端不需要更新'},
   {v:'v23.5', date:'2026/11/10', d:'不能跑名單新增「狀態」：同一份名單裡可標示「不能跑」或「已可上機（全機台）」。不能跑的排在前面（紅色標籤），已可上機的排在後面、淡化（綠色標籤）；只有「不能跑」才會在卡片上跳出警告，已可上機的不再誤報，原因與紀錄仍保留。舊資料沒有狀態的視為「不能跑」。後端 .gs 有異動（gs-2026-11-10-v22，會自動補上「狀態」欄），需要先重新部署 .gs，再上傳網頁'},
   {v:'v23.4', date:'2026/11/06', d:'「接續做」提示的小箭頭圖章重畫，箭頭與迴轉線對齊、整體置中。純前端修改'},
   {v:'v23.3', date:'2026/11/06', d:'畫面上的 emoji 符號（⚠、📌、📅、🌙、☀️）全部換成貼紙風圖示（粗框、淡黃／珊瑚色），各種手機和電腦看起來一致，深淺色主題都適用。純前端修改'},
@@ -6029,8 +6032,7 @@ function initRestrictionForm(){
   const stSel = document.getElementById('res-status');
   const syncStatus = () => {
     const lifted = stSel.value === '已可上機';
-    sel.value = lifted ? '全部' : (sel.value === '全部' && !lifted ? '' : sel.value);
-    document.getElementById('res-machine-field').style.display = lifted ? 'none' : '';
+    document.getElementById('res-machine-label').textContent = lifted ? '已可上機的機台（可選全部）' : '不能跑的機台';
   };
   stSel.addEventListener('change', syncStatus);
   document.getElementById('res-submit').addEventListener('click', submitRestriction);
@@ -6105,7 +6107,7 @@ async function saveRestrictionEdit(rowNum, btn){
   btn.textContent = '儲存中…';
   showSaveBusy('正在儲存，請稍候，不要重複按。');
   try{
-    await apiPost({action:'updateRow', sheet:'MachineRestrictions', row: rowNum, data:{'客戶關鍵字':customer, '事件':event, '機台':status === '已可上機' ? '全部' : machine, '狀態':status}});
+    await apiPost({action:'updateRow', sheet:'MachineRestrictions', row: rowNum, data:{'客戶關鍵字':customer, '事件':event, '機台':machine, '狀態':status}});
     editingRestrictionRow = null;
     await loadState();
     renderRestrictionList();
@@ -6125,7 +6127,7 @@ async function submitRestriction(){
   const customer = document.getElementById('res-customer').value.trim();
   const event = document.getElementById('res-event').value.trim();
   const status = document.getElementById('res-status').value;
-  const machine = status === '已可上機' ? '全部' : document.getElementById('res-machine').value;
+  const machine = document.getElementById('res-machine').value;
   const hint = document.getElementById('res-hint');
   if(!customer || !machine){
     hint.textContent = '請至少填寫客戶關鍵字、選好機台再新增。';
@@ -6145,7 +6147,7 @@ async function submitRestriction(){
     document.getElementById('res-event').value = '';
     document.getElementById('res-machine').value = '';
     document.getElementById('res-status').value = '不能跑';
-    document.getElementById('res-machine-field').style.display = '';
+    document.getElementById('res-machine-label').textContent = '不能跑的機台';
     hint.textContent = '已新增 · ' + fmtClock();
     render(); // 卡片上的即時提醒要立刻反映最新名單
     showSaveSuccess(status === '已可上機' ? '已新增到名單（已可上機）。' : '已新增到不能跑名單。');
