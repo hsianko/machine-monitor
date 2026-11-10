@@ -1172,6 +1172,13 @@ input, button, select, textarea{font-family:var(--font-ui);}
 .date-tab .ico{width:1.25em; height:1.25em;}
 .qty-warning .ico,.resume-hint-text .ico{vertical-align:-0.25em;}
 
+/* --- 不能跑名單：同一份名單裡用標籤區分狀態 --- */
+.res-tag{flex-shrink:0; font-size:11px; font-weight:700; border:2px solid var(--ink); border-radius:999px; padding:0 8px; color:#3E3A39; white-space:nowrap;}
+.res-tag.no{background:#F2A497;}
+.res-tag.ok{background:#B9DAA5;}
+.restriction-row.lifted .rcust,.restriction-row.lifted .revent,.restriction-row.lifted .rmachine{opacity:.6; font-weight:500;}
+.restriction-row .redit-status{flex-shrink:0; width:92px;}
+
 /* --- 簡化版「填寫說明」 --- */
 .help-btn{width:34px; height:34px; border-radius:50%; border:2px solid var(--ink); background:#F6D27A; color:#3E3A39; font-weight:700; font-size:18px; box-shadow:2px 2px 0 var(--ink-shadow); cursor:pointer; flex-shrink:0; padding:0; line-height:1;}
 .help-btn:active{transform:translate(1px,1px); box-shadow:1px 1px 0 var(--ink-shadow);}
@@ -1214,7 +1221,7 @@ input, button, select, textarea{font-family:var(--font-ui);}
 
 <div class="wrap">
   <div class="topbar">
-    <h1>產線即時監看板 <button class="version-badge" id="version-badge">v23.4</button><button class="theme-toggle" id="theme-toggle" type="button" aria-label="切換深色／淺色" title="切換深色／淺色"><span class="tt-moon"><svg class="ico ico-moon" aria-hidden="true"><use href="#i-moon"/></svg></span><span class="tt-sun"><svg class="ico ico-sun" aria-hidden="true"><use href="#i-sun"/></svg></span></button><button class="help-btn" id="help-btn" type="button" aria-label="填寫說明" title="填寫說明" style="display:none">?</button></h1>
+    <h1>產線即時監看板 <button class="version-badge" id="version-badge">v23.5</button><button class="theme-toggle" id="theme-toggle" type="button" aria-label="切換深色／淺色" title="切換深色／淺色"><span class="tt-moon"><svg class="ico ico-moon" aria-hidden="true"><use href="#i-moon"/></svg></span><span class="tt-sun"><svg class="ico ico-sun" aria-hidden="true"><use href="#i-sun"/></svg></span></button><button class="help-btn" id="help-btn" type="button" aria-label="填寫說明" title="填寫說明" style="display:none">?</button></h1>
     <div class="topbar-right">
       <button class="export-btn" id="settings-btn">設定 API 網址</button>
       <button class="export-btn" id="admin-btn">管理者設定</button>
@@ -1406,6 +1413,10 @@ input, button, select, textarea{font-family:var(--font-ui);}
             <input type="text" id="res-event" placeholder="輸入事件或原因">
           </div>
           <div class="field">
+            <label>狀態</label>
+            <select id="res-status"><option value="不能跑">不能跑</option><option value="已可上機">已可上機（全機台）</option></select>
+          </div>
+          <div class="field" id="res-machine-field">
             <label>不能跑的機台</label>
             <select id="res-machine"></select>
           </div>
@@ -1859,10 +1870,12 @@ let consumableFields = [];
 
 // 判斷這個客戶名稱，在這台機台上，有沒有符合「不能跑名單」裡的限制——
 // 只要客戶名稱裡「包含」名單上的關鍵字就算符合（不用完全一樣），機台要對得上，或名單寫「全部」代表四台都算。
+function isRestrictionLifted(r){ return String(r['狀態']||'').trim() === '已可上機'; }
 function checkCustomerRestriction(machine, customerName){
   const name = String(customerName||'').trim();
   if(!name) return null;
   return restrictionsLog.find(r => {
+    if(isRestrictionLifted(r)) return false;   // 「已可上機」的不再警告
     const kw = String(r['客戶關鍵字']||'').trim();
     if(!kw || !name.includes(kw)) return false;
     const rm = r['機台'];
@@ -4331,6 +4344,7 @@ document.getElementById('notes-panel').addEventListener('click', (e) => {
 
 // ---------- 版本紀錄 ----------
 const VERSION_LOG = [
+  {v:'v23.5', date:'2026/11/10', d:'不能跑名單新增「狀態」：同一份名單裡可標示「不能跑」或「已可上機（全機台）」。不能跑的排在前面（紅色標籤），已可上機的排在後面、淡化（綠色標籤）；只有「不能跑」才會在卡片上跳出警告，已可上機的不再誤報，原因與紀錄仍保留。舊資料沒有狀態的視為「不能跑」。後端 .gs 有異動（gs-2026-11-10-v22，會自動補上「狀態」欄），需要先重新部署 .gs，再上傳網頁'},
   {v:'v23.4', date:'2026/11/06', d:'「接續做」提示的小箭頭圖章重畫，箭頭與迴轉線對齊、整體置中。純前端修改'},
   {v:'v23.3', date:'2026/11/06', d:'畫面上的 emoji 符號（⚠、📌、📅、🌙、☀️）全部換成貼紙風圖示（粗框、淡黃／珊瑚色），各種手機和電腦看起來一致，深淺色主題都適用。純前端修改'},
   {v:'v23.2', date:'2026/11/06', d:'簡化版「這張訂單 X/Y 已做到 N 箱，今天是接續做」提示前面的 emoji 符號，改成貼紙風的小圖章（粗框＋實心陰影的淡藍色箭頭），各種手機看起來一致。純前端修改'},
@@ -6012,6 +6026,13 @@ initSupportForm();
 function initRestrictionForm(){
   const sel = document.getElementById('res-machine');
   sel.innerHTML = '<option value="">請選擇</option><option value="全部">全部</option>' + MACHINE_OPTS.map(mk => `<option value="${mk}">${mk}</option>`).join('');
+  const stSel = document.getElementById('res-status');
+  const syncStatus = () => {
+    const lifted = stSel.value === '已可上機';
+    sel.value = lifted ? '全部' : (sel.value === '全部' && !lifted ? '' : sel.value);
+    document.getElementById('res-machine-field').style.display = lifted ? 'none' : '';
+  };
+  stSel.addEventListener('change', syncStatus);
   document.getElementById('res-submit').addEventListener('click', submitRestriction);
   document.getElementById('res-export-btn').addEventListener('click', exportRestrictionsCsv);
 }
@@ -6022,12 +6043,16 @@ function renderRestrictionList(){
   const wrap = document.getElementById('restriction-list');
   const countEl = document.getElementById('restriction-count');
   if(!wrap) return;
-  if(countEl) countEl.textContent = restrictionsLog.length ? `共 ${restrictionsLog.length} 筆（可以在框內滑動瀏覽）` : '';
+  const liftedN = restrictionsLog.filter(isRestrictionLifted).length;
+  if(countEl) countEl.textContent = restrictionsLog.length ? `不能跑 ${restrictionsLog.length - liftedN} 筆・已可上機 ${liftedN} 筆（可以在框內滑動瀏覽）` : '';
   if(!restrictionsLog.length){
     wrap.innerHTML = '<div class="viewer-empty">目前還沒有任何限制項目。</div>';
     return;
   }
-  wrap.innerHTML = restrictionsLog.map(r => {
+  // 同一份名單：「不能跑」排前面，「已可上機」排後面並淡化；各自維持原本順序
+  const sorted = restrictionsLog.filter(r => !isRestrictionLifted(r)).concat(restrictionsLog.filter(isRestrictionLifted));
+  wrap.innerHTML = sorted.map(r => {
+    const lifted = isRestrictionLifted(r);
     if(editingRestrictionRow === r._row){
       const machineOpts = ['全部', ...MACHINE_OPTS].map(mk =>
         `<option value="${mk}"${mk===r['機台']?' selected':''}>${mk}</option>`).join('');
@@ -6035,13 +6060,15 @@ function renderRestrictionList(){
       <div class="restriction-row">
         <input type="text" class="redit-cust" value="${escapeHtml(r['客戶關鍵字']||'')}" placeholder="客戶關鍵字">
         <input type="text" class="redit-event" value="${escapeHtml(r['事件']||'')}" placeholder="事件／原因">
+        <select class="redit-status"><option value="不能跑"${lifted?'':' selected'}>不能跑</option><option value="已可上機"${lifted?' selected':''}>已可上機</option></select>
         <select class="redit-machine">${machineOpts}</select>
         <button class="rdel" data-save-row="${r._row}">儲存</button>
         <button class="rdel" data-cancel-row="${r._row}">取消</button>
       </div>`;
     }
     return `
-    <div class="restriction-row">
+    <div class="restriction-row${lifted?' lifted':''}">
+      <span class="res-tag ${lifted?'ok':'no'}">${lifted?'已可上機':'不能跑'}</span>
       <span class="rcust">${escapeHtml(r['客戶關鍵字']||'')}</span>
       <span class="revent">${escapeHtml(r['事件']||'')}</span>
       <span class="rmachine">${escapeHtml(r['機台']||'')}</span>
@@ -6068,6 +6095,7 @@ async function saveRestrictionEdit(rowNum, btn){
   const customer = rowEl.querySelector('.redit-cust').value.trim();
   const event = rowEl.querySelector('.redit-event').value.trim();
   const machine = rowEl.querySelector('.redit-machine').value;
+  const status = rowEl.querySelector('.redit-status').value;
   if(!customer || !machine){
     alert('客戶關鍵字、機台不能空白。');
     return;
@@ -6077,7 +6105,7 @@ async function saveRestrictionEdit(rowNum, btn){
   btn.textContent = '儲存中…';
   showSaveBusy('正在儲存，請稍候，不要重複按。');
   try{
-    await apiPost({action:'updateRow', sheet:'MachineRestrictions', row: rowNum, data:{'客戶關鍵字':customer, '事件':event, '機台':machine}});
+    await apiPost({action:'updateRow', sheet:'MachineRestrictions', row: rowNum, data:{'客戶關鍵字':customer, '事件':event, '機台':status === '已可上機' ? '全部' : machine, '狀態':status}});
     editingRestrictionRow = null;
     await loadState();
     renderRestrictionList();
@@ -6096,7 +6124,8 @@ async function submitRestriction(){
   if(submitRestrictionBusy) return;
   const customer = document.getElementById('res-customer').value.trim();
   const event = document.getElementById('res-event').value.trim();
-  const machine = document.getElementById('res-machine').value;
+  const status = document.getElementById('res-status').value;
+  const machine = status === '已可上機' ? '全部' : document.getElementById('res-machine').value;
   const hint = document.getElementById('res-hint');
   if(!customer || !machine){
     hint.textContent = '請至少填寫客戶關鍵字、選好機台再新增。';
@@ -6109,15 +6138,17 @@ async function submitRestriction(){
   btn.textContent = '儲存中…';
   showSaveBusy('正在儲存，請稍候，不要重複按。');
   try{
-    await apiPost({action:'appendRestriction', data:{'客戶關鍵字':customer, '事件':event, '機台':machine}});
+    await apiPost({action:'appendRestriction', data:{'客戶關鍵字':customer, '事件':event, '機台':machine, '狀態':status}});
     await loadState();
     renderRestrictionList();
     document.getElementById('res-customer').value = '';
     document.getElementById('res-event').value = '';
     document.getElementById('res-machine').value = '';
+    document.getElementById('res-status').value = '不能跑';
+    document.getElementById('res-machine-field').style.display = '';
     hint.textContent = '已新增 · ' + fmtClock();
     render(); // 卡片上的即時提醒要立刻反映最新名單
-    showSaveSuccess('已新增到不能跑名單。');
+    showSaveSuccess(status === '已可上機' ? '已新增到名單（已可上機）。' : '已新增到不能跑名單。');
   }catch(err){
     hideSaveOverlay();
     hint.textContent = '新增失敗：' + err.message;
@@ -6147,10 +6178,10 @@ async function deleteRestriction(rowNum){
 function exportRestrictionsCsv(){
   if(!restrictionsLog.length){ alert('目前還沒有任何限制項目可以匯出。'); return; }
   let csv = '\uFEFF不能跑名單\r\n';
-  const headers = ['客戶關鍵字','事件','機台'];
+  const headers = ['客戶關鍵字','事件','機台','狀態'];
   csv += headers.map(csvEscape).join(',') + '\r\n';
   restrictionsLog.forEach(r => {
-    csv += headers.map(h => csvEscape(r[h]||'')).join(',') + '\r\n';
+    csv += headers.map(h => csvEscape(h === '狀態' ? (r[h] || '不能跑') : (r[h]||''))).join(',') + '\r\n';
   });
   const blob = new Blob([csv], {type:'text/csv;charset=utf-8;'});
   const url = URL.createObjectURL(blob);
