@@ -1221,7 +1221,7 @@ input, button, select, textarea{font-family:var(--font-ui);}
 
 <div class="wrap">
   <div class="topbar">
-    <h1>產線即時監看板 <button class="version-badge" id="version-badge">v23.6</button><button class="theme-toggle" id="theme-toggle" type="button" aria-label="切換深色／淺色" title="切換深色／淺色"><span class="tt-moon"><svg class="ico ico-moon" aria-hidden="true"><use href="#i-moon"/></svg></span><span class="tt-sun"><svg class="ico ico-sun" aria-hidden="true"><use href="#i-sun"/></svg></span></button><button class="help-btn" id="help-btn" type="button" aria-label="填寫說明" title="填寫說明" style="display:none">?</button></h1>
+    <h1>產線即時監看板 <button class="version-badge" id="version-badge">v23.7</button><button class="theme-toggle" id="theme-toggle" type="button" aria-label="切換深色／淺色" title="切換深色／淺色"><span class="tt-moon"><svg class="ico ico-moon" aria-hidden="true"><use href="#i-moon"/></svg></span><span class="tt-sun"><svg class="ico ico-sun" aria-hidden="true"><use href="#i-sun"/></svg></span></button><button class="help-btn" id="help-btn" type="button" aria-label="填寫說明" title="填寫說明" style="display:none">?</button></h1>
     <div class="topbar-right">
       <button class="export-btn" id="settings-btn">設定 API 網址</button>
       <button class="export-btn" id="admin-btn">管理者設定</button>
@@ -4346,6 +4346,7 @@ document.getElementById('notes-panel').addEventListener('click', (e) => {
 
 // ---------- 版本紀錄 ----------
 const VERSION_LOG = [
+  {v:'v23.7', date:'2026/11/17', d:'耗材「狀態」：就算庫存高於或剛好達到安全庫存，只要近 14 天內有叫貨、還沒標「已到貨」，也會顯示「已叫貨 M/D・等到貨」；叫貨日超過 14 天前的，仍只顯示「正常」。後端不需要更新'},
   {v:'v23.6', date:'2026/11/10', d:'「已可上機」可以指定機台：選「全部」代表四台都可上，選單一機台就只有那台可上，其他機台仍會警告。已可上機的機台會蓋過同一客戶在該機台上的「不能跑」。後端不需要更新'},
   {v:'v23.5', date:'2026/11/10', d:'不能跑名單新增「狀態」：同一份名單裡可標示「不能跑」或「已可上機（全機台）」。不能跑的排在前面（紅色標籤），已可上機的排在後面、淡化（綠色標籤）；只有「不能跑」才會在卡片上跳出警告，已可上機的不再誤報，原因與紀錄仍保留。舊資料沒有狀態的視為「不能跑」。後端 .gs 有異動（gs-2026-11-10-v22，會自動補上「狀態」欄），需要先重新部署 .gs，再上傳網頁'},
   {v:'v23.4', date:'2026/11/06', d:'「接續做」提示的小箭頭圖章重畫，箭頭與迴轉線對齊、整體置中。純前端修改'},
@@ -4984,7 +4985,20 @@ function conStatus(it){
     }
     return {cls:'bad', label:`建議叫貨（缺 ${Math.round((safety - latest.qty)*100)/100}）`, low:true, latest};
   }
+  // 庫存正常，但近期（14 天內）有叫貨、還沒到貨 → 一樣顯示「已叫貨・等到貨」；叫貨日太久以前的不顯示
+  if(conPending(it) && conRecentOrder(it)){
+    return {cls:'warn', label:`已叫貨 ${conFmtMD(it['上次叫貨日'])}・等到貨`, low:false, ordered:true, latest};
+  }
   return {cls:'ok', label:'正常', low:false, latest};
+}
+const CON_RECENT_DAYS = 14;
+function conRecentOrder(it){
+  const o = conYMD(it['上次叫貨日']);
+  if(!o) return false;
+  const [y,m,d] = o.split('-').map(Number);
+  const t = new Date(); const today = new Date(t.getFullYear(), t.getMonth(), t.getDate());
+  const diff = Math.round((today - new Date(y, m-1, d)) / 86400000);
+  return diff <= CON_RECENT_DAYS;   // 未來日期（預先登記）也算
 }
 
 function conExtraCells(target, getVal){
