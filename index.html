@@ -1243,7 +1243,7 @@ input, button, select, textarea{font-family:var(--font-ui);}
 
 <div class="wrap">
   <div class="topbar">
-    <h1>產線即時監看板 <button class="version-badge" id="version-badge">v23.8</button><button class="theme-toggle" id="theme-toggle" type="button" aria-label="切換深色／淺色" title="切換深色／淺色"><span class="tt-moon"><svg class="ico ico-moon" aria-hidden="true"><use href="#i-moon"/></svg></span><span class="tt-sun"><svg class="ico ico-sun" aria-hidden="true"><use href="#i-sun"/></svg></span></button><button class="help-btn" id="help-btn" type="button" aria-label="填寫說明" title="填寫說明" style="display:none">?</button></h1>
+    <h1>產線即時監看板 <button class="version-badge" id="version-badge">v23.9</button><button class="theme-toggle" id="theme-toggle" type="button" aria-label="切換深色／淺色" title="切換深色／淺色"><span class="tt-moon"><svg class="ico ico-moon" aria-hidden="true"><use href="#i-moon"/></svg></span><span class="tt-sun"><svg class="ico ico-sun" aria-hidden="true"><use href="#i-sun"/></svg></span></button><button class="help-btn" id="help-btn" type="button" aria-label="填寫說明" title="填寫說明" style="display:none">?</button></h1>
     <div class="topbar-right">
       <button class="export-btn" id="settings-btn">設定 API 網址</button>
       <button class="export-btn" id="admin-btn">管理者設定</button>
@@ -4449,6 +4449,7 @@ document.getElementById('notes-panel').addEventListener('click', (e) => {
 
 // ---------- 版本紀錄 ----------
 const VERSION_LOG = [
+  {v:'v23.9', date:'2026/11/18', d:'客戶標籤尺寸：新增欄位改成兩個一行（名稱與代碼、單捲與內盒、外箱與嘜頭），按鈕獨佔一行；明細改成固定高度、框內滑動，表頭固定。後端不需要更新'},
   {v:'v23.8', date:'2026/11/17', d:'新增「客戶標籤尺寸」（完整版）：在「異常」分頁的不能跑名單下方，可以自己新增、修改、刪除各客戶的單捲／內盒／外箱／嘜頭標籤尺寸（已先放入 41 個客戶）。卡片輸入客戶名稱或客戶代碼時，會在客戶名稱下方顯示尺寸，不分英文大小寫，括號可省略（輸入 ALPHA 或 明泰越南 都找得到）；多個客戶符合時會列出「也符合」；看過可按 ✕ 關閉。簡化版暫時不顯示。後端 .gs 有異動（gs-2026-11-17-v23，會自動建立 CustomerLabels 分頁），需要先重新部署 .gs，再上傳網頁'},
   {v:'v23.7', date:'2026/11/17', d:'耗材「狀態」：就算庫存高於或剛好達到安全庫存，只要近 14 天內有叫貨、還沒標「已到貨」，也會顯示「已叫貨 M/D・等到貨」；叫貨日超過 14 天前的，仍只顯示「正常」。後端不需要更新'},
   {v:'v23.6', date:'2026/11/10', d:'「已可上機」可以指定機台：選「全部」代表四台都可上，選單一機台就只有那台可上，其他機台仍會警告。已可上機的機台會蓋過同一客戶在該機台上的「不能跑」。後端不需要更新'},
