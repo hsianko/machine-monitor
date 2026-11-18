@@ -842,6 +842,23 @@
     color:var(--m-sanbao); font-size:11.5px; line-height:1.5;
   }
 
+  .size-chip{margin-top:8px; border:2px solid var(--ink); border-radius:12px; background:rgba(var(--amber-rgb),.2); padding:7px 9px; font-size:12.5px; color:var(--text-primary);}
+  .size-chip .sc-head{display:flex; align-items:center; gap:6px; margin-bottom:6px;}
+  .size-chip .sc-title{font-weight:700; white-space:nowrap;}
+  .size-chip .sc-who{flex:1; min-width:0; text-align:right; color:var(--text-secondary); font-size:11.5px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+  .size-chip .sc-close{flex-shrink:0; border:none; background:transparent; color:var(--text-secondary); cursor:pointer; font-size:14px; line-height:1; padding:3px 6px; border-radius:8px;}
+  .size-chip .sc-close:hover{background:rgba(var(--red-rgb),.18);}
+  .size-chip .sc-grid{display:grid; grid-template-columns:repeat(4,1fr); gap:5px; text-align:center;}
+  .size-chip .sc-grid div{background:var(--bg-field); border:1.5px solid var(--line, rgba(128,128,128,.35)); border-radius:9px; padding:3px 1px; min-width:0;}
+  .size-chip .sc-grid span{display:block; font-size:10.5px; color:var(--text-muted);}
+  .size-chip .sc-grid b{font-size:13px; white-space:nowrap;}
+  .size-chip .sc-grid b.none{color:var(--text-muted); font-weight:500;}
+  .size-chip .sc-also{margin-top:5px; font-size:11.5px; color:var(--text-secondary);}
+  .restriction-cols > div{min-width:0;}
+  .lb-table input{width:100%; min-width:0; padding:5px 6px; font-size:12.5px;}
+  .lb-table td, .lb-table th{white-space:nowrap;}
+  .lb-table td.lb-n{white-space:normal;}
+  @media (max-width:560px){ table.viewer-table.lb-table th, table.viewer-table.lb-table td{padding:6px 3px; font-size:11.5px;} table.viewer-table.lb-table .lb-code{display:none;} table.viewer-table.lb-table .rdel{display:block; margin:2px 0; padding:3px 6px; width:100%; min-width:38px;} .lb-table input{min-width:46px;} }
   .save-hint{text-align:100%; text-align:center; font-size:10.5px; color:var(--text-muted); margin-top:18px; letter-spacing:0.3px;}
 
   .menu-wrap{position:relative;}
@@ -1221,7 +1238,7 @@ input, button, select, textarea{font-family:var(--font-ui);}
 
 <div class="wrap">
   <div class="topbar">
-    <h1>產線即時監看板 <button class="version-badge" id="version-badge">v23.7</button><button class="theme-toggle" id="theme-toggle" type="button" aria-label="切換深色／淺色" title="切換深色／淺色"><span class="tt-moon"><svg class="ico ico-moon" aria-hidden="true"><use href="#i-moon"/></svg></span><span class="tt-sun"><svg class="ico ico-sun" aria-hidden="true"><use href="#i-sun"/></svg></span></button><button class="help-btn" id="help-btn" type="button" aria-label="填寫說明" title="填寫說明" style="display:none">?</button></h1>
+    <h1>產線即時監看板 <button class="version-badge" id="version-badge">v23.8</button><button class="theme-toggle" id="theme-toggle" type="button" aria-label="切換深色／淺色" title="切換深色／淺色"><span class="tt-moon"><svg class="ico ico-moon" aria-hidden="true"><use href="#i-moon"/></svg></span><span class="tt-sun"><svg class="ico ico-sun" aria-hidden="true"><use href="#i-sun"/></svg></span></button><button class="help-btn" id="help-btn" type="button" aria-label="填寫說明" title="填寫說明" style="display:none">?</button></h1>
     <div class="topbar-right">
       <button class="export-btn" id="settings-btn">設定 API 網址</button>
       <button class="export-btn" id="admin-btn">管理者設定</button>
@@ -1428,6 +1445,28 @@ input, button, select, textarea{font-family:var(--font-ui);}
         <div class="restriction-count" id="restriction-count"></div>
         <div class="viewer-table-wrap" id="restriction-list"></div>
         <button class="export-btn" id="res-export-btn" style="margin-top:12px;">匯出不能跑名單 (CSV)</button>
+      </div>
+    </div>
+
+    <div class="section-title" style="margin-top:28px;">客戶標籤尺寸</div>
+    <p class="quick-abn-hint">卡片輸入客戶名稱（或客戶代碼）時，會在下方顯示這個客戶的單捲、內盒、外箱、嘜頭標籤尺寸。沒有的欄位留白，卡片上會顯示「無」。</p>
+    <div class="restriction-cols">
+      <div class="log-panel">
+        <div class="log-form" id="label-form">
+          <div class="field"><label>客戶名稱</label><input type="text" id="lb-name" placeholder="例如：智邦"></div>
+          <div class="field"><label>客戶代碼</label><input type="text" id="lb-code" placeholder="例如：GBA"></div>
+          <div class="field"><label>單捲</label><input type="text" id="lb-roll" placeholder="例如：100*50"></div>
+          <div class="field"><label>內盒</label><input type="text" id="lb-inner" placeholder="例如：70*45"></div>
+          <div class="field"><label>外箱</label><input type="text" id="lb-outer" placeholder="例如：70*45"></div>
+          <div class="field"><label>嘜頭</label><input type="text" id="lb-mark" placeholder="沒有就留白"></div>
+          <button class="log-submit" id="lb-submit">新增客戶尺寸</button>
+        </div>
+        <div class="log-hint" id="lb-hint"></div>
+      </div>
+      <div>
+        <div class="log-form" style="display:block; margin-bottom:8px;"><input type="text" id="lb-search" placeholder="搜尋客戶名稱或代碼"></div>
+        <div class="restriction-count" id="lb-count"></div>
+        <div class="viewer-table-wrap" id="lb-list"></div>
       </div>
     </div>
   </div>
@@ -2268,6 +2307,7 @@ function render(){
           <label>客戶名稱</label>
           <input type="text" data-k="customer" list="customer-suggestions" placeholder="輸入客戶名稱" value="${escapeHtml(d.customer)}">
           <div class="cust-warn" id="cust-warn-${m.key}" style="display:none;"></div>
+          <div class="size-chip" id="size-chip-${m.key}" style="display:none;"></div>
         </div>
       </div>
       <div class="resume-hint${incompleteMatches.length ? ' show' : ''}${incompleteMatches.length > 1 ? ' multi' : ''}">
@@ -2409,6 +2449,11 @@ function render(){
       };
       custInput.addEventListener('input', updateCustWarn);
       updateCustWarn();
+    }
+    const chipEl = card.querySelector(`#size-chip-${m.key}`);
+    if(custInput && chipEl){
+      custInput.addEventListener('input', () => renderSizeChip(chipEl, m.key, custInput.value));
+      renderSizeChip(chipEl, m.key, custInput.value);
     }
 
     card.querySelectorAll('[data-inline-resume]').forEach(btn => {
@@ -3219,6 +3264,7 @@ async function loadState(){
     if(json.support){ supportLog = json.support; }
     if(json.supportConfig){ supportConfig = json.supportConfig; }
     if(json.restrictions){ restrictionsLog = json.restrictions; }
+    if(Array.isArray(json.customerLabels)){ customerLabels = json.customerLabels; renderLabelList(); }
     if(Array.isArray(json.workNotes)){
       workNotes = json.workNotes;
       workNotesLoaded = true;
@@ -3390,6 +3436,56 @@ function dismissResumeHint(machine, customer){
   all[machine] = customer;
   try{ sessionStorage.setItem(HINT_DISMISS_KEY, JSON.stringify(all)); }catch(e){}
 }
+// ---------- 客戶標籤尺寸 ----------
+let customerLabels = [];
+const LABEL_DISMISS_KEY = 'monitor-board-dismissed-size-chips';
+function loadDismissedLabels(){ try{ return JSON.parse(sessionStorage.getItem(LABEL_DISMISS_KEY) || '{}'); }catch(e){ return {}; } }
+function isLabelChipDismissed(machine, customer){ const v = loadDismissedLabels()[machine]; return !!customer && v === String(customer).trim(); }
+function dismissLabelChip(machine, customer){
+  const all = loadDismissedLabels(); all[machine] = String(customer).trim();
+  try{ sessionStorage.setItem(LABEL_DISMISS_KEY, JSON.stringify(all)); }catch(e){}
+}
+function labelNorm(s){ return String(s == null ? '' : s).toLowerCase().replace(/[\s　]+/g, '').replace(/（/g,'(').replace(/）/g,')'); }
+// 比對方式：不分大小寫；可輸入客戶名稱、括號前後的部分（例如 ALPHA 或 明泰越南）、或客戶代碼（要完全一樣）。
+// 名稱完全一樣的優先；另外有符合的客戶（例如「智邦」也符合「智邦越南」）會列在「也符合」。
+function findCustomerLabels(input){
+  const n = labelNorm(input);
+  if(!n) return null;
+  const scored = [];
+  customerLabels.forEach(r => {
+    const nn = labelNorm(r['客戶名稱']);
+    if(!nn) return;
+    const m = nn.match(/^(.*?)\((.*)\)\s*$/);
+    const names = m ? [nn, m[1], m[2]].filter(Boolean) : [nn];
+    const code = labelNorm(r['客戶代碼']);
+    let rank = null;
+    if(names.indexOf(n) >= 0 || (code && code === n)) rank = 0;
+    else if(n.length >= 2 && names.some(k => k.indexOf(n) >= 0)) rank = 1;
+    else if(names.some(k => k.length >= 2 && n.indexOf(k) >= 0)) rank = 2;
+    if(rank !== null) scored.push({r, rank});
+  });
+  if(!scored.length) return null;
+  scored.sort((a,b) => a.rank - b.rank);
+  return {best: scored[0].r, others: scored.slice(1).map(x => x.r).slice(0,3)};
+}
+function renderSizeChip(chipEl, machine, customerName){
+  const found = customerLabels.length ? findCustomerLabels(customerName) : null;
+  if(!found || isLabelChipDismissed(machine, customerName)){ chipEl.style.display = 'none'; chipEl.innerHTML = ''; return; }
+  const b = found.best;
+  const code = String(b['客戶代碼']||'').trim();
+  const cell = (k) => { const v = String(b[k]||'').trim(); return `<div><span>${k}</span><b class="${v?'':'none'}">${v ? escapeHtml(v) : '無'}</b></div>`; };
+  chipEl.innerHTML = `
+    <div class="sc-head"><span class="sc-title">標籤尺寸</span><span class="sc-who">${escapeHtml(b['客戶名稱']||'')}${code ? `（${escapeHtml(code)}）` : ''}</span><button type="button" class="sc-close" title="看過了，關閉" aria-label="關閉標籤尺寸">✕</button></div>
+    <div class="sc-grid">${['單捲','內盒','外箱','嘜頭'].map(cell).join('')}</div>
+    ${found.others.length ? `<div class="sc-also">也符合：${found.others.map(o => escapeHtml(o['客戶名稱']||'')).join('、')}（請確認客戶）</div>` : ''}`;
+  chipEl.style.display = '';
+  // 在「按下」的瞬間就關閉並擋掉焦點轉移：輸入框一失去焦點會觸發存檔、整張卡片重畫，按鈕被換掉的話這一下點擊就會落空
+  const closeChip = () => { dismissLabelChip(machine, customerName); chipEl.style.display = 'none'; };
+  const closeBtn = chipEl.querySelector('.sc-close');
+  closeBtn.addEventListener('pointerdown', (e) => { e.preventDefault(); closeChip(); });
+  closeBtn.addEventListener('click', closeChip);
+}
+
 // 「不能跑名單」警示的關閉紀錄：同一台機台、同一個客戶名稱按過 ✕ 就不再跳出；改了客戶名稱、清空或完成訂單後會重新提示。
 const RESTRICT_DISMISS_KEY = 'monitor-board-dismissed-restrict-warns';
 function loadDismissedRestrict(){
@@ -3405,6 +3501,8 @@ function dismissRestrictionWarn(machine, customer){
   try{ sessionStorage.setItem(RESTRICT_DISMISS_KEY, JSON.stringify(all)); }catch(e){}
 }
 function clearResumeHintDismiss(machine){
+  const lall = loadDismissedLabels(); delete lall[machine];
+  try{ sessionStorage.setItem(LABEL_DISMISS_KEY, JSON.stringify(lall)); }catch(e){}
   const rall = loadDismissedRestrict();
   delete rall[machine];
   try{ sessionStorage.setItem(RESTRICT_DISMISS_KEY, JSON.stringify(rall)); }catch(e){}
@@ -4346,6 +4444,7 @@ document.getElementById('notes-panel').addEventListener('click', (e) => {
 
 // ---------- 版本紀錄 ----------
 const VERSION_LOG = [
+  {v:'v23.8', date:'2026/11/17', d:'新增「客戶標籤尺寸」（完整版）：在「異常」分頁的不能跑名單下方，可以自己新增、修改、刪除各客戶的單捲／內盒／外箱／嘜頭標籤尺寸（已先放入 41 個客戶）。卡片輸入客戶名稱或客戶代碼時，會在客戶名稱下方顯示尺寸，不分英文大小寫，括號可省略（輸入 ALPHA 或 明泰越南 都找得到）；多個客戶符合時會列出「也符合」；看過可按 ✕ 關閉。簡化版暫時不顯示。後端 .gs 有異動（gs-2026-11-17-v23，會自動建立 CustomerLabels 分頁），需要先重新部署 .gs，再上傳網頁'},
   {v:'v23.7', date:'2026/11/17', d:'耗材「狀態」：就算庫存高於或剛好達到安全庫存，只要近 14 天內有叫貨、還沒標「已到貨」，也會顯示「已叫貨 M/D・等到貨」；叫貨日超過 14 天前的，仍只顯示「正常」。後端不需要更新'},
   {v:'v23.6', date:'2026/11/10', d:'「已可上機」可以指定機台：選「全部」代表四台都可上，選單一機台就只有那台可上，其他機台仍會警告。已可上機的機台會蓋過同一客戶在該機台上的「不能跑」。後端不需要更新'},
   {v:'v23.5', date:'2026/11/10', d:'不能跑名單新增「狀態」：同一份名單裡可標示「不能跑」或「已可上機（全機台）」。不能跑的排在前面（紅色標籤），已可上機的排在後面、淡化（綠色標籤）；只有「不能跑」才會在卡片上跳出警告，已可上機的不再誤報，原因與紀錄仍保留。舊資料沒有狀態的視為「不能跑」。後端 .gs 有異動（gs-2026-11-10-v22，會自動補上「狀態」欄），需要先重新部署 .gs，再上傳網頁'},
@@ -6190,6 +6289,95 @@ async function deleteRestriction(rowNum){
     alert('刪除失敗：' + err.message);
   }
 }
+
+// ---- 客戶標籤尺寸：維護名單 ----
+let editingLabelRow = null;
+const LABEL_KEYS = ['客戶名稱','客戶代碼','單捲','內盒','外箱','嘜頭'];
+function renderLabelList(){
+  const wrap = document.getElementById('lb-list');
+  if(!wrap) return;
+  const q = labelNorm(document.getElementById('lb-search').value);
+  const list = customerLabels.filter(r => !q || LABEL_KEYS.some(k => labelNorm(r[k]).indexOf(q) >= 0));
+  document.getElementById('lb-count').textContent = customerLabels.length ? `共 ${customerLabels.length} 個客戶${q ? `，符合 ${list.length} 個` : ''}（可以在框內滑動瀏覽）` : '';
+  if(!customerLabels.length){ wrap.innerHTML = '<div class="viewer-empty">目前還沒有任何客戶的標籤尺寸。</div>'; return; }
+  if(!list.length){ wrap.innerHTML = '<div class="viewer-empty">沒有符合的客戶。</div>'; return; }
+  wrap.innerHTML = `<table class="viewer-table lb-table"><thead><tr><th>客戶</th><th class="lb-code">代碼</th><th>單捲</th><th>內盒</th><th>外箱</th><th>嘜頭</th><th></th></tr></thead><tbody>` + list.map(r => {
+    if(editingLabelRow === r._row){
+      return `<tr>${LABEL_KEYS.map(k => `<td${k==='客戶代碼'?' class="lb-code"':''}><input type="text" data-lbk="${k}" value="${escapeHtml(r[k]||'')}"></td>`).join('')}<td><button class="rdel" data-lb-save="${r._row}">儲存</button> <button class="rdel" data-lb-cancel="1">取消</button></td></tr>`;
+    }
+    return `<tr><td class="lb-n"><b>${escapeHtml(r['客戶名稱']||'')}</b></td><td class="lb-code">${escapeHtml(r['客戶代碼']||'')}</td>${['單捲','內盒','外箱','嘜頭'].map(k => `<td>${escapeHtml(r[k]||'') || '<span class="stats-muted">無</span>'}</td>`).join('')}<td><button class="rdel" data-lb-edit="${r._row}">編輯</button> <button class="rdel" data-lb-del="${r._row}">刪除</button></td></tr>`;
+  }).join('') + '</tbody></table>';
+}
+function labelDataFromInputs(get){
+  const d = {}; LABEL_KEYS.forEach(k => { d[k] = String(get(k)||'').trim(); }); return d;
+}
+async function submitLabel(){
+  const d = labelDataFromInputs(k => document.getElementById({'客戶名稱':'lb-name','客戶代碼':'lb-code','單捲':'lb-roll','內盒':'lb-inner','外箱':'lb-outer','嘜頭':'lb-mark'}[k]).value);
+  const hint = document.getElementById('lb-hint');
+  if(!d['客戶名稱']){ hint.textContent = '請至少填寫客戶名稱。'; return; }
+  if(!API_URL){ hint.textContent = '尚未設定 API 網址，請先點右上角「設定 API 網址」。'; return; }
+  const btn = document.getElementById('lb-submit');
+  btn.disabled = true; btn.textContent = '儲存中…';
+  showSaveBusy('正在儲存，請稍候，不要重複按。');
+  try{
+    await apiPost({action:'appendLabel', data:d});
+    await loadState();
+    ['lb-name','lb-code','lb-roll','lb-inner','lb-outer','lb-mark'].forEach(id => { document.getElementById(id).value = ''; });
+    renderLabelList(); render();
+    hint.textContent = '已新增 · ' + fmtClock();
+    showSaveSuccess('客戶標籤尺寸已新增。');
+  }catch(err){
+    hideSaveOverlay();
+    hint.textContent = '新增失敗：' + err.message;
+  }finally{
+    btn.disabled = false; btn.textContent = '新增客戶尺寸';
+  }
+}
+async function saveLabelEdit(rowNum, btn){
+  const rowEl = btn.closest('tr');
+  const d = labelDataFromInputs(k => rowEl.querySelector(`[data-lbk="${k}"]`).value);
+  if(!d['客戶名稱']){ alert('客戶名稱不能空白。'); return; }
+  if(!API_URL){ alert('尚未設定 API 網址，請先點右上角「設定 API 網址」。'); return; }
+  btn.disabled = true; btn.textContent = '儲存中…';
+  showSaveBusy('正在儲存，請稍候，不要重複按。');
+  try{
+    await apiPost({action:'updateRow', sheet:'CustomerLabels', row: rowNum, data:d});
+    editingLabelRow = null;
+    await loadState();
+    renderLabelList(); render();
+    showSaveSuccess('客戶標籤尺寸已更新。');
+  }catch(err){
+    hideSaveOverlay();
+    alert('儲存失敗：' + err.message);
+    btn.disabled = false; btn.textContent = '儲存';
+  }
+}
+async function deleteLabel(rowNum){
+  if(!confirm('確定要刪除這個客戶的標籤尺寸嗎？')) return;
+  if(!API_URL){ alert('尚未設定 API 網址。'); return; }
+  showSaveBusy('正在刪除，請稍候，不要重複按。', '刪除中…');
+  try{
+    await apiPost({action:'deleteRow', sheet:'CustomerLabels', row: rowNum});
+    await loadState();
+    renderLabelList(); render();
+    showSaveSuccess('已刪除。', '已刪除');
+  }catch(err){
+    hideSaveOverlay();
+    alert('刪除失敗：' + err.message);
+  }
+}
+function initLabelForm(){
+  document.getElementById('lb-submit').addEventListener('click', submitLabel);
+  document.getElementById('lb-search').addEventListener('input', renderLabelList);
+  document.getElementById('lb-list').addEventListener('click', e => {
+    const b = e.target.closest('button'); if(!b) return;
+    if(b.dataset.lbEdit){ editingLabelRow = parseInt(b.dataset.lbEdit,10); renderLabelList(); }
+    else if(b.dataset.lbCancel){ editingLabelRow = null; renderLabelList(); }
+    else if(b.dataset.lbSave){ saveLabelEdit(parseInt(b.dataset.lbSave,10), b); }
+    else if(b.dataset.lbDel){ deleteLabel(parseInt(b.dataset.lbDel,10)); }
+  });
+}
+initLabelForm();
 
 function exportRestrictionsCsv(){
   if(!restrictionsLog.length){ alert('目前還沒有任何限制項目可以匯出。'); return; }
