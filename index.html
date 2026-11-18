@@ -860,6 +860,7 @@
   #label-form .log-submit{grid-column:1 / -1; width:100%;}
   #lb-list{max-height:340px; overflow:auto; border:1px solid var(--border); border-radius:8px; padding:0 10px;}
   #lb-list .lb-table thead th{position:sticky; top:0; z-index:1; background:var(--bg-card, var(--bg-field));}
+  .auto-field{background:transparent !important; border-style:dashed !important; color:var(--text-secondary) !important; cursor:default;}
   .lb-table input{width:100%; min-width:0; padding:5px 6px; font-size:12.5px;}
   .lb-table td, .lb-table th{white-space:nowrap;}
   .lb-table td.lb-n{white-space:normal;}
@@ -1243,7 +1244,7 @@ input, button, select, textarea{font-family:var(--font-ui);}
 
 <div class="wrap">
   <div class="topbar">
-    <h1>產線即時監看板 <button class="version-badge" id="version-badge">v24.0</button><button class="theme-toggle" id="theme-toggle" type="button" aria-label="切換深色／淺色" title="切換深色／淺色"><span class="tt-moon"><svg class="ico ico-moon" aria-hidden="true"><use href="#i-moon"/></svg></span><span class="tt-sun"><svg class="ico ico-sun" aria-hidden="true"><use href="#i-sun"/></svg></span></button><button class="help-btn" id="help-btn" type="button" aria-label="填寫說明" title="填寫說明" style="display:none">?</button></h1>
+    <h1>產線即時監看板 <button class="version-badge" id="version-badge">v24.1</button><button class="theme-toggle" id="theme-toggle" type="button" aria-label="切換深色／淺色" title="切換深色／淺色"><span class="tt-moon"><svg class="ico ico-moon" aria-hidden="true"><use href="#i-moon"/></svg></span><span class="tt-sun"><svg class="ico ico-sun" aria-hidden="true"><use href="#i-sun"/></svg></span></button><button class="help-btn" id="help-btn" type="button" aria-label="填寫說明" title="填寫說明" style="display:none">?</button></h1>
     <div class="topbar-right">
       <button class="export-btn" id="settings-btn">設定 API 網址</button>
       <button class="export-btn" id="admin-btn">管理者設定</button>
@@ -3652,7 +3653,7 @@ const VIEW_CONFIG = {
     sheet:'Log',
     headers:['機台','客戶名稱','總箱數','完成箱數','當日箱數','開始時間','結束時間','備註','完成率(%)'],
     keys:['machine','customer','totalBoxes','currentBox','dayBoxes','startTime','actualEnd','remark','pct'],
-    fieldTypes:{machine:{type:'select', options:MACHINE_OPTS}, startTime:{type:'datetime'}, actualEnd:{type:'datetime'}},
+    fieldTypes:{machine:{type:'select', options:MACHINE_OPTS}, startTime:{type:'datetime'}, actualEnd:{type:'datetime'}, pct:{type:'auto'}},
     dateKey:'loggedAt',
     groupDateKey:'startTime',
     statKey:'dayBoxes',
@@ -3704,7 +3705,7 @@ const VIEW_CONFIG = {
     sheet:'SupportRecords',
     headers:['日期','星期','工作事項','開始時間','結束時間','支援時數','支援人員'],
     keys:['日期','星期','工作事項','開始時間','結束時間','支援時數','支援人員'],
-    fieldTypes:{'日期':{type:'date'}, '工作事項':{type:'select', options: () => getSupportConfigOptions('worktype')}, '支援人員':{type:'select', options: () => getSupportConfigOptions('person')}},
+    fieldTypes:{'日期':{type:'date'}, '星期':{type:'auto'}, '支援時數':{type:'auto'}, '工作事項':{type:'select', options: () => getSupportConfigOptions('worktype')}, '支援人員':{type:'select', options: () => getSupportConfigOptions('person')}},
     dateKey:'紀錄時間',
     groupDateKey:'日期',
     statKey:'支援時數',
@@ -3863,6 +3864,10 @@ function fieldControlHtml(cfg, key, value){
       <select data-edit-part="month">${monthOptionsHtml(p.month)}</select>
       <select data-edit-part="day">${dayOptionsHtml(p.day)}</select>
     </div>`;
+  }
+  if(ft && ft.type === 'auto'){
+    // 自動計算的欄位：改了相關欄位會即時跟著變，不能手動改
+    return `<input type="text" class="auto-field" data-edit-key="${key}" value="${escapeHtml(value == null ? '' : value)}" readonly tabindex="-1" title="自動計算">`;
   }
   const val = escapeHtml(cleanDisplayTime(value));
   return `<input type="text" data-edit-key="${key}" value="${val}">`;
@@ -4023,11 +4028,7 @@ function renderEditRow(view, idx){
   tr.innerHTML = `${cellsHtml}<td><button data-act="save" data-idx="${idx}">儲存</button> <button data-act="cancel" data-idx="${idx}">取消</button></td>`;
 }
 
-async function handleSaveEdit(view, idx){
-  const cfg = VIEW_CONFIG[view];
-  const r = currentViewRows[idx];
-  const tr = document.querySelector(`#viewer-body tr[data-idx="${idx}"]`);
-  if(!tr) return;
+function collectEditValues(cfg, r, tr){
   const newValues = Object.assign({}, r);
   tr.querySelectorAll('[data-edit-key]').forEach(el => {
     const key = el.dataset.editKey;
@@ -4042,7 +4043,56 @@ async function handleSaveEdit(view, idx){
       newValues[key] = el.value;
     }
   });
+  return newValues;
+}
+
+// 依修改後的欄位重新計算「自動欄位」：支援紀錄的星期、支援時數；機台產能記錄的完成率。
+// 回傳錯誤訊息字串（算不出來時），沒問題回傳 ''。
+function applyAutoFields(view, v){
+  if(view === 'support'){
+    const st = normalizeTime(v['開始時間']), et = normalizeTime(v['結束時間']);
+    if(!st || !et) return '開始時間或結束時間格式不正確，請輸入例如 0935 或 09:35（24 小時制）。';
+    const pad2 = n => String(n).padStart(2,'0');
+    const fmt = t => { const m = String(t).split(':'); return pad2(parseInt(m[0],10)) + ':' + pad2(parseInt(m[1],10)); };
+    v['開始時間'] = fmt(st); v['結束時間'] = fmt(et);
+    const hours = computeSupportHours(v['開始時間'], v['結束時間']);
+    if(hours === null) return '結束時間要晚於開始時間，請重新確認。';
+    v['支援時數'] = hours;
+    const d = parseDateOnly(v['日期']);
+    if(d.year && d.month && d.day) v['星期'] = computeWeekday(d.year, d.month, d.day);
+  } else if(view === 'log'){
+    const total = parseFloat(v.totalBoxes), cur = parseFloat(v.currentBox);
+    if(total > 0 && !isNaN(cur)) v.pct = Math.max(0, Math.min(100, Math.round(cur / total * 100)));
+  }
+  return '';
+}
+
+// 編輯中即時預覽自動欄位（時間打到一半算不出來就先保持原樣）
+document.getElementById('viewer-body').addEventListener('input', onEditRowChange);
+document.getElementById('viewer-body').addEventListener('change', onEditRowChange);
+function onEditRowChange(e){
+  if(editingIdx === null || (currentLogView !== 'support' && currentLogView !== 'log')) return;
+  const tr = e.target.closest('tr[data-idx]'); if(!tr) return;
+  const cfg = VIEW_CONFIG[currentLogView], r = currentViewRows[editingIdx];
+  if(!r) return;
+  const v = collectEditValues(cfg, r, tr);
+  if(applyAutoFields(currentLogView, v) !== '') return;
+  Object.keys(cfg.fieldTypes).forEach(k => {
+    if(cfg.fieldTypes[k].type !== 'auto') return;
+    const el = tr.querySelector(`[data-edit-key="${k}"]`);
+    if(el) el.value = v[k] == null ? '' : v[k];
+  });
+}
+
+async function handleSaveEdit(view, idx){
+  const cfg = VIEW_CONFIG[view];
+  const r = currentViewRows[idx];
+  const tr = document.querySelector(`#viewer-body tr[data-idx="${idx}"]`);
+  if(!tr) return;
+  const newValues = collectEditValues(cfg, r, tr);
   if(invalidTimeInRow(tr)){ alert('時間格式不正確，請輸入例如 0935（24 小時制）。'); return; }
+  const autoErr = applyAutoFields(view, newValues);
+  if(autoErr){ alert(autoErr); return; }
   if(!API_URL){ alert('尚未設定 API 網址，無法儲存修改。'); return; }
 
   // 補明細存檔前的提醒：如果照這筆的異常類型，應該要有的欄位還是空的，先跳出提醒，
@@ -4434,6 +4484,7 @@ document.getElementById('notes-panel').addEventListener('click', (e) => {
 
 // ---------- 版本紀錄 ----------
 const VERSION_LOG = [
+  {v:'v24.1', date:'2026/11/18', d:'紀錄分頁修改時，自動欄位會跟著重算：支援紀錄改了開始／結束時間（或日期），「支援時數」（已扣午休）與「星期」會自動更新；機台產能記錄改了總箱數或完成箱數，「完成率」會自動更新。編輯時這些欄位是灰色虛線框、不能手動改，數字會即時跟著變。後端不需要更新。注意：以前已經不一致的舊資料，需要再打開編輯、按一次儲存才會修正'},
   {v:'v24.0', date:'2026/11/18', d:'客戶標籤尺寸比對改成嚴格：卡片輸入的客戶名稱必須和明細裡的客戶名稱完全一樣（英文大小寫、空白不影響）才會顯示尺寸；不再用部分文字或客戶代碼比對。後端不需要更新'},
   {v:'v23.9', date:'2026/11/18', d:'客戶標籤尺寸：新增欄位改成兩個一行（名稱與代碼、單捲與內盒、外箱與嘜頭），按鈕獨佔一行；明細改成固定高度、框內滑動，表頭固定。後端不需要更新'},
   {v:'v23.8', date:'2026/11/17', d:'新增「客戶標籤尺寸」（完整版）：在「異常」分頁的不能跑名單下方，可以自己新增、修改、刪除各客戶的單捲／內盒／外箱／嘜頭標籤尺寸（已先放入 41 個客戶）。卡片輸入客戶名稱或客戶代碼時，會在客戶名稱下方顯示尺寸，不分英文大小寫，括號可省略（輸入 ALPHA 或 明泰越南 都找得到）；多個客戶符合時會列出「也符合」；看過可按 ✕ 關閉。簡化版暫時不顯示。後端 .gs 有異動（gs-2026-11-17-v23，會自動建立 CustomerLabels 分頁），需要先重新部署 .gs，再上傳網頁'},
