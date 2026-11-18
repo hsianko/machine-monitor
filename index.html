@@ -1243,7 +1243,7 @@ input, button, select, textarea{font-family:var(--font-ui);}
 
 <div class="wrap">
   <div class="topbar">
-    <h1>產線即時監看板 <button class="version-badge" id="version-badge">v23.9</button><button class="theme-toggle" id="theme-toggle" type="button" aria-label="切換深色／淺色" title="切換深色／淺色"><span class="tt-moon"><svg class="ico ico-moon" aria-hidden="true"><use href="#i-moon"/></svg></span><span class="tt-sun"><svg class="ico ico-sun" aria-hidden="true"><use href="#i-sun"/></svg></span></button><button class="help-btn" id="help-btn" type="button" aria-label="填寫說明" title="填寫說明" style="display:none">?</button></h1>
+    <h1>產線即時監看板 <button class="version-badge" id="version-badge">v24.0</button><button class="theme-toggle" id="theme-toggle" type="button" aria-label="切換深色／淺色" title="切換深色／淺色"><span class="tt-moon"><svg class="ico ico-moon" aria-hidden="true"><use href="#i-moon"/></svg></span><span class="tt-sun"><svg class="ico ico-sun" aria-hidden="true"><use href="#i-sun"/></svg></span></button><button class="help-btn" id="help-btn" type="button" aria-label="填寫說明" title="填寫說明" style="display:none">?</button></h1>
     <div class="topbar-right">
       <button class="export-btn" id="settings-btn">設定 API 網址</button>
       <button class="export-btn" id="admin-btn">管理者設定</button>
@@ -1454,7 +1454,7 @@ input, button, select, textarea{font-family:var(--font-ui);}
     </div>
 
     <div class="section-title" style="margin-top:28px;">客戶標籤尺寸</div>
-    <p class="quick-abn-hint">卡片輸入客戶名稱（或客戶代碼）時，會在下方顯示這個客戶的單捲、內盒、外箱、嘜頭標籤尺寸。沒有的欄位留白，卡片上會顯示「無」。</p>
+    <p class="quick-abn-hint">卡片輸入的客戶名稱，必須和這裡的客戶名稱一樣（英文大小寫不同沒關係），才會在下方顯示這個客戶的單捲、內盒、外箱、嘜頭標籤尺寸。沒有的欄位留白，卡片上會顯示「無」。</p>
     <div class="restriction-cols">
       <div class="log-panel">
         <div class="log-form" id="label-form">
@@ -3451,27 +3451,12 @@ function dismissLabelChip(machine, customer){
   try{ sessionStorage.setItem(LABEL_DISMISS_KEY, JSON.stringify(all)); }catch(e){}
 }
 function labelNorm(s){ return String(s == null ? '' : s).toLowerCase().replace(/[\s　]+/g, '').replace(/（/g,'(').replace(/）/g,')'); }
-// 比對方式：不分大小寫；可輸入客戶名稱、括號前後的部分（例如 ALPHA 或 明泰越南）、或客戶代碼（要完全一樣）。
-// 名稱完全一樣的優先；另外有符合的客戶（例如「智邦」也符合「智邦越南」）會列在「也符合」。
+// 比對方式：輸入的客戶名稱必須和明細裡的客戶名稱一樣才會顯示（只忽略英文大小寫、空白、全形半形括號的差別）。
 function findCustomerLabels(input){
   const n = labelNorm(input);
   if(!n) return null;
-  const scored = [];
-  customerLabels.forEach(r => {
-    const nn = labelNorm(r['客戶名稱']);
-    if(!nn) return;
-    const m = nn.match(/^(.*?)\((.*)\)\s*$/);
-    const names = m ? [nn, m[1], m[2]].filter(Boolean) : [nn];
-    const code = labelNorm(r['客戶代碼']);
-    let rank = null;
-    if(names.indexOf(n) >= 0 || (code && code === n)) rank = 0;
-    else if(n.length >= 2 && names.some(k => k.indexOf(n) >= 0)) rank = 1;
-    else if(names.some(k => k.length >= 2 && n.indexOf(k) >= 0)) rank = 2;
-    if(rank !== null) scored.push({r, rank});
-  });
-  if(!scored.length) return null;
-  scored.sort((a,b) => a.rank - b.rank);
-  return {best: scored[0].r, others: scored.slice(1).map(x => x.r).slice(0,3)};
+  const hit = customerLabels.find(r => labelNorm(r['客戶名稱']) === n);
+  return hit ? {best: hit, others: []} : null;
 }
 function renderSizeChip(chipEl, machine, customerName){
   const found = customerLabels.length ? findCustomerLabels(customerName) : null;
@@ -4449,6 +4434,7 @@ document.getElementById('notes-panel').addEventListener('click', (e) => {
 
 // ---------- 版本紀錄 ----------
 const VERSION_LOG = [
+  {v:'v24.0', date:'2026/11/18', d:'客戶標籤尺寸比對改成嚴格：卡片輸入的客戶名稱必須和明細裡的客戶名稱完全一樣（英文大小寫、空白不影響）才會顯示尺寸；不再用部分文字或客戶代碼比對。後端不需要更新'},
   {v:'v23.9', date:'2026/11/18', d:'客戶標籤尺寸：新增欄位改成兩個一行（名稱與代碼、單捲與內盒、外箱與嘜頭），按鈕獨佔一行；明細改成固定高度、框內滑動，表頭固定。後端不需要更新'},
   {v:'v23.8', date:'2026/11/17', d:'新增「客戶標籤尺寸」（完整版）：在「異常」分頁的不能跑名單下方，可以自己新增、修改、刪除各客戶的單捲／內盒／外箱／嘜頭標籤尺寸（已先放入 41 個客戶）。卡片輸入客戶名稱或客戶代碼時，會在客戶名稱下方顯示尺寸，不分英文大小寫，括號可省略（輸入 ALPHA 或 明泰越南 都找得到）；多個客戶符合時會列出「也符合」；看過可按 ✕ 關閉。簡化版暫時不顯示。後端 .gs 有異動（gs-2026-11-17-v23，會自動建立 CustomerLabels 分頁），需要先重新部署 .gs，再上傳網頁'},
   {v:'v23.7', date:'2026/11/17', d:'耗材「狀態」：就算庫存高於或剛好達到安全庫存，只要近 14 天內有叫貨、還沒標「已到貨」，也會顯示「已叫貨 M/D・等到貨」；叫貨日超過 14 天前的，仍只顯示「正常」。後端不需要更新'},
