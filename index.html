@@ -444,6 +444,11 @@
     text-decoration:underline;
   }
   .running-toggle:hover{color:var(--text-secondary);}
+  .inv-remind{margin-bottom:16px;}
+  .inv-body{background:rgba(var(--amber-rgb),.16); border:2px solid var(--ink); border-radius:var(--radius); padding:10px 12px; font-size:13px; line-height:1.6; color:var(--text-primary);}
+  .inv-body .inv-title{font-weight:700; margin-bottom:4px;}
+  .inv-body .inv-items{color:var(--text-secondary); margin-bottom:8px;}
+  .inv-body .inv-go{border:2px solid var(--ink); border-radius:10px; background:var(--bg-field); color:var(--text-primary); padding:4px 12px; font-size:13px; font-weight:600; cursor:pointer;}
   .running-list{
     background:var(--bg-panel);
     border:1px solid var(--border);
@@ -1244,7 +1249,7 @@ input, button, select, textarea{font-family:var(--font-ui);}
 
 <div class="wrap">
   <div class="topbar">
-    <h1>產線即時監看板 <button class="version-badge" id="version-badge">v24.1</button><button class="theme-toggle" id="theme-toggle" type="button" aria-label="切換深色／淺色" title="切換深色／淺色"><span class="tt-moon"><svg class="ico ico-moon" aria-hidden="true"><use href="#i-moon"/></svg></span><span class="tt-sun"><svg class="ico ico-sun" aria-hidden="true"><use href="#i-sun"/></svg></span></button><button class="help-btn" id="help-btn" type="button" aria-label="填寫說明" title="填寫說明" style="display:none">?</button></h1>
+    <h1>產線即時監看板 <button class="version-badge" id="version-badge">v24.2</button><button class="theme-toggle" id="theme-toggle" type="button" aria-label="切換深色／淺色" title="切換深色／淺色"><span class="tt-moon"><svg class="ico ico-moon" aria-hidden="true"><use href="#i-moon"/></svg></span><span class="tt-sun"><svg class="ico ico-sun" aria-hidden="true"><use href="#i-sun"/></svg></span></button><button class="help-btn" id="help-btn" type="button" aria-label="填寫說明" title="填寫說明" style="display:none">?</button></h1>
     <div class="topbar-right">
       <button class="export-btn" id="settings-btn">設定 API 網址</button>
       <button class="export-btn" id="admin-btn">管理者設定</button>
@@ -1287,6 +1292,14 @@ input, button, select, textarea{font-family:var(--font-ui);}
       <button class="running-toggle" id="running-toggle">收合</button>
     </div>
     <div class="running-list" id="running-list"></div>
+  </div>
+
+  <div class="inv-remind" id="inv-remind" style="display:none;">
+    <div class="running-head">
+      <span class="section-title" style="margin:0;">盤點提醒</span>
+      <button class="running-toggle" id="inv-remind-toggle">收合</button>
+    </div>
+    <div class="inv-body" id="inv-remind-body"></div>
   </div>
 
   <div class="tab-bar" id="tab-bar">
@@ -1876,7 +1889,7 @@ function applySimpleModeLayout(){
   // 簡化版不顯示：跨機台的總覽數字、進行中訂單（會看到其他機台的狀態）、分頁籤（異常/統計/紀錄/支援都跟單機台填報無關）、
   // 匯出功能（這是管理者彙整全部機台資料用的，不是操作人員的工作）。
   // 「設定 API 網址」保留，因為每台裝置第一次使用時還是需要設定一次，跟平常的完整版一樣。
-  ['overview-bar','running-board','tab-bar','export-btn','pending-section','admin-btn'].forEach(id => {
+  ['overview-bar','running-board','inv-remind','tab-bar','export-btn','pending-section','admin-btn'].forEach(id => {
     const el = document.getElementById(id);
     if(el) el.style.display = 'none';
   });
@@ -2883,10 +2896,56 @@ function renderRunningList(){
   }
   wrap.style.display = runningListCollapsed ? 'none' : '';
   toggle.textContent = runningListCollapsed ? '展開' : '收合';
+  renderInventoryRemind();
 }
 document.getElementById('running-toggle').addEventListener('click', () => {
   runningListCollapsed = !runningListCollapsed;
   renderRunningList();
+});
+
+// ---------- 耗材盤點提醒（只有完整版）----------
+// 每年固定在這些月份的「月底最後 N 天」盤點一次全部品項；只有在這段期間才會顯示提醒，過了就不再出現。
+const INVENTORY_MONTHS = [6, 12];
+const INVENTORY_WINDOW_DAYS = 7;
+let invRemindCollapsed = false;
+function inventoryWindow(now){
+  const d = now || new Date();
+  const y = d.getFullYear(), m = d.getMonth() + 1;
+  if(INVENTORY_MONTHS.indexOf(m) === -1) return null;
+  const last = new Date(y, m, 0).getDate();
+  const startDay = last - INVENTORY_WINDOW_DAYS + 1;
+  if(d.getDate() < startDay) return null;
+  const pad = n => String(n).padStart(2,'0');
+  return {m, startDay, last, start: `${y}-${pad(m)}-${pad(startDay)}`, end: `${y}-${pad(m)}-${pad(last)}`};
+}
+function renderInventoryRemind(){
+  const box = document.getElementById('inv-remind');
+  if(!box) return;
+  if(SIMPLE_MODE_MACHINE){ box.style.display = 'none'; return; }
+  const win = inventoryWindow();
+  if(!win || !consumableItems.length){ box.style.display = 'none'; return; }
+  // 本期盤點窗口內有盤點紀錄的品項就算盤過了
+  const counted = {};
+  consumableLog.forEach(r => {
+    const d = recordDateStr({dateKey:'日期'}, r) || '';
+    if(d >= win.start && d <= win.end) counted[conKey(r['品名'], r['規格'])] = true;
+  });
+  const todo = consumableItems.filter(it => !counted[conItemKey(it)]);
+  if(!todo.length){ box.style.display = 'none'; return; }
+  const body = document.getElementById('inv-remind-body');
+  body.innerHTML = `<div class="inv-title">${win.m} 月底盤點週（${win.m}/${win.startDay}～${win.m}/${win.last}）</div>
+    <div class="inv-items">還有 ${todo.length} 項尚未盤點（共 ${consumableItems.length} 項）：${todo.slice(0,12).map(it => escapeHtml(conLabel(it))).join('、')}${todo.length > 12 ? ` …等 ${todo.length} 項` : ''}</div>
+    <button class="inv-go" id="inv-go">前往耗材盤點</button>`;
+  document.getElementById('inv-go').addEventListener('click', () => {
+    const b = document.querySelector('.tab-btn[data-tab="consumable"]'); if(b) b.click();
+  });
+  body.style.display = invRemindCollapsed ? 'none' : '';
+  document.getElementById('inv-remind-toggle').textContent = invRemindCollapsed ? '展開' : '收合';
+  box.style.display = '';
+}
+document.getElementById('inv-remind-toggle').addEventListener('click', () => {
+  invRemindCollapsed = !invRemindCollapsed;
+  renderInventoryRemind();
 });
 
 function renderOverview(){
@@ -4484,6 +4543,7 @@ document.getElementById('notes-panel').addEventListener('click', (e) => {
 
 // ---------- 版本紀錄 ----------
 const VERSION_LOG = [
+  {v:'v24.2', date:'2026/11/23', d:'新增「耗材盤點提醒」（只有完整版）：每年 6 月與 12 月的月底最後 7 天，在「進行中訂單」下方會出現黃色提醒，列出本期還沒盤點的品項，並有「前往耗材盤點」按鈕；本期窗口內有盤點紀錄的品項就算盤過，全部盤完提醒就消失；時間一過也不再顯示。可以按右上角「收合」暫時收起。純前端修改，後端不需要更新'},
   {v:'v24.1', date:'2026/11/18', d:'紀錄分頁修改時，自動欄位會跟著重算：支援紀錄改了開始／結束時間（或日期），「支援時數」（已扣午休）與「星期」會自動更新；機台產能記錄改了總箱數或完成箱數，「完成率」會自動更新。編輯時這些欄位是灰色虛線框、不能手動改，數字會即時跟著變。後端不需要更新。注意：以前已經不一致的舊資料，需要再打開編輯、按一次儲存才會修正'},
   {v:'v24.0', date:'2026/11/18', d:'客戶標籤尺寸比對改成嚴格：卡片輸入的客戶名稱必須和明細裡的客戶名稱完全一樣（英文大小寫、空白不影響）才會顯示尺寸；不再用部分文字或客戶代碼比對。後端不需要更新'},
   {v:'v23.9', date:'2026/11/18', d:'客戶標籤尺寸：新增欄位改成兩個一行（名稱與代碼、單捲與內盒、外箱與嘜頭），按鈕獨佔一行；明細改成固定高度、框內滑動，表頭固定。後端不需要更新'},
@@ -5156,6 +5216,7 @@ function updateConsumableBadge(){
 
 function renderConsumables(){
   updateConsumableBadge();
+  renderInventoryRemind();
   const tab = document.getElementById('tab-consumable');
   if(!tab || tab.style.display === 'none') return;
   renderConStock();
