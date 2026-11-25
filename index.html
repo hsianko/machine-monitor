@@ -444,6 +444,7 @@
     text-decoration:underline;
   }
   .running-toggle:hover{color:var(--text-secondary);}
+  #viewer-date-tabs .date-tab{padding-left:10px; padding-right:10px;}
   .inv-remind{margin-bottom:16px;}
   .inv-body{background:rgba(var(--amber-rgb),.16); border:2px solid var(--ink); border-radius:var(--radius); padding:10px 12px; font-size:13px; line-height:1.6; color:var(--text-primary);}
   .inv-body .inv-title{font-weight:700; margin-bottom:4px;}
@@ -1249,7 +1250,7 @@ input, button, select, textarea{font-family:var(--font-ui);}
 
 <div class="wrap">
   <div class="topbar">
-    <h1>產線即時監看板 <button class="version-badge" id="version-badge">v24.2</button><button class="theme-toggle" id="theme-toggle" type="button" aria-label="切換深色／淺色" title="切換深色／淺色"><span class="tt-moon"><svg class="ico ico-moon" aria-hidden="true"><use href="#i-moon"/></svg></span><span class="tt-sun"><svg class="ico ico-sun" aria-hidden="true"><use href="#i-sun"/></svg></span></button><button class="help-btn" id="help-btn" type="button" aria-label="填寫說明" title="填寫說明" style="display:none">?</button></h1>
+    <h1>產線即時監看板 <button class="version-badge" id="version-badge">v24.3</button><button class="theme-toggle" id="theme-toggle" type="button" aria-label="切換深色／淺色" title="切換深色／淺色"><span class="tt-moon"><svg class="ico ico-moon" aria-hidden="true"><use href="#i-moon"/></svg></span><span class="tt-sun"><svg class="ico ico-sun" aria-hidden="true"><use href="#i-sun"/></svg></span></button><button class="help-btn" id="help-btn" type="button" aria-label="填寫說明" title="填寫說明" style="display:none">?</button></h1>
     <div class="topbar-right">
       <button class="export-btn" id="settings-btn">設定 API 網址</button>
       <button class="export-btn" id="admin-btn">管理者設定</button>
@@ -3964,7 +3965,9 @@ function renderViewer(view, highlightLast, keepDateFilter){
     if(d) dateSet[d] = true;
   });
   const dates = Object.keys(dateSet).sort().reverse();
-  const recentDates = dates.slice(0, 14);
+  const cutoffD = new Date(); cutoffD.setDate(cutoffD.getDate() - 6);
+  const cutoff = `${cutoffD.getFullYear()}-${String(cutoffD.getMonth()+1).padStart(2,'0')}-${String(cutoffD.getDate()).padStart(2,'0')}`;
+  const recentDates = dates.filter(d => d >= cutoff);
 
   const tabsWrap = document.getElementById('viewer-date-tabs');
   if(recentDates.length){
@@ -4543,6 +4546,7 @@ document.getElementById('notes-panel').addEventListener('click', (e) => {
 
 // ---------- 版本紀錄 ----------
 const VERSION_LOG = [
+  {v:'v24.3', date:'2026/11/25', d:'紀錄頁的日期按鈕改成只顯示最近 7 天（原本 14 天），手機畫面少 1～2 排；「全部」與「自訂日期區間」仍可查更早的資料。純前端修改，後端不需要更新'},
   {v:'v24.2', date:'2026/11/23', d:'新增「耗材盤點提醒」（只有完整版）：每年 6 月與 12 月的月底最後 7 天，在「進行中訂單」下方會出現黃色提醒，列出本期還沒盤點的品項，並有「前往耗材盤點」按鈕；本期窗口內有盤點紀錄的品項就算盤過，全部盤完提醒就消失；時間一過也不再顯示。可以按右上角「收合」暫時收起。純前端修改，後端不需要更新'},
   {v:'v24.1', date:'2026/11/18', d:'紀錄分頁修改時，自動欄位會跟著重算：支援紀錄改了開始／結束時間（或日期），「支援時數」（已扣午休）與「星期」會自動更新；機台產能記錄改了總箱數或完成箱數，「完成率」會自動更新。編輯時這些欄位是灰色虛線框、不能手動改，數字會即時跟著變。後端不需要更新。注意：以前已經不一致的舊資料，需要再打開編輯、按一次儲存才會修正'},
   {v:'v24.0', date:'2026/11/18', d:'客戶標籤尺寸比對改成嚴格：卡片輸入的客戶名稱必須和明細裡的客戶名稱完全一樣（英文大小寫、空白不影響）才會顯示尺寸；不再用部分文字或客戶代碼比對。後端不需要更新'},
