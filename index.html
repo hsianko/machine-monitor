@@ -444,6 +444,12 @@
     text-decoration:underline;
   }
   .running-toggle:hover{color:var(--text-secondary);}
+  #dashboard-modal-body{overflow:visible !important;}
+  #dash-machine-tabs{position:sticky; top:var(--topbar-h,60px); z-index:9; background:var(--bg-page); padding:8px 0 6px; margin-bottom:6px; border-bottom:1px solid var(--border);}
+  .dt-bar-row{display:flex; align-items:center; gap:8px; margin:5px 0; padding:3px 4px; border-radius:6px; cursor:pointer; border:1px solid transparent;}
+  .dt-bar-row:hover{background:var(--bg-field);}
+  .dt-bar-row.active{border-color:var(--text-secondary); background:var(--bg-field);}
+  .dt-cat-tabs{display:flex; flex-wrap:wrap; gap:6px; margin:14px 0 4px;}
   #viewer-date-tabs .date-tab{padding-left:10px; padding-right:10px;}
   .inv-remind{margin-bottom:16px;}
   .inv-body{background:rgba(var(--amber-rgb),.16); border:2px solid var(--ink); border-radius:var(--radius); padding:10px 12px; font-size:13px; line-height:1.6; color:var(--text-primary);}
@@ -1250,7 +1256,7 @@ input, button, select, textarea{font-family:var(--font-ui);}
 
 <div class="wrap">
   <div class="topbar">
-    <h1>產線即時監看板 <button class="version-badge" id="version-badge">v24.5</button><button class="theme-toggle" id="theme-toggle" type="button" aria-label="切換深色／淺色" title="切換深色／淺色"><span class="tt-moon"><svg class="ico ico-moon" aria-hidden="true"><use href="#i-moon"/></svg></span><span class="tt-sun"><svg class="ico ico-sun" aria-hidden="true"><use href="#i-sun"/></svg></span></button><button class="help-btn" id="help-btn" type="button" aria-label="填寫說明" title="填寫說明" style="display:none">?</button></h1>
+    <h1>產線即時監看板 <button class="version-badge" id="version-badge">v24.6</button><button class="theme-toggle" id="theme-toggle" type="button" aria-label="切換深色／淺色" title="切換深色／淺色"><span class="tt-moon"><svg class="ico ico-moon" aria-hidden="true"><use href="#i-moon"/></svg></span><span class="tt-sun"><svg class="ico ico-sun" aria-hidden="true"><use href="#i-sun"/></svg></span></button><button class="help-btn" id="help-btn" type="button" aria-label="填寫說明" title="填寫說明" style="display:none">?</button></h1>
     <div class="topbar-right">
       <button class="export-btn" id="settings-btn">設定 API 網址</button>
       <button class="export-btn" id="admin-btn">管理者設定</button>
@@ -4554,6 +4560,7 @@ document.getElementById('notes-panel').addEventListener('click', (e) => {
 
 // ---------- 版本紀錄 ----------
 const VERSION_LOG = [
+  {v:'v24.6', date:'2026/11/27', d:'統計區兩項改進：(1) 「全部機台／四個機台」按鈕改為凍結在頂端，往下滑看統計資料時不用再回到最上面切換機台；(2) 停機統計：點機台長條可只看該機台（再點一次回到全部）；原因表改成可用「全部原因／設備異常／非設備／人員」切換，每列顯示分類、次數與累計時間。純前端修改，後端不需要更新'},
   {v:'v24.5', date:'2026/11/27', d:'統計區新增「停機統計」：從產能紀錄備註裡的「時間-時間停機＜原因＞」自動統計各機台停機次數與時間（已扣午休），並依「設備異常／非設備／人員」分類，另列設備異常原因排行與整天無作業天數；數字相加（如 5+5）不計入，沒有時間區間的只計次數。會跟著統計區的日期與機台篩選連動。純前端修改，後端不需要更新'},
   {v:'v24.4', date:'2026/11/27', d:'盤點登記：有填「箱數」時，備註與下方即時計算改成「散數＋箱數×每箱入數的結果」，例如 39 箱、每箱 10、散數 3，顯示為 3+390（原本是 39箱×10＋散3）。總數不變。純前端修改，後端不需要更新'},
   {v:'v24.3', date:'2026/11/25', d:'紀錄頁的日期按鈕改成只顯示最近 7 天（原本 14 天），手機畫面少 1～2 排；「全部」與「自訂日期區間」仍可查更早的資料。純前端修改，後端不需要更新'},
@@ -6533,6 +6540,7 @@ let CHART_GRID_COLOR = '#2b313a';
 
 let dashRange = {start:null, end:null, label:'近7天'};
 let dashMachineFilter = null;
+let dtCatFilter = '全部';
 let chartUptime=null, chartUptimeTrend=null, chartBoxesTrend=null, chartAchievement=null, chartAbnType=null;
 
 function ymdToday(offsetDays){
@@ -7174,10 +7182,13 @@ function computeDowntimeStats(logs){
     parseDowntimeRemark(r.remark).forEach(e => {
       p.n++; p.cat[e.cat]++;
       if(e.mins === null) p.unk++; else { p.mins += e.mins; p.catMin[e.cat] += e.mins; }
-      if(e.cat === '設備'){ const k = String(e.reason || '（未註明）').replace(/[，,].*/, '').trim() || '（未註明）'; reasons[k] = (reasons[k] || 0) + 1; }
+      const k = String(e.reason || '（未註明）').replace(/[，,].*/, '').trim() || '（未註明）';
+      const key = e.cat + '|' + k;
+      if(!reasons[key]) reasons[key] = {reason:k, cat:e.cat, n:0, mins:0};
+      reasons[key].n++; if(e.mins !== null) reasons[key].mins += e.mins;
     });
   });
-  return {per: keys.map(k => per[k]), reasons};
+  return {per: keys.map(k => per[k]), reasons: Object.values(reasons)};
 }
 function dtFmtMin(m){
   if(!m) return '0 分';
@@ -7199,14 +7210,26 @@ function renderDowntimeStats(logs){
   const legend = ['設備','非設備','人員'].map(c => `<span style="margin-right:12px;font-size:11px;"><span style="color:${DT_CAT_COLOR[c]}">■</span> ${DT_CAT_LABEL[c]}</span>`).join('');
   const bars = st.per.map(p => {
     const seg = ['設備','非設備','人員','其他'].map(c => p.catMin[c] ? `<div title="${DT_CAT_LABEL[c]} ${dtFmtMin(p.catMin[c])}" style="width:${p.catMin[c] / maxMin * 100}%;background:${DT_CAT_COLOR[c]};height:100%;"></div>` : '').join('');
-    return `<div style="display:flex;align-items:center;gap:8px;margin:7px 0;"><div style="width:42px;font-size:12px;font-weight:600;color:${MACHINE_COLORS[p.machine]};">${p.machine}</div><div style="flex:1;display:flex;height:20px;background:var(--bg-field);border-radius:4px;overflow:hidden;">${seg}</div><div style="width:84px;font-size:11px;color:var(--text-secondary);">${dtFmtMin(p.mins)}</div></div>`;
+    return `<div class="dt-bar-row${dashMachineFilter === p.machine ? ' active' : ''}" data-dash-machine="${p.machine}" title="點一下只看${p.machine}，再點一次回到全部機台"><div style="width:42px;font-size:12px;font-weight:600;color:${MACHINE_COLORS[p.machine]};">${p.machine}</div><div style="flex:1;display:flex;height:20px;background:var(--bg-field);border-radius:4px;overflow:hidden;">${seg}</div><div style="width:84px;font-size:11px;color:var(--text-secondary);">${dtFmtMin(p.mins)}</div></div>`;
   }).join('');
-  document.getElementById('dash-dt-bars').innerHTML = `<h4 style="font-size:12px;margin:14px 0 4px;">停機時間（依原因分類）</h4><div>${legend}</div>${bars}`;
-  const rs = Object.entries(st.reasons).sort((a, b) => b[1] - a[1]);
-  document.getElementById('dash-dt-reasons').innerHTML = rs.length
-    ? `<table style="margin-top:14px;"><tr><th>設備異常原因</th><th style="text-align:right;">次數</th></tr>${rs.map(([k, v]) => `<tr><td>${escapeHtml(k)}</td><td style="text-align:right;">${v}</td></tr>`).join('')}</table>`
-    : '<p class="dash-note" style="margin-top:14px;">這段期間沒有設備異常的停機紀錄。</p>';
+  document.getElementById('dash-dt-bars').innerHTML = `<h4 style="font-size:12px;margin:14px 0 4px;">停機時間（依原因分類）<span style="font-weight:400;color:var(--text-muted);">・點機台長條可只看該機台</span></h4><div>${legend}</div>${bars}`;
+  const tabs = ['全部','設備','非設備','人員','其他'];
+  const rows = st.reasons.filter(r => dtCatFilter === '全部' || r.cat === dtCatFilter).sort((a, b) => b.n - a.n || b.mins - a.mins);
+  document.getElementById('dash-dt-reasons').innerHTML =
+    `<div class="dt-cat-tabs">${tabs.map(c => `<button class="date-tab${dtCatFilter === c ? ' active' : ''}" data-dt-cat="${c}">${c === '全部' ? '全部原因' : DT_CAT_LABEL[c]}</button>`).join('')}</div>` +
+    (rows.length
+      ? `<table><tr><th>原因</th><th>分類</th><th style="text-align:right;">次數</th><th style="text-align:right;">累計時間</th></tr>${rows.map(r => `<tr><td>${escapeHtml(r.reason)}</td><td><span style="color:${DT_CAT_COLOR[r.cat]}">●</span> ${DT_CAT_LABEL[r.cat]}</td><td style="text-align:right;">${r.n}</td><td style="text-align:right;">${r.mins ? dtFmtMin(r.mins) : '—'}</td></tr>`).join('')}</table>`
+      : '<p class="dash-note" style="margin-top:10px;">這個分類在這段期間沒有停機紀錄。</p>');
 }
+document.getElementById('dash-dt-section').addEventListener('click', (e) => {
+  const bar = e.target.closest('.dt-bar-row');
+  if(bar){
+    dashMachineFilter = (dashMachineFilter === bar.dataset.dashMachine) ? null : bar.dataset.dashMachine;
+    renderDashMachineTabs(); renderDashboard(); return;
+  }
+  const c = e.target.closest('[data-dt-cat]');
+  if(c){ dtCatFilter = c.dataset.dtCat; renderDashboard(); }
+});
 
 function renderDashMachineTabs(){
   const wrap = document.getElementById('dash-machine-tabs');
@@ -7234,6 +7257,15 @@ document.getElementById('dash-machine-tabs').addEventListener('click', (e) => {
   renderDashboard();
 });
 initDashDatePickers();
+// 讓統計區的機台按鈕凍結在頂端列的正下方
+(function(){
+  const tb = document.querySelector('.topbar');
+  if(!tb) return;
+  const setH = () => document.documentElement.style.setProperty('--topbar-h', tb.offsetHeight + 'px');
+  setH();
+  window.addEventListener('resize', setH);
+  if(window.ResizeObserver) new ResizeObserver(setH).observe(tb);
+})();
 
 // ---------- 儀表板匯出 ----------
 function dashReportTitle(){
