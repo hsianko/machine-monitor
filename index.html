@@ -1250,7 +1250,7 @@ input, button, select, textarea{font-family:var(--font-ui);}
 
 <div class="wrap">
   <div class="topbar">
-    <h1>產線即時監看板 <button class="version-badge" id="version-badge">v24.4</button><button class="theme-toggle" id="theme-toggle" type="button" aria-label="切換深色／淺色" title="切換深色／淺色"><span class="tt-moon"><svg class="ico ico-moon" aria-hidden="true"><use href="#i-moon"/></svg></span><span class="tt-sun"><svg class="ico ico-sun" aria-hidden="true"><use href="#i-sun"/></svg></span></button><button class="help-btn" id="help-btn" type="button" aria-label="填寫說明" title="填寫說明" style="display:none">?</button></h1>
+    <h1>產線即時監看板 <button class="version-badge" id="version-badge">v24.5</button><button class="theme-toggle" id="theme-toggle" type="button" aria-label="切換深色／淺色" title="切換深色／淺色"><span class="tt-moon"><svg class="ico ico-moon" aria-hidden="true"><use href="#i-moon"/></svg></span><span class="tt-sun"><svg class="ico ico-sun" aria-hidden="true"><use href="#i-sun"/></svg></span></button><button class="help-btn" id="help-btn" type="button" aria-label="填寫說明" title="填寫說明" style="display:none">?</button></h1>
     <div class="topbar-right">
       <button class="export-btn" id="settings-btn">設定 API 網址</button>
       <button class="export-btn" id="admin-btn">管理者設定</button>
@@ -1543,6 +1543,14 @@ input, button, select, textarea{font-family:var(--font-ui);}
         <div class="dash-chart-wrap"><canvas id="dash-chart-abnormal-type"></canvas></div>
         <div class="dash-table-wrap" id="dash-abn-rank"></div>
         <div class="dash-insight" id="dash-abn-insight"></div>
+      </div>
+
+      <div class="dash-section" id="dash-dt-section">
+        <h3>停機統計（依備註自動統計）</h3>
+        <p class="dash-note">依產能紀錄備註中「時間-時間停機＜原因＞」或「時間-時間期間＋原因」自動統計，已扣除午休 12:00～13:00；數字相加（如 5+5）不計入。沒有時間區間的停機只計次數、不計時間。「無作業」紀錄另計天數。</p>
+        <div class="dash-cards" id="dash-dt-cards"></div>
+        <div id="dash-dt-bars"></div>
+        <div class="dash-table-wrap" id="dash-dt-reasons"></div>
       </div>
 
       <div class="dash-export">
@@ -4546,6 +4554,7 @@ document.getElementById('notes-panel').addEventListener('click', (e) => {
 
 // ---------- 版本紀錄 ----------
 const VERSION_LOG = [
+  {v:'v24.5', date:'2026/11/27', d:'統計區新增「停機統計」：從產能紀錄備註裡的「時間-時間停機＜原因＞」自動統計各機台停機次數與時間（已扣午休），並依「設備異常／非設備／人員」分類，另列設備異常原因排行與整天無作業天數；數字相加（如 5+5）不計入，沒有時間區間的只計次數。會跟著統計區的日期與機台篩選連動。純前端修改，後端不需要更新'},
   {v:'v24.4', date:'2026/11/27', d:'盤點登記：有填「箱數」時，備註與下方即時計算改成「散數＋箱數×每箱入數的結果」，例如 39 箱、每箱 10、散數 3，顯示為 3+390（原本是 39箱×10＋散3）。總數不變。純前端修改，後端不需要更新'},
   {v:'v24.3', date:'2026/11/25', d:'紀錄頁的日期按鈕改成只顯示最近 7 天（原本 14 天），手機畫面少 1～2 排；「全部」與「自訂日期區間」仍可查更早的資料。純前端修改，後端不需要更新'},
   {v:'v24.2', date:'2026/11/23', d:'新增「耗材盤點提醒」（只有完整版）：每年 6 月與 12 月的月底最後 7 天，在「進行中訂單」下方會出現黃色提醒，列出本期還沒盤點的品項，並有「前往耗材盤點」按鈕；本期窗口內有盤點紀錄的品項就算盤過，全部盤完提醒就消失；時間一過也不再顯示。可以按右上角「收合」暫時收起。純前端修改，後端不需要更新'},
@@ -7116,6 +7125,87 @@ function renderDashboard(){
     `</table>`;
 
   document.getElementById('dash-abn-insight').innerHTML = ico('warn') + '觀察重點：<br>' + buildAbnormalInsight(abnStats);
+  renderDowntimeStats(logs);
+}
+
+// ===== 停機統計：從產能紀錄的「備註」文字解析 =====
+const DT_LUNCH_START = 12*60, DT_LUNCH_END = 13*60;
+function dtNetMinutes(a, b){
+  if(b <= a) return null;
+  const ov = Math.max(0, Math.min(b, DT_LUNCH_END) - Math.max(a, DT_LUNCH_START));
+  return b - a - ov;
+}
+function dtClassify(reason){
+  const r = reason || '';
+  if(/請假|休假|操作人員|未裝妥|未換妥|帶新人/.test(r)) return '人員';
+  if(/無貨|等待|等貨|支援|協助|無訂單|無工單|理貨|做貨/.test(r)) return '非設備';
+  if(/故障|異常|程式|檢測|檢修|維修|斷裂|調整|原廠|軸|皮帶|連線/.test(r)) return '設備';
+  return '其他';
+}
+// 回傳 [{mins(null=時間不詳), reason, cat}]；每一段時間區間算 1 次停機
+function parseDowntimeRemark(remark){
+  const out = [];
+  if(!remark) return out;
+  const reasons = [];
+  const t = String(remark).replace(/<([^>]*)>/g, (m, x) => { reasons.push(x); return '〈' + (reasons.length - 1) + '〉'; });
+  t.split(/[，,;；]/).forEach(clause => {
+    if(!/停機|期間/.test(clause)) return;
+    const ranges = [...clause.matchAll(/(\d{1,2}:\d{2})\s*-\s*(\d{1,2}:\d{2})/g)];
+    let reason = '';
+    const m1 = clause.match(/〈(\d+)〉/);
+    if(m1) reason = reasons[+m1[1]];
+    else { const m2 = clause.match(/期間(.+)$/); if(m2) reason = m2[1].trim(); }
+    if(ranges.length){
+      ranges.forEach(rg => out.push({mins: dtNetMinutes(timeToMinutes(rg[1]), timeToMinutes(rg[2])), reason, cat: dtClassify(reason)}));
+    } else {
+      out.push({mins:null, reason, cat: dtClassify(reason)});
+    }
+  });
+  return out;
+}
+function computeDowntimeStats(logs){
+  const keys = dashMachineFilter ? [dashMachineFilter] : MACHINES.map(m => m.key);
+  const per = {};
+  keys.forEach(k => per[k] = {machine:k, n:0, mins:0, unk:0, days:0, cat:{設備:0, 非設備:0, 人員:0, 其他:0}, catMin:{設備:0, 非設備:0, 人員:0, 其他:0}});
+  const reasons = {};
+  logs.forEach(r => {
+    const p = per[r.machine]; if(!p) return;
+    if(r.customer === '（無作業）'){ p.days++; return; }
+    parseDowntimeRemark(r.remark).forEach(e => {
+      p.n++; p.cat[e.cat]++;
+      if(e.mins === null) p.unk++; else { p.mins += e.mins; p.catMin[e.cat] += e.mins; }
+      if(e.cat === '設備'){ const k = String(e.reason || '（未註明）').replace(/[，,].*/, '').trim() || '（未註明）'; reasons[k] = (reasons[k] || 0) + 1; }
+    });
+  });
+  return {per: keys.map(k => per[k]), reasons};
+}
+function dtFmtMin(m){
+  if(!m) return '0 分';
+  const h = Math.floor(m / 60), mm = Math.round(m % 60);
+  return h ? `${h} 小時${mm ? ' ' + mm + ' 分' : ''}` : `${mm} 分`;
+}
+const DT_CAT_COLOR = {設備:'#c0503f', 非設備:'#8a96a3', 人員:'#d6a23a', 其他:'#b9b2a6'};
+const DT_CAT_LABEL = {設備:'設備異常', 非設備:'非設備', 人員:'人員', 其他:'其他'};
+function renderDowntimeStats(logs){
+  const st = computeDowntimeStats(logs);
+  document.getElementById('dash-dt-cards').innerHTML = st.per.map(p => `
+    <div class="dash-card" style="--accent:${MACHINE_COLORS[p.machine]}">
+      <div class="dc-name">${p.machine}</div>
+      <div class="dc-total">${p.n} <span style="font-size:13px;font-weight:500;">次</span></div>
+      <div class="dc-total-label">停機 ${dtFmtMin(p.mins)}${p.unk ? `（另有 ${p.unk} 次時間不詳）` : ''}${p.days ? `・整天無作業 ${p.days} 天` : ''}</div>
+      ${['設備','非設備','人員','其他'].filter(c => c !== '其他' || p.cat[c]).map(c => `<div class="dc-sub"><span><span style="color:${DT_CAT_COLOR[c]}">●</span> ${DT_CAT_LABEL[c]}</span><span>${p.cat[c]} 次・${dtFmtMin(p.catMin[c])}</span></div>`).join('')}
+    </div>`).join('');
+  const maxMin = Math.max(1, ...st.per.map(p => p.mins));
+  const legend = ['設備','非設備','人員'].map(c => `<span style="margin-right:12px;font-size:11px;"><span style="color:${DT_CAT_COLOR[c]}">■</span> ${DT_CAT_LABEL[c]}</span>`).join('');
+  const bars = st.per.map(p => {
+    const seg = ['設備','非設備','人員','其他'].map(c => p.catMin[c] ? `<div title="${DT_CAT_LABEL[c]} ${dtFmtMin(p.catMin[c])}" style="width:${p.catMin[c] / maxMin * 100}%;background:${DT_CAT_COLOR[c]};height:100%;"></div>` : '').join('');
+    return `<div style="display:flex;align-items:center;gap:8px;margin:7px 0;"><div style="width:42px;font-size:12px;font-weight:600;color:${MACHINE_COLORS[p.machine]};">${p.machine}</div><div style="flex:1;display:flex;height:20px;background:var(--bg-field);border-radius:4px;overflow:hidden;">${seg}</div><div style="width:84px;font-size:11px;color:var(--text-secondary);">${dtFmtMin(p.mins)}</div></div>`;
+  }).join('');
+  document.getElementById('dash-dt-bars').innerHTML = `<h4 style="font-size:12px;margin:14px 0 4px;">停機時間（依原因分類）</h4><div>${legend}</div>${bars}`;
+  const rs = Object.entries(st.reasons).sort((a, b) => b[1] - a[1]);
+  document.getElementById('dash-dt-reasons').innerHTML = rs.length
+    ? `<table style="margin-top:14px;"><tr><th>設備異常原因</th><th style="text-align:right;">次數</th></tr>${rs.map(([k, v]) => `<tr><td>${escapeHtml(k)}</td><td style="text-align:right;">${v}</td></tr>`).join('')}</table>`
+    : '<p class="dash-note" style="margin-top:14px;">這段期間沒有設備異常的停機紀錄。</p>';
 }
 
 function renderDashMachineTabs(){
